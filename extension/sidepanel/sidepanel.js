@@ -667,15 +667,73 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     }
   }
 
+  // Natural Language Action Recovery Parser (Fallback jika LLM menjawab teks instruktif bukan JSON)
+  function tryParseNaturalLanguageActions(text) {
+    if (!text) return null;
+    const lines = text.split('\n');
+    const actions = [];
+
+    // e.g.: Ketik `admin@jetdigitalpro.com` pada [@e1].
+    // e.g.: Ketik jdp123 pada [@e2].
+    // e.g.: Klik tombol Sign In [@e3].
+    const typeRegex = /(?:ketik|isi|tulis|masukkan|type|fill)\s+[`"']?([^`"'\n]+?)[`"']?\s+(?:pada|di|ke|into|in)\s+\[?(@e\d+|#\d+|\d+)\]?/i;
+    const clickRegex = /(?:klik|tekan|pilih|click|press)\s+(?:tombol|button|link|menu)?\s*[`"']?([^`"'\n]+?)?[`"']?\s*(?:pada|di|ke)?\s*\[?(@e\d+|#\d+|\d+)\]?/i;
+
+    for (const line of lines) {
+      const tMatch = line.match(typeRegex);
+      if (tMatch) {
+        const rawId = tMatch[2];
+        const normId = rawId.startsWith("@e") ? rawId : `@e${rawId.replace(/[^0-9]/g, '')}`;
+        actions.push({
+          action: "type",
+          value: tMatch[1].trim(),
+          elementId: normId
+        });
+        continue;
+      }
+      const cMatch = line.match(clickRegex);
+      if (cMatch) {
+        const rawId = cMatch[2];
+        const normId = rawId.startsWith("@e") ? rawId : `@e${rawId.replace(/[^0-9]/g, '')}`;
+        actions.push({
+          action: "click",
+          elementId: normId,
+          message: cMatch[1] ? `Klik ${cMatch[1].trim()}` : undefined
+        });
+      }
+    }
+
+    if (actions.length > 0) {
+      return {
+        planner: { steps: actions.map((a, i) => `${i + 1}. ${a.action === 'type' ? `Isi "${a.value}"` : 'Klik'} pada [${a.elementId}]`) },
+        actions: actions,
+        message: `Mengeksekusi ${actions.length} aksi otomatis yang teridentifikasi.`
+      };
+    }
+    return null;
+  }
+
   // Menjalankan satu langkah Multi-Agent response
   async function executeStepResponse(rawReply, stepNum, userPrompt = "") {
+    let resObj = null;
     const jsonMatch = rawReply.match(/```json\s*([\s\S]*?)\s*```/) || rawReply.match(/\{[\s\S]*"action"[\s\S]*\}/) || rawReply.match(/\{[\s\S]*"actions"[\s\S]*\}/) || rawReply.match(/\{[\s\S]*"planner"[\s\S]*\}/);
 
     if (jsonMatch) {
       try {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
-        const resObj = JSON.parse(jsonStr);
+        resObj = JSON.parse(jsonStr);
+      } catch (e) {
+        console.error("[Pesat] JSON parse error:", e);
+      }
+    }
 
+    // Jika JSON tidak ditemukan, coba pulihkan dari teks instruksi alami
+    if (!resObj) {
+      resObj = tryParseNaturalLanguageActions(rawReply);
+    }
+
+    if (resObj) {
+      try {
         const isBatch = Array.isArray(resObj.actions) && resObj.actions.length > 0;
         const actionType = isBatch ? "batch" : (resObj.action || resObj.navigator?.action);
         const targetId = resObj.elementId || resObj.navigator?.elementId || (isBatch ? resObj.actions.map(a => a.elementId || a.target).join(", ") : "");
@@ -819,7 +877,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         }
 
       } catch (e) {
-        console.error("[Pesat] JSON parse error:", e);
+        console.error("[Pesat] Step execution error:", e);
       }
     }
 

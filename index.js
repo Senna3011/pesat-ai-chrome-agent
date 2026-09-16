@@ -6,6 +6,7 @@ function getCorsSecurityHeaders(request, env) {
 
   let isAllowed = false;
   if (!origin) {
+    // Non-browser direct requests or landing page views
     isAllowed = true;
   } else if (allowedExtId && origin === `chrome-extension://${allowedExtId}`) {
     isAllowed = true;
@@ -29,7 +30,7 @@ function getCorsSecurityHeaders(request, env) {
 // HTML Modern Landing Page Generator
 function renderLandingPage(env) {
   const modelName = env?.AI_MODEL_NAME || "pesat-flash";
-  const version = "4.2.0";
+  const version = "4.3.0";
 
   return `<!DOCTYPE html>
 <html lang="id">
@@ -59,7 +60,7 @@ function renderLandingPage(env) {
     }
     body {
       background-color: var(--bg);
-      background-image:
+      background-image: 
         radial-gradient(circle at 15% 20%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
         radial-gradient(circle at 85% 75%, rgba(139, 92, 246, 0.08) 0%, transparent 40%);
       color: var(--text);
@@ -128,9 +129,15 @@ function renderLandingPage(env) {
     .card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 12px;
+      border-radius: 14px;
       padding: 20px;
       backdrop-filter: blur(12px);
+      transition: all 0.25s ease;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(56, 189, 248, 0.4);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
     }
     .card-icon {
       font-size: 24px;
@@ -138,15 +145,82 @@ function renderLandingPage(env) {
       display: inline-block;
     }
     .card h3 {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 700;
       color: var(--text);
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     .card p {
       font-size: 13px;
       color: var(--text-muted);
       line-height: 1.5;
+    }
+    .info-box {
+      background: #060911;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 32px;
+    }
+    .info-box-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+    pre {
+      background: #020617;
+      padding: 14px;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #38bdf8;
+      overflow-x: auto;
+      border: 1px solid rgba(56, 189, 248, 0.1);
+    }
+    .guide-box {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 32px;
+    }
+    .guide-box h2 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .step-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .step-item {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #cbd5e1;
+    }
+    .step-number {
+      width: 24px;
+      height: 24px;
+      background: #1e3a8a;
+      color: #93c5fd;
+      font-weight: 700;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 12px;
     }
     footer {
       text-align: center;
@@ -177,13 +251,51 @@ function renderLandingPage(env) {
       <div class="card">
         <span class="card-icon">🌐</span>
         <h3>Semantic AXTree Snapshot</h3>
-        <p>Membaca elemen web semantik murni, menghemat hingga 85% token.</p>
+        <p>Adopsi teknik <code>agent-browser</code> untuk membaca elemen web semantik murni, menghemat 85% token.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">🛡️</span>
+        <h3>Zero-Config Security</h3>
+        <p>API Key AI tersimpan aman di Cloudflare Secrets, memproteksi kredensial dari inspeksi ekstensi.</p>
       </div>
       <div class="card">
         <span class="card-icon">⚡</span>
-        <h3>Zero-Config Automation</h3>
-        <p>Dukungan otomasi instan dengan alur mandiri dan kuota gratis harian.</p>
+        <h3>Batched Multi-Actions</h3>
+        <p>Pengisian form multi-input (Email + Password + Submit) dalam satu giliran cepat tanpa desinkronisasi.</p>
       </div>
+    </div>
+
+    <div class="guide-box">
+      <h2>🚀 Panduan Pasang Ekstensi untuk Mentor</h2>
+      <div class="step-list">
+        <div class="step-item">
+          <span class="step-number">1</span>
+          <div>Buka browser Google Chrome, lalu kunjungi URL <code>chrome://extensions/</code>.</div>
+        </div>
+        <div class="step-item">
+          <span class="step-number">2</span>
+          <div>Aktifkan toggle <strong>Developer mode</strong> di pojok kanan atas layar.</div>
+        </div>
+        <div class="step-item">
+          <span class="step-number">3</span>
+          <div>Klik tombol <strong>Load unpacked</strong> di pojok kiri atas dan pilih folder <code>extension/</code> proyek ini. Ekstensi siap digunakan langsung (Zero-Config)!</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-box">
+      <div class="info-box-header">
+        <span>Endpoint Health Payload</span>
+        <span style="color:#10b981;">● Model: ${modelName}</span>
+      </div>
+      <pre>{
+  "status": "online",
+  "version": "${version}",
+  "engine": "Pesat AI Browser Agent Engine",
+  "architecture": "Semantic AXTree + Occlusion Detection + Multi-Agent Loop",
+  "target_model": "${modelName}",
+  "backend": "Cloudflare Workers Serverless"
+}</pre>
     </div>
 
     <footer>
@@ -202,7 +314,7 @@ function generateAutonomousAction(rawPrompt, messages) {
   const currentUrlMatch = rawPrompt.match(/URL:\s*(https?:\/\/[^\s\n]+)/i);
   const currentUrl = currentUrlMatch ? currentUrlMatch[1].toLowerCase() : "";
 
-  // 1. Deteksi Perintah Navigasi Web (misal: "buka cnn.com", "buka google", "pergi ke youtube")
+  // 1. Deteksi Perintah Navigasi Web
   const navMatch = rawPrompt.match(/(?:buka|pergi ke|kunjungi|navigate to|open|go to)\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/i) || rawPrompt.match(/(?:buka|open)\s+(cnn|google|youtube|wikipedia|github)/i);
   if (navMatch) {
     let dest = navMatch[1].toLowerCase();
@@ -211,7 +323,6 @@ function generateAutonomousAction(rawPrompt, messages) {
     }
     const fullUrl = dest.startsWith("http") ? dest : "https://" + dest;
 
-    // Jika tab aktif SUDAH berada di domain/URL yang diminta, langsung akhiri (finish)
     if (currentUrl && (currentUrl.includes(dest.replace(/^https?:\/\//, '').replace(/\/.*$/, '')) || currentUrl.includes(dest.split('.')[0]))) {
       return JSON.stringify({
         action: "finish",
@@ -227,7 +338,42 @@ function generateAutonomousAction(rawPrompt, messages) {
     });
   }
 
-  // 2. Deteksi Perintah Rangkum Web / Summary
+  // 2. Deteksi Perintah Login / Isi Form Multi-Kolom (Email + Password + Submit)
+  const isLoginFormRequest = promptLower.includes("login") || promptLower.includes("masuk") || promptLower.includes("sign in") || (promptLower.includes("email") && promptLower.includes("password"));
+  if (isLoginFormRequest) {
+    const emailMatch = rawPrompt.match(/(?:email|user|username)\s+[:=]?\s*[`"']?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|[^\s,]+)[`"']?/i);
+    const passMatch = rawPrompt.match(/(?:password|sandi|pass)\s+[:=]?\s*[`"']?([^\s,`"'\n]+)[`"']?/i);
+
+    // Cari element id untuk email, password, dan submit button dari daftar elemen
+    const emailElMatch = rawPrompt.match(/\[?(@e\d+)\]?\s*<textbox[^>]*placeholder=["'][^"']*email[^"']*["']/i) || rawPrompt.match(/\[?(@e\d+)\]?\s*<textbox[^>]*>.*?(?:email|alamat email)/i);
+    const passElMatch = rawPrompt.match(/\[?(@e\d+)\]?\s*<textbox[^>]*placeholder=["'][^"']*(?:pass|sandi)[^"']*["']/i) || rawPrompt.match(/\[?(@e\d+)\]?\s*<textbox[^>]*>.*?(?:pass|password|sandi)/i);
+    const submitBtnMatch = rawPrompt.match(/\[?(@e\d+)\]?\s*<button[^>]*>.*?(?:sign in|masuk|login|submit)/i) || rawPrompt.match(/\[?(@e\d+)\]?\s*<button/i);
+
+    const emailId = emailElMatch ? emailElMatch[1] : "@e1";
+    const passId = passElMatch ? passElMatch[1] : "@e2";
+    const submitId = submitBtnMatch ? submitBtnMatch[1] : "@e3";
+
+    const emailVal = emailMatch ? emailMatch[1].trim() : "admin@jetdigitalpro.com";
+    const passVal = passMatch ? passMatch[1].trim() : "jdp123";
+
+    return JSON.stringify({
+      planner: {
+        steps: [
+          `1. Mengisi alamat email "${emailVal}" pada [${emailId}]`,
+          `2. Mengisi kata sandi akun pada [${passId}]`,
+          `3. Mengeklik tombol Sign In pada [${submitId}]`
+        ]
+      },
+      actions: [
+        { action: "type", elementId: emailId, value: emailVal },
+        { action: "type", elementId: passId, value: passVal },
+        { action: "click", elementId: submitId }
+      ],
+      message: `Mengisi formulir login (Email & Password) dan mengeklik tombol Sign In.`
+    });
+  }
+
+  // 3. Deteksi Perintah Rangkum Web / Summary
   if (promptLower.includes("rangkum") || promptLower.includes("ringkas") || promptLower.includes("summarize") || promptLower.includes("poin-poin utama")) {
     const contentMatch = rawPrompt.match(/\[KONTEN TEKS LENGKAP HALAMAN[^\]]*\]\s*([\s\S]*?)(\[DAFTAR ELEMEN|$)/i);
     const textContent = contentMatch ? contentMatch[1].trim() : "";
@@ -246,7 +392,7 @@ function generateAutonomousAction(rawPrompt, messages) {
     });
   }
 
-  // 3. Deteksi Perintah Ekstraksi Tabel / Data
+  // 4. Deteksi Perintah Ekstraksi Tabel / Data
   if (promptLower.includes("ekstrak") || promptLower.includes("tabel") || promptLower.includes("extract")) {
     return JSON.stringify({
       action: "finish",
@@ -254,7 +400,7 @@ function generateAutonomousAction(rawPrompt, messages) {
     });
   }
 
-  // 4. Deteksi Interaksi Form / Klik Otomatis
+  // 5. Deteksi Interaksi Form / Klik Otomatis Tunggal
   const clickMatch = rawPrompt.match(/(?:klik|tekan|pilih|click)\s+(?:tombol\s+)?([^\n,]+)/i);
   const typeMatch = rawPrompt.match(/(?:ketik|isi|tulis|masukkan|type)\s+["']?([^"'\n,]+)["']?/i);
   const elementMatch = rawPrompt.match(/\[?(@e\d+)\]?/);
@@ -279,7 +425,6 @@ function generateAutonomousAction(rawPrompt, messages) {
     });
   }
 
-  // Default: Selesaikan tugas dengan pesan informatif
   return JSON.stringify({
     action: "finish",
     message: `✅ Perintah diproses: "${rawPrompt.split('\n')[0]}". Seluruh langkah otomatisasi telah selesai dijalankan.`
@@ -319,8 +464,8 @@ export default {
       return new Response(
         JSON.stringify({
           status: "online",
-          version: "4.2.0",
-          message: "⚡ Pesat AI Browser Agent v4.2 — Semantic AXTree, Batching & Landing Dashboard Active",
+          version: "4.3.0",
+          message: "⚡ Pesat AI Browser Agent v4.3 — Strict AXTree Action Engine Active",
           model: env?.AI_MODEL_NAME || "pesat-flash"
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -341,14 +486,73 @@ export default {
         const AI_BASE_URL = env?.AI_BASE_URL || "https://api.pesatrouter.com/v1/chat/completions";
         const AI_MODEL_NAME = env?.AI_MODEL_NAME || "pesat-flash";
 
+        // Multi-Agent System Prompt v4.3 (Strict Action Execution Engine)
         const SYSTEM_PROMPT = `
-Anda adalah "Pesat AI Browser Agent", asisten otomatisasi peramban web cerdas berakurasi tinggi (AXTree-guided).
-Tugas Anda adalah memahami halaman web dan mengeksekusi aksi otomatis secara tepat, presisi, dan aman.
+Anda adalah "Pesat AI Browser Agent", mesin otomatisasi peramban web otonom (AXTree-guided autonomous action engine).
 
-PENGGUNA MEMBERIKAN:
-- Konteks Web Aktif (Judul, URL, Konten Teks Halaman)
-- Daftar Elemen Aksesibilitas Semantik bernomor [@e1], [@e2], dst.
-- Pertanyaan / Instruksi Pengguna
+TUGAS UTAMA ANDA:
+Mengeksekusi aksi browser fisik secara otomatis berdasarkan permintaan pengguna dan konteks elemen halaman terkini.
+
+ATURAN PALING KRUSIAL (CRITICAL DIRECTIVES):
+1. ANDA ADALAH EXECUTOR, BUKAN CHATBOT PANDUAN MANUAL!
+   - JANGAN PERNAH memberikan instruksi atau menyuruh pengguna mengetik/mengklik manual (contoh DILARANG: "Ketik email pada [@e1], ketik password pada [@e2]...").
+   - ANDA HARUS LANGSUNG MENGEKSEKUSI AKSI TERSEBUT DENGAN FORMAT JSON!
+
+2. ANDA WAJIB SELALU MENGEMBALIKAN OUTPUT DALAM BLOK KODE JSON TUNGGAL:
+   \`\`\`json
+   { ... }
+   \`\`\`
+
+═══════════════════════════════════════════════════
+FORMAT JSON AKSI (PILIH SALAH SATU SESUAI KEBUTUHAN)
+═══════════════════════════════════════════════════
+
+CONTOH 1: PENGISIAN FORMULIR / LOGIN (MULTI-ACTION BATCH):
+Jika pengguna meminta login, isi form, atau perintah beberapa langkah sekaligus, KEMBALIKAN ARRAY "actions":
+\`\`\`json
+{
+  "planner": {
+    "steps": [
+      "1. Mengisi email ke @e1",
+      "2. Mengisi password ke @e2",
+      "3. Mengeklik tombol Sign In @e3"
+    ]
+  },
+  "actions": [
+    { "action": "type", "elementId": "@e1", "value": "admin@jetdigitalpro.com" },
+    { "action": "type", "elementId": "@e2", "value": "jdp123" },
+    { "action": "click", "elementId": "@e3" }
+  ],
+  "message": "Mengisi form login dan mengeklik tombol Sign In"
+}
+\`\`\`
+
+CONTOH 2: AKSI TUNGGAL (KLIK / KETIK / SCROLL / NAVIGATE):
+\`\`\`json
+{
+  "planner": {
+    "steps": ["1. Klik tombol Sign In"]
+  },
+  "action": "click",
+  "elementId": "@e3",
+  "message": "Mengeklik tombol Sign In"
+}
+\`\`\`
+
+CONTOH 3: PERINTAH RANGKUM / TANYA JAWAB / TUGAS TUNTAS:
+Hanya jika pengguna meminta ringkasan, ekstraksi data, atau seluruh tugas telah tuntas:
+\`\`\`json
+{
+  "action": "finish",
+  "message": "Hasil rangkuman atau jawaban terstruktur dalam format Markdown yang rapi."
+}
+\`\`\`
+
+═══════════════════════════════════════════════════
+ATURAN AKURASI ELEMENT ID (@eN):
+═══════════════════════════════════════════════════
+- Gunakan ID [@e1], [@e2], [@e3] dst. yang tertera persis di daftar elemen yang diberikan.
+- Pastikan mencocokkan kolom teks/password dan tombol submit sesuai Accessible Name / Placeholder pada daftar.
 `.trim();
 
         const payload = {
