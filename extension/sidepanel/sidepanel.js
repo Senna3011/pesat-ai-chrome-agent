@@ -507,7 +507,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           };
 
           setAgentRunning(true, `Aksi: ${actionType} [${targetId || ''}]`);
-          appendLog(`Navigator executing: ${actionType} [${targetId}]`);
+          appendLog(`▶ Menjalankan: ${actionType} [${targetId || '—'}]`);
 
           const execResult = await sendToContentScript({
             type: "EXECUTE_ACTION",
@@ -519,25 +519,60 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
             }
           });
 
-          multiAgentData.navigator.status = execResult.success ? "Selesai (0.3s)" : "Gagal";
-          multiAgentData.validator = {
-            success: execResult.success,
-            message: execResult.success 
-              ? `Aksi ${actionType} pada [${targetId}] berhasil diverifikasi.`
-              : `Gagal verifikasi: ${execResult.error}`
-          };
+          // ── AUTO-WAIT setelah aksi yang memicu loading halaman ──
+          if (execResult.success) {
+            const needsWait = actionType === "navigate" || actionType === "click";
+            if (needsWait) {
+              const waitMs = actionType === "navigate" ? 3000 : 1200;
+              appendLog(`⏳ Menunggu halaman dimuat (maks ${waitMs / 1000}s)...`);
+              setAgentRunning(true, "Menunggu halaman...");
+
+              // Beri jeda awal agar browser sempat mulai load
+              await new Promise(r => setTimeout(r, waitMs === 3000 ? 800 : 300));
+
+              const stableResult = await sendToContentScript({
+                type: "WAIT_FOR_DOM_STABLE",
+                maxWaitMs: waitMs,
+                stableWindowMs: actionType === "navigate" ? 700 : 500
+              });
+
+              if (stableResult?.stable || stableResult?.timedOut) {
+                appendLog(`✅ Halaman stabil${stableResult.timedOut ? " (lanjut paksa)" : ""}, analisis dilanjutkan.`);
+              }
+            }
+
+            const elapsed = actionType === "navigate" ? "3.0s" : "1.2s";
+            multiAgentData.navigator.status = `Selesai (${elapsed})`;
+            multiAgentData.validator = {
+              success: true,
+              message: `Aksi ${actionType} pada [${targetId || '—'}] berhasil diverifikasi.`
+            };
+          } else {
+            // Aksi gagal — validator merah + saran yang ramah
+            multiAgentData.navigator.status = "Gagal";
+            const suggestion = execResult.suggestion === "scroll"
+              ? "💡 Coba gulir halaman ke bawah terlebih dahulu, lalu kirim permintaan yang sama."
+              : "💡 Coba muat ulang halaman, lalu ulangi perintah.";
+            multiAgentData.validator = {
+              success: false,
+              message: `${execResult.error || "Terjadi kesalahan saat eksekusi."}\n\n${suggestion}`
+            };
+            appendLog(`❌ Aksi gagal: ${execResult.error}`);
+          }
         }
 
         addMessageToCurrentSession("assistant", "", multiAgentData);
         return;
       } catch (e) {
-        // Fallback jika parsing gagal
+        // Fallback jika parsing JSON gagal
+        console.error("[Pesat] JSON parse error:", e);
       }
     }
 
     // Tampilkan balasan teks biasa dengan markdown rapi
     addMessageToCurrentSession("assistant", rawReply);
   }
+
 
   // ----------------------------------------------------
   // Quick Action Chips Handlers

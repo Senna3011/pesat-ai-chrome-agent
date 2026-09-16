@@ -74,3 +74,16 @@
 - [x] **Quick Action Chips**: Tombol 1-klik untuk Rangkum Web, Ekstrak Data/Tabel, Bantu Isi Form, dan Toggle Marker.
 - [x] **Emergency Stop Button (⏹️)**: Kontrol pembatalan aksi seketika bagi pengguna.
 - [x] **Autonomous System Prompt**: Engine AI (`index.js`) yang cerdas membedakan percakapan informatif vs JSON Action otomatis.
+
+### 🗓️ Day 2 (Phase 4: Error Handling, Auto-Wait, & Prompt Hardening)
+- [x] **Auto-Waiting `waitForDOMStable()`** (`content.js`): MutationObserver yang memantau stabilitas DOM hingga 5 detik setelah navigasi. Tidak memblokir selamanya — ada deadline paksa yang otomatis melanjutkan eksekusi.
+- [x] **`WAIT_FOR_DOM_STABLE` Message Handler** (`content.js`): Side panel bisa meminta content script untuk tunggu DOM stabil sebelum scan ulang.
+- [x] **Auto-Wait Setelah Aksi** (`sidepanel.js`): Setelah `navigate` → tunggu 3 detik + DOM stable check. Setelah `click` → tunggu 1.2 detik + DOM stable check. Activity Log menampilkan countdown ⏳ dan konfirmasi ✅.
+- [x] **Fuzzy Fallback Matching** (`content.js`): Jika AI memberi ID elemen yang tidak valid, sistem otomatis mencari elemen yang paling cocok berdasarkan teks/placeholder/aria-label dengan sistem scoring. Glow amber = fuzzy match, glow hijau = exact match.
+- [x] **Validator Card Error Ramah** (`sidepanel.js`): Pesan error kini memberikan saran konkret ("Coba gulir ke bawah...") bukan sekadar pesan teknis.
+- [x] **Prompt Hardening v3.0.0** (`index.js`): 6 Aturan Anti-Hallucination resmi ditambahkan ke System Prompt: (1) Jangan tebak ID, (2) Scroll jika daftar kosong, (3) Cek URL dulu, (4) Gunakan finish jika ragu, (5) Satu aksi per respons, (6) Pesan ramah saat gagal.
+- [ ] **Test Case 1–3** (`4.2`): *Menunggu uji coba manual oleh user.*
+  - TC1: Buka Google → ketik "Kanban CRM" → klik cari.
+  - TC2: Login form uji coba (user menyediakan URL + kredensial).
+  - TC3: Scrape judul artikel dari web berita.
+

@@ -176,7 +176,92 @@
     };
   }
 
+  // ─────────────────────────────────────────────────────
+  // AUTO-WAITING: Tunggu DOM stabil setelah navigasi/klik
+  // ─────────────────────────────────────────────────────
+  function waitForDOMStable(maxWaitMs = 5000, stableWindowMs = 600) {
+    return new Promise((resolve) => {
+      let stableTimer = null;
+      const deadline = Date.now() + maxWaitMs;
+
+      const markStable = () => {
+        stableTimer = setTimeout(() => {
+          observer.disconnect();
+          resolve({ stable: true });
+        }, stableWindowMs);
+      };
+
+      const observer = new MutationObserver(() => {
+        if (stableTimer) clearTimeout(stableTimer);
+        if (Date.now() >= deadline) {
+          observer.disconnect();
+          resolve({ stable: false, timedOut: true });
+          return;
+        }
+        markStable();
+      });
+
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: false,
+        characterData: false
+      });
+
+      // Deadline paksa — tidak block selamanya
+      setTimeout(() => {
+        observer.disconnect();
+        resolve({ stable: false, timedOut: true });
+      }, maxWaitMs);
+
+      // Mulai timer pertama
+      markStable();
+    });
+  }
+
+  // ─────────────────────────────────────────────────────
+  // FUZZY FALLBACK: Cari elemen berdasarkan teks/placeholder
+  // ─────────────────────────────────────────────────────
+  function findElementByFuzzy(hintText, action) {
+    if (!hintText) return null;
+    const q = String(hintText).toLowerCase().trim();
+
+    // Pool selector berdasarkan tipe aksi
+    const pool = action === "click"
+      ? Array.from(document.querySelectorAll("button, a[href], [role='button'], input[type='submit'], input[type='button']"))
+      : Array.from(document.querySelectorAll("input, textarea, select, [contenteditable='true']"));
+
+    const scored = pool
+      .filter(isElementVisible)
+      .map(el => {
+        const candidates = [
+          el.innerText || "",
+          el.textContent || "",
+          el.getAttribute("placeholder") || "",
+          el.getAttribute("aria-label") || "",
+          el.getAttribute("name") || "",
+          el.getAttribute("value") || "",
+          el.getAttribute("title") || ""
+        ].map(s => s.toLowerCase().trim());
+
+        const score = candidates.reduce((acc, c) => {
+          if (c === q) return acc + 100;
+          if (c.includes(q)) return acc + 50;
+          if (q.includes(c) && c.length > 2) return acc + 25;
+          return acc;
+        }, 0);
+
+        return { el, score };
+      })
+      .filter(x => x.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    return scored.length > 0 ? scored[0].el : null;
+  }
+
+  // ─────────────────────────────────────────────────────
   // Eksekusi aksi fisik pada elemen web
+  // ─────────────────────────────────────────────────────
   async function executeAction(actionData) {
     const { action, elementId, value, scrollDirection } = actionData;
 
@@ -192,20 +277,39 @@
         window.location.href = value;
         return { success: true, message: `Membuka URL: ${value}` };
       }
-      return { success: false, error: "URL tidak valid." };
+      return { success: false, error: "URL tidak valid. Pastikan URL dimulai dengan https://" };
     }
 
-    const targetEl = activeElementsMap.get(Number(elementId)) || document.querySelector(`[data-pesat-id="${elementId}"]`);
+    // Cari elemen: utama dari map, lalu fallback ke fuzzy search
+    let targetEl = activeElementsMap.get(Number(elementId))
+      || document.querySelector(`[data-pesat-id="${elementId}"]`);
+
+    let usedFuzzy = false;
+    if (!targetEl) {
+      const hint = value || String(elementId);
+      targetEl = findElementByFuzzy(hint, action);
+      if (targetEl) {
+        usedFuzzy = true;
+        console.log(`[Pesat] Fuzzy match ditemukan untuk hint: "${hint}"`);
+      }
+    }
 
     if (!targetEl) {
-      return { success: false, error: `Elemen [${elementId}] tidak ditemukan.` };
+      return {
+        success: false,
+        error: `Elemen [${elementId}] tidak ditemukan di halaman. Coba gulir ke bawah atau muat ulang halaman, lalu coba lagi.`,
+        suggestion: "scroll"
+      };
     }
 
-    // Efek visual glow
+    // Efek visual glow (amber=fuzzy, hijau=exact)
     const oldOutline = targetEl.style.outline;
-    targetEl.style.outline = "3px solid #10b981";
+    const glowColor = usedFuzzy ? "#f59e0b" : "#10b981";
+    targetEl.style.outline = `3px solid ${glowColor}`;
     targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
     await new Promise(r => setTimeout(r, 350));
+
+    const fuzzyNote = usedFuzzy ? " (ditemukan otomatis)" : "";
 
     try {
       if (action === "click") {
@@ -213,8 +317,8 @@
         targetEl.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
         targetEl.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
         targetEl.click();
-        setTimeout(() => { targetEl.style.outline = oldOutline; }, 1000);
-        return { success: true, message: `Klik pada elemen [${elementId}] berhasil.` };
+        setTimeout(() => { targetEl.style.outline = oldOutline; }, 1200);
+        return { success: true, message: `Klik pada elemen [${elementId}] berhasil${fuzzyNote}.` };
       }
 
       if (action === "type") {
@@ -223,7 +327,7 @@
           targetEl.value = value || "";
           targetEl.dispatchEvent(new Event("input", { bubbles: true }));
           targetEl.dispatchEvent(new Event("change", { bubbles: true }));
-          
+
           if (actionData.pressEnter) {
             targetEl.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true }));
             targetEl.dispatchEvent(new KeyboardEvent("keypress", { key: "Enter", keyCode: 13, bubbles: true }));
@@ -231,30 +335,42 @@
             if (targetEl.form) targetEl.form.dispatchEvent(new Event("submit", { bubbles: true }));
           }
         }
-        setTimeout(() => { targetEl.style.outline = oldOutline; }, 1000);
-        return { success: true, message: `Mengetik "${value}" pada elemen [${elementId}] berhasil.` };
+        setTimeout(() => { targetEl.style.outline = oldOutline; }, 1200);
+        return { success: true, message: `Mengetik "${value}" pada elemen [${elementId}] berhasil${fuzzyNote}.` };
       }
 
-      return { success: false, error: `Aksi ${action} tidak didukung.` };
+      return { success: false, error: `Aksi "${action}" tidak didukung.` };
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: `Terjadi kesalahan teknis: ${err.message}` };
     }
   }
 
-  // Listener Komunikasi
+  // ─────────────────────────────────────────────────────
+  // Listener Komunikasi dengan Side Panel
+  // ─────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === "SCAN_DOM") {
       const data = scanInteractiveDOM(request.showOverlay !== false);
       sendResponse({ success: true, data });
       return true;
     }
+
     if (request.type === "CLEAR_MARKERS") {
       clearVisualMarkers();
       sendResponse({ success: true });
       return true;
     }
+
     if (request.type === "EXECUTE_ACTION") {
       executeAction(request.actionData).then(result => sendResponse(result));
+      return true;
+    }
+
+    // Handler baru: tunggu DOM stabil setelah navigasi/klik
+    if (request.type === "WAIT_FOR_DOM_STABLE") {
+      const maxWait = request.maxWaitMs || 5000;
+      const stableWindow = request.stableWindowMs || 600;
+      waitForDOMStable(maxWait, stableWindow).then(result => sendResponse(result));
       return true;
     }
   });
