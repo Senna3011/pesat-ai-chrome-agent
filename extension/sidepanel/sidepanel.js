@@ -459,7 +459,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!userPrompt || isAgentRunning) return;
 
     promptInput.value = "";
-    promptInput.style.height = "52px";
+    promptInput.style.height = "80px";
     shouldStopAgent = false;
 
     addMessageToCurrentSession("user", userPrompt);
@@ -750,7 +750,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
   function applyPromptToInput(text) {
     promptInput.value = text;
     promptInput.style.height = "auto";
-    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 52), 140) + "px";
+    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 80), 180) + "px";
     promptInput.focus();
   }
 
@@ -780,7 +780,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
   // Auto resize textarea on typing
   promptInput.addEventListener("input", () => {
     promptInput.style.height = "auto";
-    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 52), 140) + "px";
+    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 80), 180) + "px";
   });
 
   promptInput.addEventListener("keydown", (e) => {
