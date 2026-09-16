@@ -538,7 +538,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     showStatusIndicator("Memulai siklus otomatisasi...");
     appendLog(`User prompt: "${userPrompt}"`);
 
-    const stored = await chrome.storage.local.get(["apiUrl", "apiKey"]);
     const targetUrl = stored.apiUrl || "https://pesat-ai-chrome-agent.senna-947.workers.dev/";
 
     const MAX_STEPS = 8;
