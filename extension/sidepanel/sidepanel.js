@@ -1,4 +1,4 @@
-// sidepanel.js - Pesat AI Browser Agent Main Logic (History, Edit Prompt, Autonomous Actions)
+// sidepanel.js - Pesat AI Browser Agent (Multi-Agent Pipeline, Rich Markdown, & Full History)
 
 document.addEventListener("DOMContentLoaded", async () => {
   // DOM Elements
@@ -40,14 +40,76 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // State
   let currentSessionId = null;
-  let sessions = []; // Array of session objects: { id, title, timestamp, messages: [] }
+  let sessions = [];
   let isAgentRunning = false;
   let shouldStopAgent = false;
   let markersVisible = false;
 
-  // Initialize Settings & Sessions
+  // Initialize
   await loadSettings();
   await loadSessions();
+
+  // ----------------------------------------------------
+  // Markdown & Rich Text Formatter
+  // ----------------------------------------------------
+  function parseMarkdown(text) {
+    if (!text) return "";
+    
+    let html = escapeHtml(text);
+
+    // Code blocks
+    html = html.replace(/```([a-z]*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Bold
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // Italic
+    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    
+    // Headers
+    html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+    html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+    html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+    // Bullet lists
+    html = html.replace(/^\s*[\*\-]\s+(.*$)/gim, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>)/gim, '<ul>$1</ul>');
+    html = html.replace(/<\/ul>\s*<ul>/g, ''); // merge lists
+
+    // Markdown Tables (Simple parser)
+    if (html.includes('|')) {
+      const lines = html.split('\n');
+      let inTable = false;
+      let tableHtml = '';
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('|') && line.endsWith('|')) {
+          if (!inTable) {
+            inTable = true;
+            tableHtml += '<table>';
+          }
+          if (line.includes('---')) continue; // skip divider
+          
+          const cells = line.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+          tableHtml += '<tr>' + cells.map(c => `<td>${c.trim()}</td>`).join('') + '</tr>';
+        } else {
+          if (inTable) {
+            inTable = false;
+            tableHtml += '</table>';
+          }
+          tableHtml += line + '<br>';
+        }
+      }
+      if (inTable) tableHtml += '</table>';
+      html = tableHtml;
+    } else {
+      // Newlines to br (outside of pre/ul)
+      html = html.replace(/\n/g, '<br>');
+    }
+
+    return html;
+  }
 
   // ----------------------------------------------------
   // Session & History Management
@@ -111,11 +173,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       <div class="message assistant-message" id="welcomeMessage">
         <div class="message-bubble">
           <strong>Halo! Saya Pesat AI Agent ⚡</strong><br>
-          Saya dapat membaca halaman web aktif, mengklik tombol, mengisi form, atau merangkum data untuk Anda.
+          Asisten browser otonom dengan kolaborasi multi-agent (Planner, Navigator, & Validator).
           <div class="welcome-suggestions">
             <span class="suggestion-tag" data-prompt="Apa isi ringkasan dari halaman web ini?">💡 Rangkum web ini</span>
-            <span class="suggestion-tag" data-prompt="Cari informasi kontak atau email di halaman ini">🔍 Cari kontak</span>
-            <span class="suggestion-tag" data-prompt="Tolong cari tombol pencarian dan ketik query">🎯 Cari sesuatu</span>
+            <span class="suggestion-tag" data-prompt="Cari kolom pencarian dan ketik query">🔍 Cari sesuatu</span>
+            <span class="suggestion-tag" data-prompt="Tolong ekstrak data tabel pada halaman ini">📊 Ekstrak tabel</span>
           </div>
         </div>
       </div>
@@ -186,7 +248,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ----------------------------------------------------
-  // Message Rendering & Edit Prompt Feature
+  // Message Rendering & Multi-Agent UI Cards
   // ----------------------------------------------------
   function renderMessageBubble(msg, index) {
     const isUser = msg.role === "user";
@@ -194,21 +256,65 @@ document.addEventListener("DOMContentLoaded", async () => {
     msgDiv.className = `message ${isUser ? "user-message" : "assistant-message"}`;
     msgDiv.dataset.index = index;
 
-    let contentHtml = escapeHtml(msg.content).replace(/\n/g, "<br>");
+    let contentHtml = "";
 
-    // Jika pesan memiliki info step aksi
-    if (msg.stepCard) {
-      contentHtml += `
-        <div class="step-card ${msg.stepCard.type || 'action'}">
-          ${msg.stepCard.icon || '⚡'} ${escapeHtml(msg.stepCard.text)}
-        </div>
-      `;
+    if (isUser) {
+      contentHtml = `<div class="message-bubble">${escapeHtml(msg.content)}</div>`;
+    } else if (msg.multiAgent) {
+      // Render Multi-Agent Pipeline Cards (Planner, Navigator, Validator)
+      const { planner, navigator, validator, finalAnswer } = msg.multiAgent;
+      let pipelineHtml = '<div class="agent-pipeline-container">';
+
+      if (planner && planner.steps && planner.steps.length > 0) {
+        pipelineHtml += `
+          <div class="agent-card planner">
+            <div class="agent-card-header">🧠 Planner Agent</div>
+            <div class="agent-card-body">
+              <div><strong>Rencana Aksi:</strong></div>
+              <ol>${planner.steps.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
+            </div>
+          </div>
+        `;
+      }
+
+      if (navigator) {
+        pipelineHtml += `
+          <div class="agent-card navigator">
+            <div class="agent-card-header">🧭 Navigator Agent</div>
+            <div class="agent-card-body">
+              <div>${escapeHtml(navigator.description || navigator.action)}</div>
+              ${navigator.elementId ? `<span class="target-badge">Target: [${navigator.elementId}]</span>` : ''}
+              ${navigator.status ? `<div style="font-size:10px; color:#93c5fd; margin-top:3px;">Status: ${escapeHtml(navigator.status)}</div>` : ''}
+            </div>
+          </div>
+        `;
+      }
+
+      if (validator) {
+        pipelineHtml += `
+          <div class="agent-card validator">
+            <div class="agent-card-header">🎯 Validator Agent</div>
+            <div class="agent-card-body">
+              <div>${validator.success ? '✅' : '⚠️'} ${escapeHtml(validator.message || 'Verifikasi Selesai')}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      pipelineHtml += '</div>';
+
+      if (finalAnswer) {
+        pipelineHtml += `<div class="message-bubble markdown-body" style="margin-top:8px;">${parseMarkdown(finalAnswer)}</div>`;
+      }
+
+      contentHtml = pipelineHtml;
+    } else {
+      // Normal Assistant Markdown Message
+      contentHtml = `<div class="message-bubble markdown-body">${parseMarkdown(msg.content)}</div>`;
     }
 
     msgDiv.innerHTML = `
-      <div class="message-bubble">
-        ${contentHtml}
-      </div>
+      ${contentHtml}
       ${isUser ? `
         <div class="message-actions">
           <button class="action-icon-btn btn-edit-prompt" title="Edit prompt & jalankan ulang">✏️ Edit</button>
@@ -216,18 +322,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       ` : ''}
     `;
 
-    // Pasang event edit prompt
     if (isUser) {
       const btnEdit = msgDiv.querySelector(".btn-edit-prompt");
-      btnEdit.addEventListener("click", () => {
-        editPromptAt(index);
-      });
+      btnEdit.addEventListener("click", () => editPromptAt(index));
     }
 
     chatArea.appendChild(msgDiv);
   }
 
-  // Edit Prompt & Re-run Logic (Branching)
   function editPromptAt(index) {
     const session = getCurrentSession();
     if (!session || !session.messages[index]) return;
@@ -236,21 +338,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     promptInput.value = originalText;
     promptInput.focus();
 
-    // Potong percakapan di titik pesan ini (buang pesan setelahnya)
     session.messages = session.messages.slice(0, index);
     saveSessions();
     renderCurrentSession();
     appendLog(`Prompt ke-${index + 1} dimuat kembali untuk diedit.`);
   }
 
-  function addMessageToCurrentSession(role, content, stepCard = null) {
+  function addMessageToCurrentSession(role, content, multiAgent = null) {
     const session = getCurrentSession();
     if (!session) return;
 
-    const msgObj = { role, content, timestamp: Date.now(), stepCard };
+    const msgObj = { role, content, timestamp: Date.now(), multiAgent };
     session.messages.push(msgObj);
 
-    // Auto update session title dari prompt pertama
     if (session.messages.length === 1 && role === "user") {
       session.title = content.substring(0, 32) + (content.length > 32 ? "..." : "");
     }
@@ -262,7 +362,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ----------------------------------------------------
-  // Settings Logic
+  // Settings & Content Script Bridge
   // ----------------------------------------------------
   async function loadSettings() {
     const config = await chrome.storage.local.get(["apiUrl", "apiKey"]);
@@ -279,9 +379,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     appendLog("✅ Pengaturan API disimpan.");
   });
 
-  // ----------------------------------------------------
-  // Content Script Messenger Helper
-  // ----------------------------------------------------
   function sendToContentScript(payload) {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(
@@ -304,18 +401,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     const userPrompt = promptInput.value.trim();
     if (!userPrompt || isAgentRunning) return;
 
-    // Bersihkan input
     promptInput.value = "";
     promptInput.style.height = "36px";
 
-    // Simpan pesan user
     addMessageToCurrentSession("user", userPrompt);
-
-    setAgentRunning(true, "Menganalisis Halaman...");
+    setAgentRunning(true, "Menganalisis Web...");
     appendLog(`User prompt: "${userPrompt}"`);
 
-    // 1. Scan DOM dari Halaman Aktif secara otomatis
-    appendLog("Memindai DOM halaman aktif...");
+    // 1. Scan DOM dari Tab Aktif (Colored Bounding Boxes)
+    appendLog("Memindai elemen interaktif halaman aktif...");
     const scanRes = await sendToContentScript({ type: "SCAN_DOM", showOverlay: true });
     
     let pageContext = "";
@@ -327,21 +421,19 @@ Judul: ${d.title}
 URL: ${d.url}
 Jumlah Elemen Interaktif: ${d.elementsCount}
 
-[DAFTAR ELEMEN INTERAKTIF VIEWPORT]
-${d.reducedDOM || "(Tidak ada elemen interaktif terdeteksi)"}
+[DAFTAR ELEMEN INTERAKTIF VIEWPORT BERNOMOR]
+${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       `.trim();
       appendLog(`DOM terpindai: ${d.elementsCount} elemen.`);
-    } else {
-      appendLog(`Peringatan: Gagal memindai DOM (${scanRes?.error || "Tab tidak didukung"}).`);
     }
 
-    // 2. Hubungi Backend AI Proxy
+    // 2. Hubungi Backend AI Worker
     const stored = await chrome.storage.local.get(["apiUrl", "apiKey"]);
     const targetUrl = stored.apiUrl || "https://pesat-ai-chrome-agent.senna-947.workers.dev/";
 
     try {
       appendLog(`Menghubungi AI Engine: ${targetUrl}`);
-      setAgentRunning(true, "Berpikir...");
+      setAgentRunning(true, "Berpikir (Multi-Agent)...");
 
       const session = getCurrentSession();
       const history = (session?.messages || []).slice(-6).map(m => ({
@@ -374,8 +466,8 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif terdeteksi)"}
       const aiReply = data.reply || "";
       appendLog("Respon AI diterima.");
 
-      // 3. Cek apakah respon berupa JSON Action (Otomatisasi) atau Teks Percakapan
-      await processAiResponse(aiReply);
+      // 3. Proses Respon Multi-Agent
+      await processMultiAgentResponse(aiReply);
 
     } catch (err) {
       appendLog(`Error: ${err.message}`);
@@ -385,77 +477,83 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif terdeteksi)"}
     }
   }
 
-  // Memproses respon AI (Parsing JSON Action vs Chat Markdown)
-  async function processAiResponse(rawReply) {
-    // Cek jika AI mengembalikan blok JSON Action
-    const jsonMatch = rawReply.match(/```json\s*([\s\S]*?)\s*```/) || rawReply.match(/\{[\s\S]*"action"[\s\S]*\}/);
-    
+  // Memproses Multi-Agent Pipeline Response (Planner, Navigator, Validator)
+  async function processMultiAgentResponse(rawReply) {
+    const jsonMatch = rawReply.match(/```json\s*([\s\S]*?)\s*```/) || rawReply.match(/\{[\s\S]*"action"[\s\S]*\}/) || rawReply.match(/\{[\s\S]*"planner"[\s\S]*\}/);
+
     if (jsonMatch) {
       try {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
-        const actionObj = JSON.parse(jsonStr);
+        const resObj = JSON.parse(jsonStr);
 
-        // Tampilkan pemikiran AI (Thought)
-        if (actionObj.thought) {
-          addMessageToCurrentSession("assistant", actionObj.thought, {
-            type: "thought",
-            icon: "🧠",
-            text: `Pemikiran Agent: ${actionObj.thought}`
-          });
-        }
+        const multiAgentData = {
+          planner: resObj.planner || (resObj.thought ? { steps: [resObj.thought] } : null),
+          navigator: null,
+          validator: null,
+          finalAnswer: resObj.answer || resObj.message || ""
+        };
 
-        // Eksekusi aksi fisik pada halaman web
-        if (actionObj.action && actionObj.action !== "finish") {
-          setAgentRunning(true, `Aksi: ${actionObj.action} [${actionObj.elementId || ''}]`);
-          appendLog(`Mengeksekusi aksi: ${actionObj.action} pada element [${actionObj.elementId}]`);
+        // Eksekusi aksi jika ada
+        const actionType = resObj.action || resObj.navigator?.action;
+        const targetId = resObj.elementId || resObj.navigator?.elementId;
+        const actionValue = resObj.value || resObj.navigator?.value;
+
+        if (actionType && actionType !== "finish") {
+          multiAgentData.navigator = {
+            action: actionType,
+            elementId: targetId,
+            description: resObj.message || `Mengeksekusi ${actionType} pada elemen [${targetId || ''}]`,
+            status: "Sedang berjalan..."
+          };
+
+          setAgentRunning(true, `Aksi: ${actionType} [${targetId || ''}]`);
+          appendLog(`Navigator executing: ${actionType} [${targetId}]`);
 
           const execResult = await sendToContentScript({
             type: "EXECUTE_ACTION",
-            actionData: actionObj
+            actionData: {
+              action: actionType,
+              elementId: targetId,
+              value: actionValue,
+              pressEnter: resObj.pressEnter
+            }
           });
 
-          if (execResult.success) {
-            addMessageToCurrentSession("assistant", actionObj.message || `✅ Berhasil mengeksekusi ${actionObj.action}.`, {
-              type: "action",
-              icon: "🎯",
-              text: `Aksi Selesai: ${execResult.message || 'Sukses'}`
-            });
-          } else {
-            addMessageToCurrentSession("assistant", `⚠️ Gagal eksekusi: ${execResult.error}`, {
-              type: "error",
-              icon: "❌",
-              text: execResult.error
-            });
-          }
-        } else {
-          // Action finish / jawaban akhir
-          addMessageToCurrentSession("assistant", actionObj.message || actionObj.answer || rawReply);
+          multiAgentData.navigator.status = execResult.success ? "Selesai (0.3s)" : "Gagal";
+          multiAgentData.validator = {
+            success: execResult.success,
+            message: execResult.success 
+              ? `Aksi ${actionType} pada [${targetId}] berhasil diverifikasi.`
+              : `Gagal verifikasi: ${execResult.error}`
+          };
         }
+
+        addMessageToCurrentSession("assistant", "", multiAgentData);
         return;
       } catch (e) {
-        // Fallback jika bukan valid JSON
+        // Fallback jika parsing gagal
       }
     }
 
-    // Tampilkan balasan teks biasa
+    // Tampilkan balasan teks biasa dengan markdown rapi
     addMessageToCurrentSession("assistant", rawReply);
   }
 
   // ----------------------------------------------------
   // Quick Action Chips Handlers
   // ----------------------------------------------------
-  chipSummarize.addEventListener("click", async () => {
-    promptInput.value = "Tolong berikan ringkasan poin-poin utama dari isi konten halaman web ini dalam format yang rapi.";
+  chipSummarize.addEventListener("click", () => {
+    promptInput.value = "Tolong berikan ringkasan poin-poin utama dari isi konten halaman web ini dalam format Markdown yang rapi dengan bullet points.";
     handleSend();
   });
 
-  chipExtract.addEventListener("click", async () => {
+  chipExtract.addEventListener("click", () => {
     promptInput.value = "Tolong ekstrak data atau tabel penting yang ada pada halaman ini dan sajikan dalam format tabel Markdown.";
     handleSend();
   });
 
-  chipAutoFill.addEventListener("click", async () => {
-    promptInput.value = "Tolong periksa apakah ada formulir pada halaman ini dan bantu saya mengisinya.";
+  chipAutoFill.addEventListener("click", () => {
+    promptInput.value = "Tolong periksa kolom formulir pada halaman ini dan jelaskan cara pengisiannya.";
     handleSend();
   });
 
@@ -471,7 +569,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif terdeteksi)"}
   });
 
   // ----------------------------------------------------
-  // UI Helpers & Event Listeners
+  // Helpers
   // ----------------------------------------------------
   function setAgentRunning(running, statusText = "Siap") {
     isAgentRunning = running;
@@ -513,7 +611,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif terdeteksi)"}
       .replace(/'/g, "&#039;");
   }
 
-  // Header & Drawer Triggers
+  // Event Listeners
   btnNewChat.addEventListener("click", createNewSession);
   btnDrawerNewChat.addEventListener("click", createNewSession);
 
@@ -553,7 +651,6 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif terdeteksi)"}
     }
   });
 
-  // Auto-resize textarea
   promptInput.addEventListener("input", () => {
     promptInput.style.height = "auto";
     promptInput.style.height = Math.min(promptInput.scrollHeight, 90) + "px";

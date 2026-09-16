@@ -60,11 +60,13 @@
 
 ## 📝 Log Progres Harian
 
-### 🗓️ Day 1 (Inisialisasi Dasar, Backend AI, & Phase 3 UX Supercharged)
+### 🗓️ Day 1 (Inisialisasi Dasar, Backend AI, & Phase 3 Multi-Agent Supercharged)
 - [x] Diskusi awal dan penentuan strategi tech stack (Vanilla JS + Side Panel).
-- [x] Pembuatan dokumen pelacak proyek `coldstart.md`.
+- [x] Pembuatan dokumen pelacak proyek `coldstart.md` dan roadmap `To-do-list.md`.
 - [x] Pembuatan boilerplate Chrome Extension (Manifest V3) dan integrasi Cloudflare Worker.
-- [x] **Smart DOM Scanner & Reduced DOM Parser** (`content.js`): Ekstraksi elemen interaktif hemat 85% token dengan visual overlay badge `[1]`, `[2]`, dll.
+- [x] **Smart DOM Scanner & Colored Bounding Box Overlay** (`content.js`): Garis kotak berwarna (Biru: Input, Merah: Button, Hijau: Link, Oranye: Select) dan badge angka presisi ala Nanobrowser.
+- [x] **Multi-Agent Pipeline Cards**: Visualisasi transparan kartu 🧠 **Planner** (daftar rencana), 🧭 **Navigator** (aksi target [ID]), dan 🎯 **Validator** (verifikasi hasil).
+- [x] **Rich Markdown & Table Renderer**: Format Markdown (bold, list, table, code) ter-render bersih dalam HTML.
 - [x] **Multi-Action Executor** (`content.js`): Simulasi otomatis klik, ketik teks dengan submit enter, scroll, dan navigasi URL.
 - [x] **Fitur Edit Prompt & Re-run**: Kemampuan koreksi prompt lama pada bubble chat dengan auto-truncation memori percakapan.
 - [x] **New Chat Context (+)**: Tombol instan untuk reset obrolan dan memulai task baru.

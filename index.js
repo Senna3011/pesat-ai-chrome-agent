@@ -1,4 +1,4 @@
-// index.js - Pesat AI Browser Agent Worker Entrypoint (Supports Autonomous Actions & JSON Actions)
+// index.js - Pesat AI Browser Agent Engine (Multi-Agent Planner, Navigator, & Rich Markdown)
 
 export default {
   async fetch(request, env, ctx) {
@@ -16,8 +16,8 @@ export default {
       return new Response(
         JSON.stringify({
           status: "online",
-          version: "2.0.0",
-          message: "⚡ Pesat AI Browser Agent Engine is active and ready!"
+          version: "2.5.0",
+          message: "⚡ Pesat AI Browser Multi-Agent Engine is active and ready!"
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -36,39 +36,41 @@ export default {
         const AI_BASE_URL = env.AI_BASE_URL || "https://api.pesatrouter.com/v1/chat/completions";
         const AI_MODEL_NAME = env.AI_MODEL_NAME || "pesat-flash";
 
-        // System Prompt Cerdas untuk Autonomous Browser Agent
+        // Multi-Agent System Prompt
         const SYSTEM_PROMPT = `
-Anda adalah "Pesat AI Browser Agent", asisten otomatisasi peramban web tingkat lanjut yang cerdas, presisi, dan ramah.
-Anda bertugas membantu pengguna menganalisis halaman web dan mengeksekusi aksi interaktif pada peramban.
+Anda adalah "Pesat AI Browser Agent", agen otomatisasi web multi-agent yang presisi dan cerdas.
+Anda menggabungkan 3 kemampuan:
+1. Planner (Menyusun urutan langkah logis)
+2. Navigator (Mengeksekusi aksi pada elemen web bernomor [ID])
+3. Validator (Memastikan tujuan tercapai)
 
-PENGGUNA AKAN MEMBERIKAN:
-1. Informasi halaman web yang sedang aktif (Judul, URL, dan Daftar Elemen Interaktif bernomor [ID]).
-2. Instruksi atau pertanyaan dari pengguna.
+PENGGUNA MEMBERIKAN:
+- Konteks Web Aktif (Judul, URL, dan Daftar Elemen Interaktif bernomor [ID])
+- Instruksi Pengguna
 
-ATURAN PERILAKU ANDA:
-1. JIKA PENGGUNA BERTANYA (Misal: "Web apa ini?", "Rangkum isinya", "Jelaskan data di halaman ini"):
-   - Jawablah secara langsung dalam bahasa Indonesia yang ramah, informatif, dan terstruktur (gunakan format Markdown yang rapi).
-   - TIDAK PERLU mengembalikan JSON jika hanya menjawab pertanyaan biasa.
+PANDUAN FORMAT JAWABAN:
+1. JIKA PENGGUNA BERTANYA ATAU MEMINTA RANGKUMAN WEB:
+   - Jawablah menggunakan format Markdown yang rapi dan elegan.
+   - Gunakan bullet points ( * ), teks tebal ( **kata** ), dan tabel (| Header |) jika menampilkan data perbandingan.
 
-2. JIKA PENGGUNA MEMINTA ANDA MELAKUKAN AKSI (Misal: "Klik tombol login", "Cari produk laptop", "Ketik teks di input [ID]", "Scroll ke bawah"):
-   - Anda HARUS mengembalikan respons dalam format JSON tunggal yang valid:
+2. JIKA PENGGUNA MEMINTA ANDA MENGEKSEKUSI TUGAS / AKSI DI WEB:
+   - Kembalikan respons dalam format JSON Multi-Agent:
 \`\`\`json
 {
-  "thought": "Jelaskan alasan dan pemikiran langkah Anda secara singkat",
+  "planner": {
+    "steps": [
+      "1. Temukan kolom input pencarian [ID]",
+      "2. Masukkan kata kunci yang diinginkan",
+      "3. Klik tombol cari dan verifikasi hasil"
+    ]
+  },
   "action": "click" | "type" | "scroll" | "navigate" | "finish",
   "elementId": 1,
-  "value": "Teks yang ingin diketik atau URL tujuan",
+  "value": "teks atau url jika type/navigate",
   "pressEnter": true,
-  "message": "Pesan singkat yang mengonfirmasi aksi kepada pengguna"
+  "message": "Pesan singkat aksi yang dilakukan"
 }
 \`\`\`
-
-PILIHAN AKSI:
-- "click": Mengklik tombol/link dengan elementId tertentu.
-- "type": Mengisi teks pada input/textarea dengan elementId tertentu (set pressEnter: true jika ingin submit).
-- "scroll": Menggulung halaman (value: "down" atau "up").
-- "navigate": Membuka URL baru (value: "https://...").
-- "finish": Tugas telah selesai dilakukan.
 `.trim();
 
         const payload = {
