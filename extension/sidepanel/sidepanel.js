@@ -553,7 +553,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
   });
 
   chipAutoFill.addEventListener("click", () => {
-    promptInput.value = "Tolong periksa kolom formulir pada halaman ini dan jelaskan cara pengisiannya.";
+    promptInput.value = "Tolong periksa kolom input atau formulir pada halaman ini, lalu pandu saya cara mengisinya dengan bahasa yang ramah dan mudah dipahami (hindari istilah koding mentah).";
     handleSend();
   });
 
