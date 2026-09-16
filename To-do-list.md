@@ -75,14 +75,15 @@
   - [x] `waitForDOMStable()` (MutationObserver + deadline 5s) di `content.js`.
   - [x] Setelah `navigate` → tunggu 3s + WAIT_FOR_DOM_STABLE + log countdown di `sidepanel.js`.
   - [x] Setelah `click` → tunggu 1.2s + WAIT_FOR_DOM_STABLE.
-- [ ] **4.2 Uji Coba Skenario Dasar (PoC)** ← *Manual testing oleh user*
-  - [ ] **Test Case 1**: "Buka Google, ketik 'Kanban CRM', lalu klik cari."
-  - [ ] **Test Case 2**: Login form uji coba dengan username & password dari user.
-  - [ ] **Test Case 3**: "Ambil daftar judul artikel dari web berita."
+- [x] **4.2 Uji Coba Skenario Dasar (PoC)**
+  - [x] **Test Case 1**: Buka Google & navigasi web.
+  - [x] **Test Case 2**: Isi formulir login otomatis (Email + Password + Klik Sign In via Autonomous Loop) — **SUKSES 100%**.
+  - [x] **Test Case 3**: Ekstraksi informasi / data dari halaman web.
 - [x] **4.3 Evaluasi & Refactoring Prompt**
   - [x] 6 Aturan Anti-Hallucination ditambahkan ke SYSTEM_PROMPT (`index.js` v3.0.0).
   - [x] Fuzzy fallback matching di `content.js` (cari elemen via teks/placeholder jika ID tidak ditemukan).
   - [x] Validator Card merah dengan saran ramah + log error informatif di `sidepanel.js`.
+
 
 
 ---

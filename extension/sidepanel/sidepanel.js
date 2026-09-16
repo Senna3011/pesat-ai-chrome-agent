@@ -397,25 +397,43 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ----------------------------------------------------
   // Core: Autonomous AI Action & Prompt Dispatch
   // ----------------------------------------------------
+  // ----------------------------------------------------
+  // Core: Autonomous Multi-Step Agentic Loop (Nanobrowser-Grade)
+  // ----------------------------------------------------
   async function handleSend() {
     const userPrompt = promptInput.value.trim();
     if (!userPrompt || isAgentRunning) return;
 
     promptInput.value = "";
     promptInput.style.height = "36px";
+    shouldStopAgent = false;
 
     addMessageToCurrentSession("user", userPrompt);
-    setAgentRunning(true, "Menganalisis Web...");
+    setAgentRunning(true, "Memulai Agentic Loop...");
     appendLog(`User prompt: "${userPrompt}"`);
 
-    // 1. Scan DOM dari Tab Aktif (Colored Bounding Boxes)
-    appendLog("Memindai elemen interaktif halaman aktif...");
-    const scanRes = await sendToContentScript({ type: "SCAN_DOM", showOverlay: true });
-    
-    let pageContext = "";
-    if (scanRes && scanRes.success && scanRes.data) {
-      const d = scanRes.data;
-      pageContext = `
+    const stored = await chrome.storage.local.get(["apiUrl", "apiKey"]);
+    const targetUrl = stored.apiUrl || "https://pesat-ai-chrome-agent.senna-947.workers.dev/";
+
+    const MAX_STEPS = 8;
+    let stepCount = 0;
+    let lastActionSuccess = true;
+    let lastActionSummary = "";
+
+    try {
+      while (stepCount < MAX_STEPS && !shouldStopAgent) {
+        stepCount++;
+        setAgentRunning(true, `Langkah ${stepCount}/${MAX_STEPS}...`);
+        appendLog(`─── Memulai Langkah ${stepCount} ───`);
+
+        // 1. Scan DOM dari Tab Aktif (Colored Bounding Boxes)
+        appendLog("Memindai elemen interaktif halaman...");
+        const scanRes = await sendToContentScript({ type: "SCAN_DOM", showOverlay: true });
+        
+        let pageContext = "";
+        if (scanRes && scanRes.success && scanRes.data) {
+          const d = scanRes.data;
+          pageContext = `
 [INFORMASI WEB AKTIF]
 Judul: ${d.title}
 URL: ${d.url}
@@ -423,62 +441,100 @@ Jumlah Elemen Interaktif: ${d.elementsCount}
 
 [DAFTAR ELEMEN INTERAKTIF VIEWPORT BERNOMOR]
 ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
-      `.trim();
-      appendLog(`DOM terpindai: ${d.elementsCount} elemen.`);
-    }
+          `.trim();
+          appendLog(`DOM terpindai: ${d.elementsCount} elemen.`);
+        }
 
-    // 2. Hubungi Backend AI Worker
-    const stored = await chrome.storage.local.get(["apiUrl", "apiKey"]);
-    const targetUrl = stored.apiUrl || "https://pesat-ai-chrome-agent.senna-947.workers.dev/";
+        if (shouldStopAgent) break;
 
-    try {
-      appendLog(`Menghubungi AI Engine: ${targetUrl}`);
-      setAgentRunning(true, "Berpikir (Multi-Agent)...");
+        // 2. Susun prompt untuk LLM
+        let promptPayload = `Konteks Halaman Web Terkini:\n${pageContext}\n\nTugas Utama Pengguna: "${userPrompt}"`;
+        if (stepCount > 1) {
+          promptPayload += `\n\nStatus Langkah Sebelumnya (${stepCount - 1}): ${lastActionSummary}`;
+          promptPayload += `\nLanjutkan mengeksekusi langkah berikutnya yang diperlukan, atau kembalikan action "finish" jika seluruh tugas pengguna sudah selesai.`;
+        }
 
-      const session = getCurrentSession();
-      const history = (session?.messages || []).slice(-6).map(m => ({
-        role: m.role,
-        content: m.content
-      }));
+        // Ambil riwayat chat terbaru
+        const session = getCurrentSession();
+        const history = (session?.messages || []).slice(-6).map(m => ({
+          role: m.role,
+          content: m.content
+        }));
 
-      const res = await fetch(targetUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(stored.apiKey ? { "Authorization": `Bearer ${stored.apiKey}` } : {})
-        },
-        body: JSON.stringify({
-          prompt: `Konteks Halaman Web:\n${pageContext}\n\nPermintaan Pengguna: ${userPrompt}`,
-          messages: history
-        })
-      });
+        appendLog(`Menghubungi AI Engine (Langkah ${stepCount})...`);
+        setAgentRunning(true, `Berpikir (Langkah ${stepCount})...`);
 
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`HTTP ${res.status}: ${errText}`);
+        const res = await fetch(targetUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(stored.apiKey ? { "Authorization": `Bearer ${stored.apiKey}` } : {})
+          },
+          body: JSON.stringify({
+            prompt: promptPayload,
+            messages: history
+          })
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errText}`);
+        }
+
+        const data = await res.json();
+        if (data.success === false && data.error) {
+          throw new Error(data.error);
+        }
+
+        const aiReply = data.reply || "";
+        appendLog(`Respon AI (Langkah ${stepCount}) diterima.`);
+
+        if (shouldStopAgent) break;
+
+        // 3. Proses respons langkah ini
+        const stepResult = await executeStepResponse(aiReply, stepCount);
+
+        if (stepResult.isFinished) {
+          appendLog("✅ Tugas selesai sepenuhnya (AI Finish).");
+          break;
+        }
+
+        if (!stepResult.hasAction) {
+          // Hanya balasan percakapan / teks biasa, tidak ada aksi fisik lanjutan
+          break;
+        }
+
+        if (!stepResult.actionSuccess) {
+          // Aksi gagal
+          lastActionSuccess = false;
+          lastActionSummary = `Gagal mengeksekusi ${stepResult.actionType}: ${stepResult.errorMessage}`;
+          appendLog(`⚠️ Langkah ${stepCount} gagal. Menghentikan loop untuk evaluasi.`);
+          break;
+        }
+
+        lastActionSuccess = true;
+        lastActionSummary = `Berhasil mengeksekusi ${stepResult.actionType} pada target [${stepResult.targetId || '—'}].`;
+
+        // Jeda kecil sebelum langkah berikutnya agar halaman sempat render state baru
+        await new Promise(r => setTimeout(r, 600));
       }
 
-      const data = await res.json();
-      if (data.success === false && data.error) {
-        throw new Error(data.error);
+      if (stepCount >= MAX_STEPS && !shouldStopAgent) {
+        appendLog(`ℹ️ Batas maksimum ${MAX_STEPS} langkah tercapai.`);
       }
-
-      const aiReply = data.reply || "";
-      appendLog("Respon AI diterima.");
-
-      // 3. Proses Respon Multi-Agent
-      await processMultiAgentResponse(aiReply);
 
     } catch (err) {
       appendLog(`Error: ${err.message}`);
       addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan: ${err.message}`);
     } finally {
       setAgentRunning(false);
+      // Bersihkan marker jika selesai
+      await sendToContentScript({ type: "CLEAR_MARKERS" });
     }
   }
 
-  // Memproses Multi-Agent Pipeline Response (Planner, Navigator, Validator)
-  async function processMultiAgentResponse(rawReply) {
+  // Menjalankan satu langkah Multi-Agent response
+  async function executeStepResponse(rawReply, stepNum) {
     const jsonMatch = rawReply.match(/```json\s*([\s\S]*?)\s*```/) || rawReply.match(/\{[\s\S]*"action"[\s\S]*\}/) || rawReply.match(/\{[\s\S]*"planner"[\s\S]*\}/);
 
     if (jsonMatch) {
@@ -486,30 +542,48 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         const jsonStr = jsonMatch[1] || jsonMatch[0];
         const resObj = JSON.parse(jsonStr);
 
-        const multiAgentData = {
-          planner: resObj.planner || (resObj.thought ? { steps: [resObj.thought] } : null),
-          navigator: null,
-          validator: null,
-          finalAnswer: resObj.answer || resObj.message || ""
-        };
-
-        // Eksekusi aksi jika ada
         const actionType = resObj.action || resObj.navigator?.action;
         const targetId = resObj.elementId || resObj.navigator?.elementId;
         const actionValue = resObj.value || resObj.navigator?.value;
 
-        if (actionType && actionType !== "finish") {
-          multiAgentData.navigator = {
+        // Jika AI memutuskan tugas selesai
+        if (actionType === "finish" || (!actionType && resObj.message)) {
+          const finalMsg = resObj.message || resObj.answer || "Tugas telah selesai dikerjakan!";
+          addMessageToCurrentSession("assistant", finalMsg);
+          return { isFinished: true, hasAction: false };
+        }
+
+        const multiAgentData = {
+          planner: resObj.planner || (resObj.thought ? { steps: [resObj.thought] } : null),
+          navigator: {
             action: actionType,
             elementId: targetId,
             description: resObj.message || `Mengeksekusi ${actionType} pada elemen [${targetId || ''}]`,
             status: "Sedang berjalan..."
-          };
+          },
+          validator: null,
+          finalAnswer: resObj.answer || ""
+        };
 
-          setAgentRunning(true, `Aksi: ${actionType} [${targetId || ''}]`);
-          appendLog(`▶ Menjalankan: ${actionType} [${targetId || '—'}]`);
+        setAgentRunning(true, `Aksi: ${actionType} [${targetId || '—'}]`);
+        appendLog(`▶ Menjalankan [Step ${stepNum}]: ${actionType} ${actionType === 'navigate' ? actionValue : `[${targetId || '—'}]`}`);
 
-          const execResult = await sendToContentScript({
+        let execResult;
+        if (actionType === "navigate") {
+          execResult = await new Promise((resolve) => {
+            chrome.runtime.sendMessage(
+              { action: "NAVIGATE_TAB", url: actionValue },
+              (response) => {
+                if (chrome.runtime.lastError) {
+                  resolve({ success: false, error: chrome.runtime.lastError.message });
+                } else {
+                  resolve(response || { success: true });
+                }
+              }
+            );
+          });
+        } else {
+          execResult = await sendToContentScript({
             type: "EXECUTE_ACTION",
             actionData: {
               action: actionType,
@@ -518,60 +592,79 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
               pressEnter: resObj.pressEnter
             }
           });
-
-          // ── AUTO-WAIT setelah aksi yang memicu loading halaman ──
-          if (execResult.success) {
-            const needsWait = actionType === "navigate" || actionType === "click";
-            if (needsWait) {
-              const waitMs = actionType === "navigate" ? 3000 : 1200;
-              appendLog(`⏳ Menunggu halaman dimuat (maks ${waitMs / 1000}s)...`);
-              setAgentRunning(true, "Menunggu halaman...");
-
-              // Beri jeda awal agar browser sempat mulai load
-              await new Promise(r => setTimeout(r, waitMs === 3000 ? 800 : 300));
-
-              const stableResult = await sendToContentScript({
-                type: "WAIT_FOR_DOM_STABLE",
-                maxWaitMs: waitMs,
-                stableWindowMs: actionType === "navigate" ? 700 : 500
-              });
-
-              if (stableResult?.stable || stableResult?.timedOut) {
-                appendLog(`✅ Halaman stabil${stableResult.timedOut ? " (lanjut paksa)" : ""}, analisis dilanjutkan.`);
-              }
-            }
-
-            const elapsed = actionType === "navigate" ? "3.0s" : "1.2s";
-            multiAgentData.navigator.status = `Selesai (${elapsed})`;
-            multiAgentData.validator = {
-              success: true,
-              message: `Aksi ${actionType} pada [${targetId || '—'}] berhasil diverifikasi.`
-            };
-          } else {
-            // Aksi gagal — validator merah + saran yang ramah
-            multiAgentData.navigator.status = "Gagal";
-            const suggestion = execResult.suggestion === "scroll"
-              ? "💡 Coba gulir halaman ke bawah terlebih dahulu, lalu kirim permintaan yang sama."
-              : "💡 Coba muat ulang halaman, lalu ulangi perintah.";
-            multiAgentData.validator = {
-              success: false,
-              message: `${execResult.error || "Terjadi kesalahan saat eksekusi."}\n\n${suggestion}`
-            };
-            appendLog(`❌ Aksi gagal: ${execResult.error}`);
-          }
         }
 
-        addMessageToCurrentSession("assistant", "", multiAgentData);
-        return;
+        // Auto-wait setelah aksi
+        if (execResult && execResult.success) {
+          const needsWait = actionType === "navigate" || actionType === "click";
+          if (needsWait) {
+            const waitMs = actionType === "navigate" ? 3500 : 1200;
+            appendLog(`⏳ Menunggu halaman dimuat (maks ${waitMs / 1000}s)...`);
+            setAgentRunning(true, "Menunggu halaman...");
+
+            await new Promise(r => setTimeout(r, actionType === "navigate" ? 1500 : 300));
+
+            const stableResult = await sendToContentScript({
+              type: "WAIT_FOR_DOM_STABLE",
+              maxWaitMs: waitMs,
+              stableWindowMs: actionType === "navigate" ? 700 : 500
+            });
+
+            if (stableResult?.stable || stableResult?.timedOut) {
+              appendLog(`✅ Halaman stabil${stableResult.timedOut ? " (lanjut paksa)" : ""}.`);
+            }
+          }
+
+          const elapsed = actionType === "navigate" ? "3.5s" : "1.2s";
+          multiAgentData.navigator.status = `Selesai (${elapsed})`;
+          multiAgentData.validator = {
+            success: true,
+            message: `Aksi ${actionType} ${actionType === 'navigate' ? `menuju ${actionValue}` : `pada [${targetId || '—'}]`} berhasil.`
+          };
+
+          addMessageToCurrentSession("assistant", "", multiAgentData);
+
+          return {
+            isFinished: false,
+            hasAction: true,
+            actionSuccess: true,
+            actionType,
+            targetId
+          };
+        } else {
+          // Aksi gagal
+          multiAgentData.navigator.status = "Gagal";
+          const suggestion = execResult?.suggestion === "scroll"
+            ? "💡 Coba gulir halaman ke bawah terlebih dahulu."
+            : "💡 Coba muat ulang halaman, lalu ulangi perintah.";
+          multiAgentData.validator = {
+            success: false,
+            message: `${execResult?.error || "Terjadi kesalahan saat eksekusi."}\n\n${suggestion}`
+          };
+          appendLog(`❌ Aksi gagal: ${execResult?.error}`);
+
+          addMessageToCurrentSession("assistant", "", multiAgentData);
+
+          return {
+            isFinished: false,
+            hasAction: true,
+            actionSuccess: false,
+            actionType,
+            targetId,
+            errorMessage: execResult?.error
+          };
+        }
+
       } catch (e) {
-        // Fallback jika parsing JSON gagal
         console.error("[Pesat] JSON parse error:", e);
       }
     }
 
-    // Tampilkan balasan teks biasa dengan markdown rapi
+    // Tampilkan balasan teks biasa
     addMessageToCurrentSession("assistant", rawReply);
+    return { isFinished: true, hasAction: false };
   }
+
 
 
   // ----------------------------------------------------
