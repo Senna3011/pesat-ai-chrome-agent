@@ -53,6 +53,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Initialize
   await loadSettings();
   await loadSessions();
+  attachSuggestionListeners();
 
   // ----------------------------------------------------
   // 4. Markdown & Responsive Table Parser (marked.js Integration)
@@ -195,6 +196,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function createNewSession() {
+    // Pastikan state running selalu direset saat buka sesi baru
+    if (activeAbortController) {
+      try { activeAbortController.abort(); } catch (e) {}
+      activeAbortController = null;
+    }
+    setAgentRunning(false);
+    hideStatusIndicator();
+    shouldStopAgent = true;
+
     currentSessionId = "sess_" + Date.now();
     const newSession = {
       id: currentSessionId,
@@ -230,13 +240,36 @@ document.addEventListener("DOMContentLoaded", async () => {
   function renderWelcomeMessage() {
     chatArea.innerHTML = `
       <div class="message assistant-message" id="welcomeMessage">
-        <div class="message-bubble">
-          <strong>Halo! Saya Pesat AI Agent ⚡</strong><br>
-          Asisten browser otonom cerdas dengan dukungan Multi-Agent (Planner, Navigator, & Validator).
+        <div class="message-bubble welcome-card">
+          <div class="welcome-header">
+            <span class="welcome-badge">Pesat.AI</span>
+            <span class="welcome-title">Halo! Saya Pesat AI Agent ⚡</span>
+          </div>
+          <p class="welcome-desc">
+            Asisten browser otonom cerdas dengan arsitektur Multi-Agent (Planner, Navigator, & Validator) untuk membantu otomasi web Anda secara presisi.
+          </p>
           <div class="welcome-suggestions">
-            <span class="suggestion-tag" data-prompt="Tolong berikan ringkasan poin-poin utama dari isi konten halaman web ini dalam format Markdown yang rapi dengan bullet points.">💡 Rangkum web ini</span>
-            <span class="suggestion-tag" data-prompt="Tolong ekstrak data atau tabel penting yang ada pada halaman ini dan sajikan dalam format tabel Markdown.">📊 Ekstrak tabel</span>
-            <span class="suggestion-tag" data-prompt="Tolong periksa kolom input atau formulir pada halaman ini, lalu pandu saya cara mengisinya.">📝 Bantu isi formulir</span>
+            <div class="suggestion-item" data-prompt="Tolong berikan ringkasan poin-poin utama dari isi konten halaman web ini dalam format Markdown yang rapi dengan bullet points.">
+              <span class="suggestion-icon">💡</span>
+              <div class="suggestion-text">
+                <span class="suggestion-title">Rangkum web ini</span>
+                <span class="suggestion-sub">Ekstraksi poin-poin esensial konten</span>
+              </div>
+            </div>
+            <div class="suggestion-item" data-prompt="Tolong ekstrak data atau tabel penting yang ada pada halaman ini dan sajikan dalam format tabel Markdown.">
+              <span class="suggestion-icon">📊</span>
+              <div class="suggestion-text">
+                <span class="suggestion-title">Ekstrak tabel</span>
+                <span class="suggestion-sub">Konversi data web ke tabel rapi</span>
+              </div>
+            </div>
+            <div class="suggestion-item" data-prompt="Tolong periksa kolom input atau formulir pada halaman ini, lalu pandu saya cara mengisinya.">
+              <span class="suggestion-icon">📝</span>
+              <div class="suggestion-text">
+                <span class="suggestion-title">Bantu isi formulir</span>
+                <span class="suggestion-sub">Otomasi pengisian field interaktif</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -245,11 +278,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function attachSuggestionListeners() {
-    document.querySelectorAll(".suggestion-tag").forEach(tag => {
+    document.querySelectorAll(".suggestion-item, .suggestion-tag").forEach(tag => {
       tag.addEventListener("click", () => {
         const prompt = tag.getAttribute("data-prompt");
         if (prompt) {
           applyPromptToInput(prompt);
+          handleSend();
         }
       });
     });
@@ -438,13 +472,25 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function sendToContentScript(payload) {
     return new Promise((resolve) => {
+      let resolved = false;
+      const timer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          resolve({ success: false, error: "Content script timeout (halaman mungkin internal/terproteksi)" });
+        }
+      }, 5000);
+
       chrome.runtime.sendMessage(
         { action: "EXECUTE_IN_CONTENT", payload },
         (response) => {
-          if (chrome.runtime.lastError) {
-            resolve({ success: false, error: chrome.runtime.lastError.message });
-          } else {
-            resolve(response?.data || response || { success: false, error: "No response" });
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timer);
+            if (chrome.runtime.lastError) {
+              resolve({ success: false, error: chrome.runtime.lastError.message });
+            } else {
+              resolve(response?.data || response || { success: false, error: "No response" });
+            }
           }
         }
       );
@@ -795,14 +841,17 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
 
   chipSummarize.addEventListener("click", () => {
     applyPromptToInput("Tolong berikan ringkasan poin-poin utama dari isi konten halaman web ini dalam format Markdown yang rapi dengan bullet points.");
+    handleSend();
   });
 
   chipExtract.addEventListener("click", () => {
     applyPromptToInput("Tolong ekstrak data atau tabel penting yang ada pada halaman ini dan sajikan dalam format tabel Markdown.");
+    handleSend();
   });
 
   chipAutoFill.addEventListener("click", () => {
     applyPromptToInput("Tolong periksa kolom input atau formulir pada halaman ini, lalu pandu saya cara mengisinya dengan bahasa yang ramah dan mudah dipahami.");
+    handleSend();
   });
 
   chipToggleMarkers.addEventListener("click", async () => {
