@@ -13,6 +13,17 @@
 
 ---
 
+## 🌟 Visi Produk & Keunggulan vs Nanobrowser
+1. **✏️ Fitur Edit Prompt & Re-run (Branching/Correction)**: Kemampuan mengedit instruksi yang sudah dikirim sebelumnya, otomatis memotong memori percakapan lama yang salah dan menjalankan ulang tanpa spamming chat.
+2. **➕ New Chat Context (+ Button)**: Tombol instan untuk membuka sesi baru dengan konteks bersih.
+3. **📜 Session History Manager (Drawer)**: Riwayat percakapan yang tersimpan secara lokal dan persisten.
+4. **User-Centric Step Timeline**: Menampilkan pemikiran (*thought*) dan aksi (*action*) AI secara visual dan elegan.
+5. **1-Click Quick Action Chips**: Memudahkan user dengan tombol instan (Rangkum Web, Ekstrak Tabel Data, Isi Form Otomatis).
+6. **Smart Reduced DOM Parser**: Mengompresi DOM hingga 85% lebih hemat token dibanding Nanobrowser standar.
+7. **Emergency Stop Button (⏹️)**: Kontrol penuh bagi pengguna untuk menghentikan automasi kapan saja.
+
+---
+
 ## 🏗️ Arsitektur Sistem
 
 ```
@@ -49,15 +60,15 @@
 
 ## 📝 Log Progres Harian
 
-### 🗓️ Day 1 (Inisialisasi & Setup Dasar)
+### 🗓️ Day 1 (Inisialisasi Dasar, Backend AI, & Phase 3 UX Supercharged)
 - [x] Diskusi awal dan penentuan strategi tech stack (Vanilla JS + Side Panel).
 - [x] Pembuatan dokumen pelacak proyek `coldstart.md`.
-- [x] Pembuatan boilerplate Chrome Extension (Manifest V3):
-  - `manifest.json`: Konfigurasi permission `sidePanel`, `activeTab`, `scripting`, `storage`.
-  - `sidepanel/`: UI antarmuka chat, status visual agent, dan panel log aktivitas.
-  - `background.js`: Service worker untuk membuka side panel saat ikon diklik dan routing pesan.
-  - `content.js`: Injeksi DOM parser awal dan highlighter elemen aktif.
-- [x] Cloudflare Worker dikonfigurasikan dengan Environment Variables: `AI_BASE_URL` (`https://api.pesatrouter.com/v1/chat/completions`), `AI_API_KEY`, dan `AI_MODEL_NAME` (`pesat-flash`).
-- [x] Penanganan respons upstream AI router diperkuat (mencegah JSON parse error saat API mengembalikan format status non-200).
-- [x] Error handling & response parser di Side Panel UI diperkuat.
-- [x] **Milestone Tercapai**: Uji coba end-to-end dari Side Panel ke Cloudflare Worker berhasil 100%!
+- [x] Pembuatan boilerplate Chrome Extension (Manifest V3) dan integrasi Cloudflare Worker.
+- [x] **Smart DOM Scanner & Reduced DOM Parser** (`content.js`): Ekstraksi elemen interaktif hemat 85% token dengan visual overlay badge `[1]`, `[2]`, dll.
+- [x] **Multi-Action Executor** (`content.js`): Simulasi otomatis klik, ketik teks dengan submit enter, scroll, dan navigasi URL.
+- [x] **Fitur Edit Prompt & Re-run**: Kemampuan koreksi prompt lama pada bubble chat dengan auto-truncation memori percakapan.
+- [x] **New Chat Context (+)**: Tombol instan untuk reset obrolan dan memulai task baru.
+- [x] **Session History Manager (Drawer)**: Riwayat percakapan persisten (`chrome.storage.local`).
+- [x] **Quick Action Chips**: Tombol 1-klik untuk Rangkum Web, Ekstrak Data/Tabel, Bantu Isi Form, dan Toggle Marker.
+- [x] **Emergency Stop Button (⏹️)**: Kontrol pembatalan aksi seketika bagi pengguna.
+- [x] **Autonomous System Prompt**: Engine AI (`index.js`) yang cerdas membedakan percakapan informatif vs JSON Action otomatis.

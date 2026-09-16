@@ -8,7 +8,8 @@
 </head>
 <body>
   <div class="app-container">
-    <!-- Header -->
+    
+    <!-- Top Header -->
     <header class="header">
       <div class="logo-area">
         <span class="logo-icon">⚡</span>
@@ -17,45 +18,85 @@
           <span class="status-badge" id="agentStatus">Siap</span>
         </div>
       </div>
-      <div class="settings-btn" id="btnSettings" title="Pengaturan">⚙️</div>
+      <div class="header-actions">
+        <button class="icon-btn" id="btnNewChat" title="Mulai Obrolan / Konteks Baru (+)">➕</button>
+        <button class="icon-btn" id="btnHistory" title="Riwayat Percakapan (History)">🕒</button>
+        <button class="icon-btn" id="btnSettings" title="Pengaturan API">⚙️</button>
+      </div>
     </header>
 
-    <!-- Settings Modal (Config Endpoint & Key) -->
+    <!-- History Drawer (Slide-out panel) -->
+    <div class="history-drawer hidden" id="historyDrawer">
+      <div class="drawer-header">
+        <h3>📜 Riwayat Percakapan</h3>
+        <button class="close-btn" id="btnCloseHistory">✕</button>
+      </div>
+      <div class="drawer-actions">
+        <button class="btn btn-secondary btn-full" id="btnDrawerNewChat">➕ Obrolan Baru</button>
+      </div>
+      <div class="session-list" id="sessionList">
+        <!-- List sesi history akan dirender secara dinamis di sini -->
+        <div class="history-empty">Belum ada riwayat sesi.</div>
+      </div>
+      <div class="drawer-footer">
+        <button class="btn btn-danger-link" id="btnClearHistory">Hapus Semua Riwayat</button>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
     <div class="settings-panel hidden" id="settingsPanel">
-      <h3>⚙️ Konfigurasi Endpoint</h3>
+      <div class="settings-header">
+        <h3>⚙️ Konfigurasi Endpoint & Key</h3>
+        <button class="close-btn" id="btnCloseSettings">✕</button>
+      </div>
       <div class="form-group">
-        <label for="apiUrlInput">API Proxy / Cloudflare URL:</label>
-        <input type="text" id="apiUrlInput" placeholder="https://pesat-agent.pages.dev/api/chat" />
+        <label for="apiUrlInput">Cloudflare Worker / Proxy URL:</label>
+        <input type="text" id="apiUrlInput" placeholder="https://pesat-ai-chrome-agent.senna-947.workers.dev/" />
       </div>
       <div class="form-group">
         <label for="apiKeyInput">Custom API Key (Opsional):</label>
         <input type="password" id="apiKeyInput" placeholder="sk-..." />
       </div>
       <div class="settings-actions">
-        <button class="btn btn-secondary" id="btnCancelSettings">Batal</button>
-        <button class="btn btn-primary" id="btnSaveSettings">Simpan</button>
+        <button class="btn btn-secondary" id="btnCancelSettings">Tutup</button>
+        <button class="btn btn-primary" id="btnSaveSettings">Simpan Pengaturan</button>
       </div>
     </div>
 
-    <!-- Quick Actions for Testing -->
-    <div class="quick-actions">
-      <button class="quick-btn" id="btnInspectPage">🔍 Cek Info Halaman</button>
-      <button class="quick-btn" id="btnHighlightDOM">🎯 Highlight Elemen</button>
+    <!-- Quick Action Chips (Aksi Cepat 1-Klik) -->
+    <div class="quick-chips-container">
+      <button class="chip-btn" id="chipSummarize">📄 Rangkum Halaman</button>
+      <button class="chip-btn" id="chipExtract">📊 Ekstrak Data</button>
+      <button class="chip-btn" id="chipAutoFill">📝 Bantu Isi Form</button>
+      <button class="chip-btn" id="chipToggleMarkers">🎯 Toggle Marker</button>
     </div>
 
-    <!-- Chat & Activity Log Area -->
+    <!-- Chat Messages Area -->
     <main class="chat-area" id="chatArea">
-      <div class="message assistant-message">
+      <!-- Pesan sambutan awal -->
+      <div class="message assistant-message" id="welcomeMessage">
         <div class="message-content">
-          <strong>Halo!</strong> Saya adalah Pesat AI Agent. Anda dapat memberikan instruksi untuk menganalisis atau mengotomatisasi halaman web yang sedang aktif.
+          <strong>Halo! Saya Pesat AI Agent ⚡</strong><br>
+          Saya dapat membaca halaman web aktif, mengklik tombol, mengisi form, atau merangkum data untuk Anda.
+          <div class="welcome-suggestions">
+            <span class="suggestion-tag" data-prompt="Apa isi ringkasan dari halaman web ini?">💡 Rangkum web ini</span>
+            <span class="suggestion-tag" data-prompt="Cari informasi kontak atau email di halaman ini">🔍 Cari kontak</span>
+            <span class="suggestion-tag" data-prompt="Tolong cari tombol pencarian dan ketik query">🎯 Cari sesuatu</span>
+          </div>
         </div>
       </div>
     </main>
 
-    <!-- Thought / Agent Log Accordion -->
+    <!-- Emergency Stop Control Bar (Muncul saat Agent bekerja) -->
+    <div class="stop-bar hidden" id="stopBar">
+      <span class="stop-text">🤖 Agent sedang mengeksekusi otomatisasi...</span>
+      <button class="btn-stop" id="btnStopAgent">⏹️ Hentikan</button>
+    </div>
+
+    <!-- Activity Log Accordion -->
     <div class="agent-log-container" id="logContainer">
       <div class="log-header" id="logToggle">
-        <span>📋 Aktivitas & Log Agent</span>
+        <span>📋 Aktivitas & Detail Langkah</span>
         <span id="logIcon">▼</span>
       </div>
       <div class="log-content hidden" id="logContent">
@@ -66,7 +107,7 @@
     <!-- Input Footer -->
     <footer class="footer">
       <div class="input-wrapper">
-        <textarea id="promptInput" placeholder="Ketik perintah (contoh: 'Cari tombol login dan klik')..." rows="2"></textarea>
+        <textarea id="promptInput" placeholder="Ketik perintah (contoh: 'Klik tombol login dan ketik email saya')..." rows="2"></textarea>
         <button id="btnSend" class="send-btn" title="Kirim Perintah">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="22" y1="2" x2="11" y2="13"></line>

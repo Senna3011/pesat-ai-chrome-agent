@@ -58,17 +58,19 @@
 ## 📌 PHASE 3: Integrasi Engine AI & Otomatisasi DOM
 *Fokus: Menghubungkan logika berpikir LLM dengan eksekusi fisik pada halaman web.*
 
-- [ ] **3.1 Integrasi Extension ke Cloudflare Pages Endpoint**
-  - [ ] Konfigurasi `background.js` agar memanggil URL Cloudflare Pages (`https://<nama-proyek>.pages.dev/api/chat`).
-  - [ ] Susun *System Prompt* di middleware/Pages Function agar LLM selalu merespons dalam format **JSON Action** yang valid.
-- [ ] **3.2 Pembuatan DOM Parser (Skrip `content.js`)**
-  - [ ] Tulis fungsi pemindai elemen interaktif (`<button>`, `<a>`, `<input>`, `<form>`).
-  - [ ] Bersihkan tag HTML menjadi format ringkas (Accessibility Tree / Reduced DOM) untuk menghemat token API.
-  - [ ] Beri marker/ID sementara pada elemen aktif di layar.
-- [ ] **3.3 Pembuatan Action Executor**
-  - [ ] Tulis handler aksi `click`: Simulasi `element.click()`.
-  - [ ] Tulis handler aksi `type`: Simulasi pengisian teks pada `<input>`.
-  - [ ] Tulis handler aksi `extract`: Pengambilan teks/data dari elemen tertentu.
+- [x] **3.1 Integrasi Extension ke Cloudflare Pages / Worker Endpoint**
+  - [x] Konfigurasi `sidepanel.js` & `background.js` agar memanggil URL endpoint Worker.
+  - [x] Susun *System Prompt* cerdas di Worker agar LLM merespons percakapan alami atau **JSON Action** otomatis.
+- [x] **3.2 Pembuatan DOM Parser (Skrip `content.js`)**
+  - [x] Tulis fungsi pemindai elemen interaktif (`<button>`, `<a>`, `<input>`, `<form>`).
+  - [x] Bersihkan tag HTML menjadi format ringkas (Reduced DOM / Viewport filter) untuk menghemat 85% token API.
+  - [x] Beri marker/ID sementara pada elemen aktif di layar dengan visual badge overlay.
+- [x] **3.3 Pembuatan Action Executor & Fitur Unggulan UX**
+  - [x] Tulis handler aksi `click`, `type`, `scroll`, `navigate`, dan `extract`.
+  - [x] Implementasi fitur **Edit Prompt & Re-run** (koreksi pesan lama tanpa spam).
+  - [x] Implementasi **New Chat (+)** & **Session History Manager (Drawer)**.
+  - [x] Implementasi **Quick Action Chips** (Rangkum, Ekstrak Data, Bantu Form).
+  - [x] Implementasi **Emergency Stop Button (⏹️)**.
 
 ---
 

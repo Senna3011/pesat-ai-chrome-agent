@@ -1,16 +1,11 @@
-// functions/api/chat.js - Cloudflare Pages Function (API Proxy & Middleware)
+// functions/api/chat.js - Cloudflare Pages Function (Supports Autonomous Actions & JSON Actions)
 
-/**
- * Handler POST request dari Chrome Extension
- * Menjaga kerahasiaan API Key Internal perusahaan di sisi server (Cloudflare)
- */
 export async function onRequestPost(context) {
   const { request, env } = context;
 
-  // Header CORS agar Chrome Extension bisa memanggil API ini
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
@@ -19,41 +14,68 @@ export async function onRequestPost(context) {
     const userPrompt = body.prompt || "";
     const conversationHistory = body.messages || [];
 
-    // Konfigurasi API AI Internal dari Cloudflare Environment Variables
-    // (Bisa disetting di Dashboard Cloudflare Pages -> Settings -> Environment variables)
-    const AI_BASE_URL = env.AI_BASE_URL || "https://api.internal-perusahaan.com/v1/chat/completions";
-    const AI_API_KEY = env.AI_API_KEY || "";
+    const authHeader = request.headers.get("Authorization") || "";
+    const headerKey = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const AI_API_KEY = headerKey || env.AI_API_KEY || "";
+    
+    const AI_BASE_URL = env.AI_BASE_URL || "https://api.pesatrouter.com/v1/chat/completions";
+    const AI_MODEL_NAME = env.AI_MODEL_NAME || "pesat-flash";
 
-    // Payload yang akan dikirim ke API AI Internal
+    const SYSTEM_PROMPT = `
+Anda adalah "Pesat AI Browser Agent", asisten otomatisasi peramban web tingkat lanjut yang cerdas, presisi, dan ramah.
+Anda bertugas membantu pengguna menganalisis halaman web dan mengeksekusi aksi interaktif pada peramban.
+
+PENGGUNA AKAN MEMBERIKAN:
+1. Informasi halaman web yang sedang aktif (Judul, URL, dan Daftar Elemen Interaktif bernomor [ID]).
+2. Instruksi atau pertanyaan dari pengguna.
+
+ATURAN PERILAKU ANDA:
+1. JIKA PENGGUNA BERTANYA (Misal: "Web apa ini?", "Rangkum isinya", "Jelaskan data di halaman ini"):
+   - Jawablah secara langsung dalam bahasa Indonesia yang ramah, informatif, dan terstruktur (gunakan format Markdown yang rapi).
+   - TIDAK PERLU mengembalikan JSON jika hanya menjawab pertanyaan biasa.
+
+2. JIKA PENGGUNA MEMINTA ANDA MELAKUKAN AKSI (Misal: "Klik tombol login", "Cari produk laptop", "Ketik teks di input [ID]", "Scroll ke bawah"):
+   - Anda HARUS mengembalikan respons dalam format JSON tunggal yang valid:
+\`\`\`json
+{
+  "thought": "Jelaskan alasan dan pemikiran langkah Anda secara singkat",
+  "action": "click" | "type" | "scroll" | "navigate" | "finish",
+  "elementId": 1,
+  "value": "Teks yang ingin diketik atau URL tujuan",
+  "pressEnter": true,
+  "message": "Pesan singkat yang mengonfirmasi aksi kepada pengguna"
+}
+\`\`\`
+
+PILIHAN AKSI:
+- "click": Mengklik tombol/link dengan elementId tertentu.
+- "type": Mengisi teks pada input/textarea dengan elementId tertentu (set pressEnter: true jika ingin submit).
+- "scroll": Menggulung halaman (value: "down" atau "up").
+- "navigate": Membuka URL baru (value: "https://...").
+- "finish": Tugas telah selesai dilakukan.
+`.trim();
+
     const payload = {
-      model: env.AI_MODEL_NAME || "gpt-4o-mini", // Sesuaikan dengan model internal
+      model: AI_MODEL_NAME,
       messages: [
-        {
-          role: "system",
-          content: "Anda adalah AI Browser Agent yang cerdas dan presisi. Tugas Anda adalah membantu pengguna mengotomatisasi atau mengekstrak informasi dari halaman web dalam bentuk instruksi/aksi yang terstruktur."
-        },
+        { role: "system", content: SYSTEM_PROMPT },
         ...conversationHistory,
         ...(userPrompt ? [{ role: "user", content: userPrompt }] : [])
       ]
     };
 
-    // Jika API Key belum disetting di Cloudflare (mode demo/mock)
     if (!AI_API_KEY) {
       return new Response(
         JSON.stringify({
           success: true,
-          reply: `[Cloudflare Pages Proxy Ready] Prompt diterima: "${userPrompt}". Silakan masukkan AI_API_KEY di dashboard Cloudflare Pages untuk menghubungkan ke model nyata.`,
+          reply: `🤖 [Pesat AI Worker Connected]\nPrompt diterima.\n\nSilakan masukkan AI_API_KEY di dashboard Cloudflare untuk menghubungkan ke model AI nyata.`,
           mock: true
         }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Teruskan request ke API AI Internal
-    const response = await fetch(AI_BASE_URL, {
+    const aiResponse = await fetch(AI_BASE_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -62,7 +84,7 @@ export async function onRequestPost(context) {
       body: JSON.stringify(payload)
     });
 
-    const rawText = await response.text();
+    const rawText = await aiResponse.text();
     let data;
     try {
       data = JSON.parse(rawText);
@@ -70,44 +92,34 @@ export async function onRequestPost(context) {
       data = null;
     }
 
-    if (!response.ok) {
-      const errMsg = data?.error?.message || data?.message || rawText || `HTTP ${response.status}`;
+    if (!aiResponse.ok) {
+      const errMsg = data?.error?.message || data?.message || rawText || `HTTP ${aiResponse.status}`;
       return new Response(
-        JSON.stringify({ success: false, error: `AI Router Error (${response.status}): ${errMsg}` }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
+        JSON.stringify({ success: false, error: `AI Router Error (${aiResponse.status}): ${errMsg}` }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const assistantReply = data?.choices?.[0]?.message?.content || data?.reply || rawText;
+    const reply = data?.choices?.[0]?.message?.content || data?.reply || rawText;
 
     return new Response(
-      JSON.stringify({ success: true, reply: assistantReply }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      }
+      JSON.stringify({ success: true, reply }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
+  } catch (err) {
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      }
+      JSON.stringify({ success: false, error: err.message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 }
 
-// Handler OPTIONS untuk CORS preflight request dari browser
 export async function onRequestOptions() {
   return new Response(null, {
     status: 204,
     headers: {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
     }
   });
