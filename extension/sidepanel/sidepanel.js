@@ -185,6 +185,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       const data = await res.json();
+      if (data.success === false && data.error) {
+        throw new Error(data.error);
+      }
+
       setStatus("Siap", false);
       appendLog("Menerima respon dari AI API Proxy.");
       appendMessage(data.reply || JSON.stringify(data));

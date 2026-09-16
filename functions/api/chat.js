@@ -62,8 +62,26 @@ export async function onRequestPost(context) {
       body: JSON.stringify(payload)
     });
 
-    const data = await response.json();
-    const assistantReply = data.choices?.[0]?.message?.content || data.reply || JSON.stringify(data);
+    const rawText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (e) {
+      data = null;
+    }
+
+    if (!response.ok) {
+      const errMsg = data?.error?.message || data?.message || rawText || `HTTP ${response.status}`;
+      return new Response(
+        JSON.stringify({ success: false, error: `AI Router Error (${response.status}): ${errMsg}` }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        }
+      );
+    }
+
+    const assistantReply = data?.choices?.[0]?.message?.content || data?.reply || rawText;
 
     return new Response(
       JSON.stringify({ success: true, reply: assistantReply }),

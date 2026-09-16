@@ -57,7 +57,7 @@
   - `sidepanel/`: UI antarmuka chat, status visual agent, dan panel log aktivitas.
   - `background.js`: Service worker untuk membuka side panel saat ikon diklik dan routing pesan.
   - `content.js`: Injeksi DOM parser awal dan highlighter elemen aktif.
-- [x] Pembuatan template middleware Cloudflare Pages `functions/api/chat.js` dan folder `public/index.html`.
-- [x] Pembuatan worker entrypoint `index.js` & `wrangler.jsonc` untuk kompatibilitas penuh Cloudflare Workers (`*.workers.dev`).
-- [x] Panduan instalasi dan pengujian *Load Unpacked* di Google Chrome.
+- [x] Cloudflare Worker dikonfigurasikan dengan Environment Variables: `AI_BASE_URL` (`https://api.pesatrouter.com/v1/chat/completions`), `AI_API_KEY`, dan `AI_MODEL_NAME` (`pesat-flash`).
+- [x] Penanganan respons upstream AI router diperkuat (mencegah JSON parse error saat API mengembalikan format status non-200).
 - [x] Error handling & response parser di Side Panel UI diperkuat.
+- [x] **Milestone Tercapai**: Uji coba end-to-end dari Side Panel ke Cloudflare Worker berhasil 100%!
