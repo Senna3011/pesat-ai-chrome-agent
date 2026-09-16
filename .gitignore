@@ -1,0 +1,15 @@
+# Dependency & Cache
+node_modules/
+.env
+.env.local
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# VS Code / IDE
+.vscode/
+.idea/
+
+# Cloudflare Wrangler cache
+.wrangler/

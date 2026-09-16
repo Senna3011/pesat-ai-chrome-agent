@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pesat AI Agent</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo-area">
+        <span class="logo-icon">⚡</span>
+        <div>
+          <h1 class="title">Pesat Agent</h1>
+          <span class="status-badge" id="agentStatus">Siap</span>
+        </div>
+      </div>
+      <div class="settings-btn" id="btnSettings" title="Pengaturan">⚙️</div>
+    </header>
+
+    <!-- Settings Modal (Config Endpoint & Key) -->
+    <div class="settings-panel hidden" id="settingsPanel">
+      <h3>⚙️ Konfigurasi Endpoint</h3>
+      <div class="form-group">
+        <label for="apiUrlInput">API Proxy / Cloudflare URL:</label>
+        <input type="text" id="apiUrlInput" placeholder="https://pesat-agent.pages.dev/api/chat" />
+      </div>
+      <div class="form-group">
+        <label for="apiKeyInput">Custom API Key (Opsional):</label>
+        <input type="password" id="apiKeyInput" placeholder="sk-..." />
+      </div>
+      <div class="settings-actions">
+        <button class="btn btn-secondary" id="btnCancelSettings">Batal</button>
+        <button class="btn btn-primary" id="btnSaveSettings">Simpan</button>
+      </div>
+    </div>
+
+    <!-- Quick Actions for Testing -->
+    <div class="quick-actions">
+      <button class="quick-btn" id="btnInspectPage">🔍 Cek Info Halaman</button>
+      <button class="quick-btn" id="btnHighlightDOM">🎯 Highlight Elemen</button>
+    </div>
+
+    <!-- Chat & Activity Log Area -->
+    <main class="chat-area" id="chatArea">
+      <div class="message assistant-message">
+        <div class="message-content">
+          <strong>Halo!</strong> Saya adalah Pesat AI Agent. Anda dapat memberikan instruksi untuk menganalisis atau mengotomatisasi halaman web yang sedang aktif.
+        </div>
+      </div>
+    </main>
+
+    <!-- Thought / Agent Log Accordion -->
+    <div class="agent-log-container" id="logContainer">
+      <div class="log-header" id="logToggle">
+        <span>📋 Aktivitas & Log Agent</span>
+        <span id="logIcon">▼</span>
+      </div>
+      <div class="log-content hidden" id="logContent">
+        <div class="log-empty">Belum ada aktivitas tercatat.</div>
+      </div>
+    </div>
+
+    <!-- Input Footer -->
+    <footer class="footer">
+      <div class="input-wrapper">
+        <textarea id="promptInput" placeholder="Ketik perintah (contoh: 'Cari tombol login dan klik')..." rows="2"></textarea>
+        <button id="btnSend" class="send-btn" title="Kirim Perintah">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
