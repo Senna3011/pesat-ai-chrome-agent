@@ -579,7 +579,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         if (shouldStopAgent) break;
 
         // 3. Proses respons langkah ini
-        const stepResult = await executeStepResponse(aiReply, stepCount);
+        const stepResult = await executeStepResponse(aiReply, stepCount, userPrompt);
 
         if (stepResult.isFinished) {
           appendLog("✅ Tugas selesai sepenuhnya (AI Finish).");
@@ -623,7 +623,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
   }
 
   // Menjalankan satu langkah Multi-Agent response
-  async function executeStepResponse(rawReply, stepNum) {
+  async function executeStepResponse(rawReply, stepNum, userPrompt = "") {
     const jsonMatch = rawReply.match(/```json\s*([\s\S]*?)\s*```/) || rawReply.match(/\{[\s\S]*"action"[\s\S]*\}/) || rawReply.match(/\{[\s\S]*"actions"[\s\S]*\}/) || rawReply.match(/\{[\s\S]*"planner"[\s\S]*\}/);
 
     if (jsonMatch) {
@@ -727,6 +727,20 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           };
 
           addMessageToCurrentSession("assistant", "", multiAgentData);
+
+          // Cek apakah perintah hanya membuka website
+          const isOnlyNavigate = actionType === "navigate" && /^(buka|open|go to|pergi ke|kunjungi)\s+[a-zA-Z0-9.-]+/i.test(userPrompt.trim());
+
+          if (isOnlyNavigate) {
+            appendLog(`✅ Navigasi ke ${actionValue} selesai. Tugas utama tuntas.`);
+            return {
+              isFinished: true, // Berhenti langsung, tidak looping
+              hasAction: true,
+              actionSuccess: true,
+              actionType,
+              targetId
+            };
+          }
 
           return {
             isFinished: false,

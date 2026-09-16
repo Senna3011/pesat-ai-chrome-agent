@@ -177,17 +177,28 @@ ATURAN UTAMA AKURASI TINGGI (HIGH-PRECISION RULES)
     let simulatedReply;
     const promptLower = (userPrompt || "").toLowerCase();
 
+    const currentUrlMatch = userPrompt.match(/URL:\s*(https?:\/\/[^\s\n]+)/i);
+    const currentUrl = currentUrlMatch ? currentUrlMatch[1].toLowerCase() : "";
+
     const navMatch = userPrompt.match(/(?:buka|pergi ke|kunjungi|navigate to|open|go to)\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/i) || userPrompt.match(/(?:buka|open)\s+(cnn|google|youtube|wikipedia|github)/i);
     if (navMatch) {
-      let dest = navMatch[1];
+      let dest = navMatch[1].toLowerCase();
       if (!dest.includes(".")) dest = dest + ".com";
       const fullUrl = dest.startsWith("http") ? dest : "https://" + dest;
-      simulatedReply = JSON.stringify({
-        planner: { steps: [`1. Membuka alamat website ${dest}`, "2. Menunggu halaman termuat sempurna"] },
-        action: "navigate",
-        value: fullUrl,
-        message: `Membuka website ${fullUrl}...`
-      });
+
+      if (currentUrl && (currentUrl.includes(dest.replace(/^https?:\/\//, '').replace(/\/.*$/, '')) || currentUrl.includes(dest.split('.')[0]))) {
+        simulatedReply = JSON.stringify({
+          action: "finish",
+          message: `✅ Website **${dest}** sudah berhasil dibuka dan dimuat sempurna!`
+        });
+      } else {
+        simulatedReply = JSON.stringify({
+          planner: { steps: [`1. Membuka alamat website ${dest}`, "2. Menunggu halaman termuat sempurna"] },
+          action: "navigate",
+          value: fullUrl,
+          message: `Membuka website ${fullUrl}...`
+        });
+      }
     } else if (promptLower.includes("rangkum") || promptLower.includes("ringkas") || promptLower.includes("summarize")) {
       const contentMatch = userPrompt.match(/\[KONTEN TEKS LENGKAP HALAMAN[^\]]*\]\s*([\s\S]*?)(\[DAFTAR ELEMEN|$)/i);
       const textContent = contentMatch ? contentMatch[1].trim() : "";

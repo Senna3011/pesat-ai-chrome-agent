@@ -198,14 +198,27 @@ function renderLandingPage(env) {
 function generateAutonomousAction(rawPrompt, messages) {
   const promptLower = (rawPrompt || "").toLowerCase();
 
+  // Ambil URL tab aktif terkini dari konteks prompt
+  const currentUrlMatch = rawPrompt.match(/URL:\s*(https?:\/\/[^\s\n]+)/i);
+  const currentUrl = currentUrlMatch ? currentUrlMatch[1].toLowerCase() : "";
+
   // 1. Deteksi Perintah Navigasi Web (misal: "buka cnn.com", "buka google", "pergi ke youtube")
   const navMatch = rawPrompt.match(/(?:buka|pergi ke|kunjungi|navigate to|open|go to)\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/i) || rawPrompt.match(/(?:buka|open)\s+(cnn|google|youtube|wikipedia|github)/i);
   if (navMatch) {
-    let dest = navMatch[1];
+    let dest = navMatch[1].toLowerCase();
     if (!dest.includes(".")) {
       dest = dest + ".com";
     }
     const fullUrl = dest.startsWith("http") ? dest : "https://" + dest;
+
+    // Jika tab aktif SUDAH berada di domain/URL yang diminta, langsung akhiri (finish)
+    if (currentUrl && (currentUrl.includes(dest.replace(/^https?:\/\//, '').replace(/\/.*$/, '')) || currentUrl.includes(dest.split('.')[0]))) {
+      return JSON.stringify({
+        action: "finish",
+        message: `✅ Website **${dest}** sudah berhasil dibuka dan dimuat sempurna!`
+      });
+    }
+
     return JSON.stringify({
       planner: { steps: [`1. Membuka alamat website ${dest}`, "2. Menunggu halaman termuat sempurna"] },
       action: "navigate",
