@@ -76,10 +76,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     html = html.replace(/(<li>.*<\/li>)/gim, '<ul>$1</ul>');
     html = html.replace(/<\/ul>\s*<ul>/g, ''); // merge lists
 
-    // Markdown Tables (Simple parser)
+    // Markdown Tables (Rich responsive table parser)
     if (html.includes('|')) {
       const lines = html.split('\n');
       let inTable = false;
+      let isFirstRow = true;
       let tableHtml = '';
       
       for (let i = 0; i < lines.length; i++) {
@@ -87,21 +88,27 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (line.startsWith('|') && line.endsWith('|')) {
           if (!inTable) {
             inTable = true;
-            tableHtml += '<table>';
+            isFirstRow = true;
+            tableHtml += '<div class="table-responsive"><table>';
           }
-          if (line.includes('---')) continue; // skip divider
+          if (line.includes('---') || line.includes(':---') || line.includes('---:')) {
+            isFirstRow = false;
+            continue; // skip separator row
+          }
           
           const cells = line.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-          tableHtml += '<tr>' + cells.map(c => `<td>${c.trim()}</td>`).join('') + '</tr>';
+          const tag = isFirstRow ? 'th' : 'td';
+          tableHtml += '<tr>' + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('') + '</tr>';
+          if (isFirstRow) isFirstRow = false;
         } else {
           if (inTable) {
             inTable = false;
-            tableHtml += '</table>';
+            tableHtml += '</table></div>';
           }
-          tableHtml += line + '<br>';
+          tableHtml += (line ? line + '<br>' : '<br>');
         }
       }
-      if (inTable) tableHtml += '</table>';
+      if (inTable) tableHtml += '</table></div>';
       html = tableHtml;
     } else {
       // Newlines to br (outside of pre/ul)
@@ -110,6 +117,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     return html;
   }
+
 
   // ----------------------------------------------------
   // Session & History Management
@@ -439,11 +447,15 @@ Judul: ${d.title}
 URL: ${d.url}
 Jumlah Elemen Interaktif: ${d.elementsCount}
 
-[DAFTAR ELEMEN INTERAKTIF VIEWPORT BERNOMOR]
+[KONTEN TEKS LENGKAP HALAMAN (Untuk Rangkuman & Ekstraksi Data)]
+${d.pageContent || "(Tidak ada konten teks utama)"}
+
+[DAFTAR ELEMEN INTERAKTIF VIEWPORT BERNOMOR (Untuk Navigasi/Aksi)]
 ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           `.trim();
           appendLog(`DOM terpindai: ${d.elementsCount} elemen.`);
         }
+
 
         if (shouldStopAgent) break;
 

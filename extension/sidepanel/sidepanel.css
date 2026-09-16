@@ -511,27 +511,44 @@ body {
   font-weight: 600;
 }
 
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  margin: 10px 0;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: #0b1329;
+}
+
 .markdown-body table {
   width: 100%;
+  min-width: 260px;
   border-collapse: collapse;
-  margin: 8px 0;
   font-size: 11px;
 }
 
 .markdown-body th, .markdown-body td {
-  border: 1px solid #334155;
-  padding: 4px 8px;
+  border: 1px solid #1e293b;
+  padding: 6px 10px;
   text-align: left;
+  line-height: 1.4;
 }
 
 .markdown-body th {
-  background-color: #1e293b;
-  color: #94a3b8;
+  background-color: #172554;
+  color: #93c5fd;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .markdown-body tr:nth-child(even) {
   background-color: #0f172a;
 }
+
+.markdown-body tr:hover {
+  background-color: #1e293b55;
+}
+
 
 /* Edit Button on User Message */
 .message-actions {

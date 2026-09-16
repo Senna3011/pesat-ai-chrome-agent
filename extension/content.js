@@ -150,7 +150,7 @@
       // Format Reduced DOM untuk AI
       const tagName = el.tagName.toLowerCase();
       const type = el.getAttribute("type") || "";
-      const text = (el.innerText || el.textContent || "").trim().replace(/\s+/g, " ").substring(0, 60);
+      const text = (el.innerText || el.textContent || "").trim().replace(/\s+/g, " ").substring(0, 100);
       const placeholder = el.getAttribute("placeholder") || "";
       const ariaLabel = el.getAttribute("aria-label") || "";
       const name = el.getAttribute("name") || "";
@@ -168,13 +168,41 @@
       elementsList.push(`[${elementId}] ${desc}`);
     }
 
+    // Ekstrak teks konten halaman (artikel, kartu, tabel, list) secara terstruktur & utuh
+    const pageReadableText = extractReadablePageText();
+
     return {
       title: document.title,
       url: window.location.href,
       elementsCount: visibleElements.length,
-      reducedDOM: elementsList.join("\n")
+      reducedDOM: elementsList.join("\n"),
+      pageContent: pageReadableText
     };
   }
+
+  // Helper: Ekstraksi teks konten utama halaman agar ringkasan & ekstraksi data lengkap
+  function extractReadablePageText() {
+    try {
+      // Prioritaskan area konten utama
+      const mainContainer = document.querySelector("main, article, [role='main'], #main-content, .dashboard, .kanban-board, .content, body");
+      if (!mainContainer) return "";
+
+      const clone = mainContainer.cloneNode(true);
+      // Buang script, style, svg, markers overlay
+      clone.querySelectorAll("script, style, noscript, svg, #pesat-markers-overlay").forEach(el => el.remove());
+
+      const rawText = clone.innerText || clone.textContent || "";
+      return rawText
+        .split("\n")
+        .map(l => l.trim())
+        .filter(l => l.length > 0)
+        .join("\n")
+        .substring(0, 4500); // Batas aman & kaya konteks untuk token AI
+    } catch (e) {
+      return "";
+    }
+  }
+
 
   // ─────────────────────────────────────────────────────
   // AUTO-WAITING: Tunggu DOM stabil setelah navigasi/klik
