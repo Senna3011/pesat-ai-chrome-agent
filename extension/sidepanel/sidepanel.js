@@ -1,4 +1,4 @@
-// sidepanel.js - Pesat AI Browser Agent (Multi-Agent Pipeline, Rich Markdown, & Full History)
+// sidepanel.js - Pesat AI Browser Agent (Modern UI, Marked.js, Action Indicator, & Responsive Tables)
 
 document.addEventListener("DOMContentLoaded", async () => {
   // DOM Elements
@@ -11,12 +11,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   const logIcon = document.getElementById("logIcon");
   const stopBar = document.getElementById("stopBar");
   const btnStopAgent = document.getElementById("btnStopAgent");
-  
+
+  // Status Indicator Element (Floating UX Loader)
+  const agentStatusIndicator = document.getElementById("agentStatusIndicator");
+  const statusIndicatorText = document.getElementById("statusIndicatorText");
+
   // Header Action Buttons
   const btnNewChat = document.getElementById("btnNewChat");
   const btnHistory = document.getElementById("btnHistory");
   const btnSettings = document.getElementById("btnSettings");
-  
+
   // History Drawer Elements
   const historyDrawer = document.getElementById("historyDrawer");
   const btnCloseHistory = document.getElementById("btnCloseHistory");
@@ -50,11 +54,33 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadSessions();
 
   // ----------------------------------------------------
-  // Markdown & Rich Text Formatter
+  // 4. Markdown & Responsive Table Parser (marked.js Integration)
   // ----------------------------------------------------
   function parseMarkdown(text) {
     if (!text) return "";
-    
+
+    let rawHtml = "";
+
+    // 1. Coba parse dengan marked.js
+    if (typeof marked !== "undefined" && typeof marked.parse === "function") {
+      try {
+        rawHtml = marked.parse(text, { breaks: true, gfm: true });
+      } catch (err) {
+        console.warn("[Pesat] marked.parse failed, falling back:", err);
+        rawHtml = fallbackMarkdown(text);
+      }
+    } else {
+      rawHtml = fallbackMarkdown(text);
+    }
+
+    // 2. Wrap semua <table> ke dalam <div class="table-container"> (Mencegah potong horizontal)
+    rawHtml = wrapTablesWithResponsiveContainer(rawHtml);
+
+    return rawHtml;
+  }
+
+  // Helper Fallback Markdown jika marked.js tidak tersedia
+  function fallbackMarkdown(text) {
     let html = escapeHtml(text);
 
     // Code blocks
@@ -65,37 +91,35 @@ document.addEventListener("DOMContentLoaded", async () => {
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     // Italic
     html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    
     // Headers
     html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
     html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
     html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-
     // Bullet lists
     html = html.replace(/^\s*[\*\-]\s+(.*$)/gim, '<li>$1</li>');
     html = html.replace(/(<li>.*<\/li>)/gim, '<ul>$1</ul>');
-    html = html.replace(/<\/ul>\s*<ul>/g, ''); // merge lists
+    html = html.replace(/<\/ul>\s*<ul>/g, '');
 
-    // Markdown Tables (Rich responsive table parser)
+    // Markdown Tables manual parser
     if (html.includes('|')) {
       const lines = html.split('\n');
       let inTable = false;
       let isFirstRow = true;
       let tableHtml = '';
-      
+
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         if (line.startsWith('|') && line.endsWith('|')) {
           if (!inTable) {
             inTable = true;
             isFirstRow = true;
-            tableHtml += '<div class="table-responsive"><table>';
+            tableHtml += '<table>';
           }
           if (line.includes('---') || line.includes(':---') || line.includes('---:')) {
             isFirstRow = false;
-            continue; // skip separator row
+            continue;
           }
-          
+
           const cells = line.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
           const tag = isFirstRow ? 'th' : 'td';
           tableHtml += '<tr>' + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('') + '</tr>';
@@ -103,21 +127,47 @@ document.addEventListener("DOMContentLoaded", async () => {
         } else {
           if (inTable) {
             inTable = false;
-            tableHtml += '</table></div>';
+            tableHtml += '</table>';
           }
           tableHtml += (line ? line + '<br>' : '<br>');
         }
       }
-      if (inTable) tableHtml += '</table></div>';
+      if (inTable) tableHtml += '</table>';
       html = tableHtml;
     } else {
-      // Newlines to br (outside of pre/ul)
       html = html.replace(/\n/g, '<br>');
     }
 
     return html;
   }
 
+  // Helper: Pastikan setiap <table> dibungkus .table-container
+  function wrapTablesWithResponsiveContainer(html) {
+    if (!html.includes("<table")) return html;
+
+    // Jika sudah di dalam table-container, hindari double wrap
+    if (html.includes('class="table-container"')) return html;
+
+    return html.replace(/(<table[\s\S]*?<\/table>)/gi, (match) => {
+      return `<div class="table-container">${match}</div>`;
+    });
+  }
+
+  // ----------------------------------------------------
+  // 2. Status Indicator Helper
+  // ----------------------------------------------------
+  function showStatusIndicator(text) {
+    if (agentStatusIndicator && statusIndicatorText) {
+      statusIndicatorText.textContent = text;
+      agentStatusIndicator.classList.remove("hidden");
+    }
+  }
+
+  function hideStatusIndicator() {
+    if (agentStatusIndicator) {
+      agentStatusIndicator.classList.add("hidden");
+    }
+  }
 
   // ----------------------------------------------------
   // Session & History Management
@@ -181,11 +231,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       <div class="message assistant-message" id="welcomeMessage">
         <div class="message-bubble">
           <strong>Halo! Saya Pesat AI Agent ⚡</strong><br>
-          Asisten browser otonom dengan kolaborasi multi-agent (Planner, Navigator, & Validator).
+          Asisten browser otonom cerdas dengan dukungan Multi-Agent (Planner, Navigator, & Validator).
           <div class="welcome-suggestions">
-            <span class="suggestion-tag" data-prompt="Apa isi ringkasan dari halaman web ini?">💡 Rangkum web ini</span>
-            <span class="suggestion-tag" data-prompt="Cari kolom pencarian dan ketik query">🔍 Cari sesuatu</span>
-            <span class="suggestion-tag" data-prompt="Tolong ekstrak data tabel pada halaman ini">📊 Ekstrak tabel</span>
+            <span class="suggestion-tag" data-prompt="Tolong berikan ringkasan poin-poin utama dari isi konten halaman web ini dalam format Markdown yang rapi dengan bullet points.">💡 Rangkum web ini</span>
+            <span class="suggestion-tag" data-prompt="Tolong ekstrak data atau tabel penting yang ada pada halaman ini dan sajikan dalam format tabel Markdown.">📊 Ekstrak tabel</span>
+            <span class="suggestion-tag" data-prompt="Tolong periksa kolom input atau formulir pada halaman ini, lalu pandu saya cara mengisinya.">📝 Bantu isi formulir</span>
           </div>
         </div>
       </div>
@@ -198,8 +248,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       tag.addEventListener("click", () => {
         const prompt = tag.getAttribute("data-prompt");
         if (prompt) {
-          promptInput.value = prompt;
-          handleSend();
+          applyPromptToInput(prompt);
         }
       });
     });
@@ -215,7 +264,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     sessions.forEach(sess => {
       const item = document.createElement("div");
       item.className = `session-item ${sess.id === currentSessionId ? 'active' : ''}`;
-      
+
       const timeStr = new Date(sess.timestamp).toLocaleDateString("id-ID", {
         hour: "2-digit",
         minute: "2-digit"
@@ -291,7 +340,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             <div class="agent-card-header">🧭 Navigator Agent</div>
             <div class="agent-card-body">
               <div>${escapeHtml(navigator.description || navigator.action)}</div>
-              ${navigator.elementId ? `<span class="target-badge">Target: [${navigator.elementId}]</span>` : ''}
+              ${navigator.elementId ? `<span class="target-badge">Target: [${escapeHtml(String(navigator.elementId))}]</span>` : ''}
               ${navigator.status ? `<div style="font-size:10px; color:#93c5fd; margin-top:3px;">Status: ${escapeHtml(navigator.status)}</div>` : ''}
             </div>
           </div>
@@ -343,8 +392,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!session || !session.messages[index]) return;
 
     const originalText = session.messages[index].content;
-    promptInput.value = originalText;
-    promptInput.focus();
+    applyPromptToInput(originalText);
 
     session.messages = session.messages.slice(0, index);
     saveSessions();
@@ -403,10 +451,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ----------------------------------------------------
-  // Core: Autonomous AI Action & Prompt Dispatch
-  // ----------------------------------------------------
-  // ----------------------------------------------------
-  // Core: Autonomous Multi-Step Agentic Loop (Nanobrowser-Grade)
+  // Core: Autonomous Multi-Step Agentic Loop (Nanobrowser & Agent-Browser Grade)
   // ----------------------------------------------------
   async function handleSend() {
     const userPrompt = promptInput.value.trim();
@@ -418,6 +463,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     addMessageToCurrentSession("user", userPrompt);
     setAgentRunning(true, "Memulai Agentic Loop...");
+    showStatusIndicator("Memulai siklus otomatisasi...");
     appendLog(`User prompt: "${userPrompt}"`);
 
     const stored = await chrome.storage.local.get(["apiUrl", "apiKey"]);
@@ -434,10 +480,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         setAgentRunning(true, `Langkah ${stepCount}/${MAX_STEPS}...`);
         appendLog(`─── Memulai Langkah ${stepCount} ───`);
 
-        // 1. Scan DOM dari Tab Aktif (Colored Bounding Boxes)
+        // 1. Scan DOM dari Tab Aktif (Semantic AXTree + Colored Bounding Boxes)
+        showStatusIndicator(`Langkah ${stepCount}: Memindai elemen halaman...`);
         appendLog("Memindai elemen interaktif halaman...");
         const scanRes = await sendToContentScript({ type: "SCAN_DOM", showOverlay: true });
-        
+
         let pageContext = "";
         if (scanRes && scanRes.success && scanRes.data) {
           const d = scanRes.data;
@@ -450,12 +497,11 @@ Jumlah Elemen Interaktif: ${d.elementsCount}
 [KONTEN TEKS LENGKAP HALAMAN (Untuk Rangkuman & Ekstraksi Data)]
 ${d.pageContent || "(Tidak ada konten teks utama)"}
 
-[DAFTAR ELEMEN INTERAKTIF VIEWPORT BERNOMOR (Untuk Navigasi/Aksi)]
+[DAFTAR ELEMEN SEMANTIK AKSI TERTANDA [@eN]]
 ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           `.trim();
           appendLog(`DOM terpindai: ${d.elementsCount} elemen.`);
         }
-
 
         if (shouldStopAgent) break;
 
@@ -473,6 +519,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           content: m.content
         }));
 
+        showStatusIndicator(`Langkah ${stepCount}: AI sedang merencanakan aksi...`);
         appendLog(`Menghubungi AI Engine (Langkah ${stepCount})...`);
         setAgentRunning(true, `Berpikir (Langkah ${stepCount})...`);
 
@@ -512,12 +559,10 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         }
 
         if (!stepResult.hasAction) {
-          // Hanya balasan percakapan / teks biasa, tidak ada aksi fisik lanjutan
           break;
         }
 
         if (!stepResult.actionSuccess) {
-          // Aksi gagal
           lastActionSuccess = false;
           lastActionSummary = `Gagal mengeksekusi ${stepResult.actionType}: ${stepResult.errorMessage}`;
           appendLog(`⚠️ Langkah ${stepCount} gagal. Menghentikan loop untuk evaluasi.`);
@@ -527,7 +572,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         lastActionSuccess = true;
         lastActionSummary = `Berhasil mengeksekusi ${stepResult.actionType} pada target [${stepResult.targetId || '—'}].`;
 
-        // Jeda kecil sebelum langkah berikutnya agar halaman sempat render state baru
+        // Jeda kecil sebelum langkah berikutnya agar halaman render state baru
         await new Promise(r => setTimeout(r, 600));
       }
 
@@ -540,26 +585,27 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan: ${err.message}`);
     } finally {
       setAgentRunning(false);
-      // Bersihkan marker jika selesai
+      hideStatusIndicator();
       await sendToContentScript({ type: "CLEAR_MARKERS" });
     }
   }
 
   // Menjalankan satu langkah Multi-Agent response
   async function executeStepResponse(rawReply, stepNum) {
-    const jsonMatch = rawReply.match(/```json\s*([\s\S]*?)\s*```/) || rawReply.match(/\{[\s\S]*"action"[\s\S]*\}/) || rawReply.match(/\{[\s\S]*"planner"[\s\S]*\}/);
+    const jsonMatch = rawReply.match(/```json\s*([\s\S]*?)\s*```/) || rawReply.match(/\{[\s\S]*"action"[\s\S]*\}/) || rawReply.match(/\{[\s\S]*"actions"[\s\S]*\}/) || rawReply.match(/\{[\s\S]*"planner"[\s\S]*\}/);
 
     if (jsonMatch) {
       try {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
         const resObj = JSON.parse(jsonStr);
 
-        const actionType = resObj.action || resObj.navigator?.action;
-        const targetId = resObj.elementId || resObj.navigator?.elementId;
+        const isBatch = Array.isArray(resObj.actions) && resObj.actions.length > 0;
+        const actionType = isBatch ? "batch" : (resObj.action || resObj.navigator?.action);
+        const targetId = resObj.elementId || resObj.navigator?.elementId || (isBatch ? resObj.actions.map(a => a.elementId || a.target).join(", ") : "");
         const actionValue = resObj.value || resObj.navigator?.value;
 
         // Jika AI memutuskan tugas selesai
-        if (actionType === "finish" || (!actionType && resObj.message)) {
+        if (actionType === "finish" || (!actionType && !isBatch && resObj.message)) {
           const finalMsg = resObj.message || resObj.answer || "Tugas telah selesai dikerjakan!";
           addMessageToCurrentSession("assistant", finalMsg);
           return { isFinished: true, hasAction: false };
@@ -568,17 +614,19 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         const multiAgentData = {
           planner: resObj.planner || (resObj.thought ? { steps: [resObj.thought] } : null),
           navigator: {
-            action: actionType,
+            action: isBatch ? `Batch (${resObj.actions.length} aksi)` : actionType,
             elementId: targetId,
-            description: resObj.message || `Mengeksekusi ${actionType} pada elemen [${targetId || ''}]`,
+            description: resObj.message || (isBatch ? `Mengeksekusi ${resObj.actions.length} langkah berurutan` : `Mengeksekusi ${actionType} pada elemen [${targetId || ''}]`),
             status: "Sedang berjalan..."
           },
           validator: null,
           finalAnswer: resObj.answer || ""
         };
 
-        setAgentRunning(true, `Aksi: ${actionType} [${targetId || '—'}]`);
-        appendLog(`▶ Menjalankan [Step ${stepNum}]: ${actionType} ${actionType === 'navigate' ? actionValue : `[${targetId || '—'}]`}`);
+        const statusLabel = isBatch ? `Mengeksekusi: Batch (${resObj.actions.length} aksi)...` : `Mengeksekusi: ${actionType} [${targetId || '—'}]...`;
+        showStatusIndicator(statusLabel);
+        setAgentRunning(true, `Aksi: ${isBatch ? `Batch (${resObj.actions.length})` : `${actionType} [${targetId || '—'}]`}`);
+        appendLog(`▶ Menjalankan [Step ${stepNum}]: ${isBatch ? `Batch (${resObj.actions.length} aksi)` : `${actionType} ${actionType === 'navigate' ? actionValue : `[${targetId || '—'}]`}`}`);
 
         let execResult;
         if (actionType === "navigate") {
@@ -594,6 +642,17 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
               }
             );
           });
+        } else if (isBatch) {
+          const normalizedActions = resObj.actions.map(act => ({
+            ...act,
+            elementId: act.elementId || act.target
+          }));
+          execResult = await sendToContentScript({
+            type: "EXECUTE_ACTION",
+            actionData: {
+              actions: normalizedActions
+            }
+          });
         } else {
           execResult = await sendToContentScript({
             type: "EXECUTE_ACTION",
@@ -608,9 +667,10 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
 
         // Auto-wait setelah aksi
         if (execResult && execResult.success) {
-          const needsWait = actionType === "navigate" || actionType === "click";
+          const needsWait = actionType === "navigate" || actionType === "click" || isBatch;
           if (needsWait) {
             const waitMs = actionType === "navigate" ? 3500 : 1200;
+            showStatusIndicator(`Menunggu halaman stabil (maks ${waitMs / 1000}s)...`);
             appendLog(`⏳ Menunggu halaman dimuat (maks ${waitMs / 1000}s)...`);
             setAgentRunning(true, "Menunggu halaman...");
 
@@ -631,7 +691,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           multiAgentData.navigator.status = `Selesai (${elapsed})`;
           multiAgentData.validator = {
             success: true,
-            message: `Aksi ${actionType} ${actionType === 'navigate' ? `menuju ${actionValue}` : `pada [${targetId || '—'}]`} berhasil.`
+            message: execResult.message || `Aksi ${actionType} berhasil.`
           };
 
           addMessageToCurrentSession("assistant", "", multiAgentData);
@@ -677,24 +737,26 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     return { isFinished: true, hasAction: false };
   }
 
-
-
   // ----------------------------------------------------
-  // Quick Action Chips Handlers
+  // 3. Prompt Chip Button Interaction (Auto-fill & Focus)
   // ----------------------------------------------------
+  function applyPromptToInput(text) {
+    promptInput.value = text;
+    promptInput.style.height = "auto";
+    promptInput.style.height = Math.min(promptInput.scrollHeight, 100) + "px";
+    promptInput.focus();
+  }
+
   chipSummarize.addEventListener("click", () => {
-    promptInput.value = "Tolong berikan ringkasan poin-poin utama dari isi konten halaman web ini dalam format Markdown yang rapi dengan bullet points.";
-    handleSend();
+    applyPromptToInput("Tolong berikan ringkasan poin-poin utama dari isi konten halaman web ini dalam format Markdown yang rapi dengan bullet points.");
   });
 
   chipExtract.addEventListener("click", () => {
-    promptInput.value = "Tolong ekstrak data atau tabel penting yang ada pada halaman ini dan sajikan dalam format tabel Markdown.";
-    handleSend();
+    applyPromptToInput("Tolong ekstrak data atau tabel penting yang ada pada halaman ini dan sajikan dalam format tabel Markdown.");
   });
 
   chipAutoFill.addEventListener("click", () => {
-    promptInput.value = "Tolong periksa kolom input atau formulir pada halaman ini, lalu pandu saya cara mengisinya dengan bahasa yang ramah dan mudah dipahami (hindari istilah koding mentah).";
-    handleSend();
+    applyPromptToInput("Tolong periksa kolom input atau formulir pada halaman ini, lalu pandu saya cara mengisinya dengan bahasa yang ramah dan mudah dipahami.");
   });
 
   chipToggleMarkers.addEventListener("click", async () => {
@@ -705,6 +767,19 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     } else {
       await sendToContentScript({ type: "CLEAR_MARKERS" });
       appendLog("Marker visual dibersihkan.");
+    }
+  });
+
+  // Auto resize textarea on typing
+  promptInput.addEventListener("input", () => {
+    promptInput.style.height = "auto";
+    promptInput.style.height = Math.min(promptInput.scrollHeight, 100) + "px";
+  });
+
+  promptInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
   });
 
@@ -726,6 +801,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
   btnStopAgent.addEventListener("click", () => {
     shouldStopAgent = true;
     setAgentRunning(false, "Dihentikan");
+    hideStatusIndicator();
     appendLog("🛑 Otomatisasi dihentikan oleh pengguna.");
   });
 
@@ -751,7 +827,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       .replace(/'/g, "&#039;");
   }
 
-  // Event Listeners
+  // Event Listeners Header & Drawers
   btnNewChat.addEventListener("click", createNewSession);
   btnDrawerNewChat.addEventListener("click", createNewSession);
 
@@ -784,15 +860,4 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
   });
 
   btnSend.addEventListener("click", handleSend);
-  promptInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  });
-
-  promptInput.addEventListener("input", () => {
-    promptInput.style.height = "auto";
-    promptInput.style.height = Math.min(promptInput.scrollHeight, 90) + "px";
-  });
 });

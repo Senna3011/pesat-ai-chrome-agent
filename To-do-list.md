@@ -83,6 +83,13 @@
   - [x] 6 Aturan Anti-Hallucination ditambahkan ke SYSTEM_PROMPT (`index.js` v3.0.0).
   - [x] Fuzzy fallback matching di `content.js` (cari elemen via teks/placeholder jika ID tidak ditemukan).
   - [x] Validator Card merah dengan saran ramah + log error informatif di `sidepanel.js`.
+- [x] **4.4 Peningkatan Akurasi ala Agent-Browser / Skills.sh (Vercel Labs)**
+  - [x] **Semantic AXTree Snapshotting** (`[@e1]`, accessible name, semantic role, state flags).
+  - [x] **Occlusion Detection** (`document.elementFromPoint` untuk mendeteksi elemen tertutup popup/cookie banner).
+  - [x] **React/Vue Input Setter Compatibility** (prototype property descriptor setter agar input controlled framework tidak hilang).
+  - [x] **Full Pointer Event Sequence** (`pointerdown` -> `mousedown` -> `pointerup` -> `mouseup` -> `click`).
+  - [x] **Batched Multi-Actions Support** (`actions: [...]` untuk pengisian form multi-kolom dalam 1 giliran).
+  - [x] **Targeted Waiting** (`WAIT_FOR_SELECTOR` + `WAIT_FOR_DOM_STABLE`).
 
 
 
