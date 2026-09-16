@@ -122,6 +122,15 @@
   }
 
   // Tentukan warna tema bounding box
+  function getRoleIcon(role) {
+    if (role === "textbox" || role === "searchbox") return "📝";
+    if (role === "button") return "🔘";
+    if (role === "link") return "🔗";
+    if (role === "combobox" || role === "select" || role === "tab" || role === "menuitem") return "📋";
+    if (role === "checkbox" || role === "radio") return "☑️";
+    return "⚡";
+  }
+
   function getElementTheme(role) {
     if (role === "textbox" || role === "searchbox") {
       return { border: "#2563eb", bg: "#1d4ed8", name: "input" }; // Blue
@@ -138,12 +147,76 @@
     return { border: "#8b5cf6", bg: "#6d28d9", name: "interactive" }; // Purple
   }
 
-  // Bersihkan semua visual marker overlay
+  // Render Petunjuk / Legenda Marker Ramah Pengguna
+  function renderFloatingLegend() {
+    const existing = document.getElementById("pesat-markers-legend");
+    if (existing) existing.remove();
+
+    const legend = document.createElement("div");
+    legend.id = "pesat-markers-legend";
+    legend.style.cssText = `
+      position: fixed;
+      bottom: 18px;
+      right: 18px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 10px 14px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+      z-index: 2147483647;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 290px;
+      color: #f8fafc;
+      pointer-events: auto;
+      user-select: none;
+    `;
+
+    legend.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span style="font-size:12px; font-weight:700; color:#38bdf8; display:flex; align-items:center; gap:5px;">
+          ⚡ Petunjuk Marker AI (#ID)
+        </span>
+        <button id="pesat-btn-close-legend" style="background:none; border:none; color:#94a3b8; font-size:14px; cursor:pointer; padding:0 4px;" title="Tutup">✕</button>
+      </div>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:11px; color:#cbd5e1;">
+        <div style="display:flex; align-items:center; gap:5px;">
+          <span style="width:10px; height:10px; border-radius:2px; background:#1d4ed8; display:inline-block;"></span>
+          <span>📝 Input / Form</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:5px;">
+          <span style="width:10px; height:10px; border-radius:2px; background:#b91c1c; display:inline-block;"></span>
+          <span>🔘 Tombol</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:5px;">
+          <span style="width:10px; height:10px; border-radius:2px; background:#047857; display:inline-block;"></span>
+          <span>🔗 Menu / Link</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:5px;">
+          <span style="width:10px; height:10px; border-radius:2px; background:#b45309; display:inline-block;"></span>
+          <span>📋 Dropdown</span>
+        </div>
+      </div>
+      <div style="font-size:10px; color:#94a3b8; margin-top:8px; border-top:1px solid #1e293b; padding-top:6px; line-height:1.3;">
+        💡 Nomor (#1, #2...) adalah ID tombol/input yang dapat diperintahkan ke AI.
+      </div>
+    `;
+
+    document.body.appendChild(legend);
+
+    document.getElementById("pesat-btn-close-legend")?.addEventListener("click", () => {
+      legend.remove();
+    });
+  }
+
+  // Bersihkan semua visual marker overlay & legend
   function clearVisualMarkers() {
     if (markersOverlay) {
       markersOverlay.remove();
       markersOverlay = null;
     }
+    const legend = document.getElementById("pesat-markers-legend");
+    if (legend) legend.remove();
+
     document.querySelectorAll("[data-pesat-id]").forEach((el) => {
       el.removeAttribute("data-pesat-id");
     });
@@ -190,6 +263,7 @@
         overflow: hidden;
       `;
       document.body.appendChild(markersOverlay);
+      renderFloatingLegend();
     }
 
     const elementsList = [];
@@ -209,9 +283,10 @@
       const role = getSemanticRole(el);
       const label = getAccessibleName(el);
       const theme = getElementTheme(role);
+      const icon = getRoleIcon(role);
       const occlusion = checkOcclusion(el);
 
-      // Gambar Colored Bounding Box & Number Badge
+      // Gambar Colored Bounding Box & User-Friendly Badge
       if (showOverlay && markersOverlay) {
         const box = document.createElement("div");
         box.style.cssText = `
@@ -228,21 +303,25 @@
         `;
 
         const badge = document.createElement("span");
-        badge.textContent = `@e${elementId}`;
+        badge.textContent = `#${elementId} ${icon}`;
+        badge.title = `Target #${elementId}: ${label || role}`;
         badge.style.cssText = `
           position: absolute;
-          top: -10px;
+          top: -12px;
           left: -4px;
           background: ${theme.bg};
           color: #ffffff;
-          font-size: 10px;
+          font-size: 11px;
           font-weight: 700;
-          font-family: ui-monospace, SFMono-Regular, monospace;
-          padding: 1px 5px;
-          border-radius: 3px;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          padding: 1px 6px;
+          border-radius: 4px;
           border: 1px solid rgba(255,255,255,0.4);
           box-shadow: 0 2px 4px rgba(0,0,0,0.5);
           line-height: 1.2;
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
         `;
         box.appendChild(badge);
         markersOverlay.appendChild(box);
@@ -430,7 +509,7 @@
   // ─────────────────────────────────────────────────────
   async function executeSingleAction(actionData) {
     const { action, value, pressEnter, scrollDirection } = actionData;
-    let cleanId = String(actionData.elementId || "").replace(/^@e/, "").trim();
+    let cleanId = String(actionData.elementId || "").replace(/[@#\[\]eE\s]/g, "").trim();
 
     if (action === "scroll") {
       const distance = scrollDirection === "up" ? -500 : 500;

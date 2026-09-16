@@ -75,24 +75,31 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
       }
       
-      try {
-        // Pastikan content script sudah di-inject
-        await chrome.scripting.executeScript({
-          target: { tabId: activeTabId },
-          files: ["content.js"]
-        });
-
-        // Kirim pesan ke content script
+      const sendMessageToTab = () => {
         chrome.tabs.sendMessage(activeTabId, request.payload, (response) => {
           if (chrome.runtime.lastError) {
-            sendResponse({ success: false, error: chrome.runtime.lastError.message });
+            // Jika content script belum ada, inject dan kirim ulang
+            chrome.scripting.executeScript({
+              target: { tabId: activeTabId },
+              files: ["content.js"]
+            }).then(() => {
+              chrome.tabs.sendMessage(activeTabId, request.payload, (retryRes) => {
+                if (chrome.runtime.lastError) {
+                  sendResponse({ success: false, error: chrome.runtime.lastError.message });
+                } else {
+                  sendResponse({ success: true, data: retryRes });
+                }
+              });
+            }).catch((err) => {
+              sendResponse({ success: false, error: err.message });
+            });
           } else {
             sendResponse({ success: true, data: response });
           }
         });
-      } catch (err) {
-        sendResponse({ success: false, error: err.message });
-      }
+      };
+
+      sendMessageToTab();
     });
 
     return true; // Menandakan respon async

@@ -48,6 +48,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   let isAgentRunning = false;
   let shouldStopAgent = false;
   let markersVisible = false;
+  let activeAbortController = null;
 
   // Initialize
   await loadSettings();
@@ -523,8 +524,10 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         appendLog(`Menghubungi AI Engine (Langkah ${stepCount})...`);
         setAgentRunning(true, `Berpikir (Langkah ${stepCount})...`);
 
+        activeAbortController = new AbortController();
         const res = await fetch(targetUrl, {
           method: "POST",
+          signal: activeAbortController.signal,
           headers: {
             "Content-Type": "application/json",
             ...(stored.apiKey ? { "Authorization": `Bearer ${stored.apiKey}` } : {})
@@ -581,8 +584,12 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       }
 
     } catch (err) {
-      appendLog(`Error: ${err.message}`);
-      addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan: ${err.message}`);
+      if (err.name === "AbortError" || shouldStopAgent) {
+        appendLog("🛑 Permintaan dibatalkan.");
+      } else {
+        appendLog(`Error: ${err.message}`);
+        addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan: ${err.message}`);
+      }
     } finally {
       setAgentRunning(false);
       hideStatusIndicator();
@@ -800,6 +807,12 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
 
   btnStopAgent.addEventListener("click", () => {
     shouldStopAgent = true;
+    if (activeAbortController) {
+      try {
+        activeAbortController.abort();
+      } catch (e) {}
+      activeAbortController = null;
+    }
     setAgentRunning(false, "Dihentikan");
     hideStatusIndicator();
     appendLog("🛑 Otomatisasi dihentikan oleh pengguna.");
@@ -858,6 +871,20 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     const isHidden = logContent.classList.toggle("hidden");
     logIcon.textContent = isHidden ? "▼" : "▲";
   });
+
+  const btnExportHistory = document.getElementById("btnExportHistory");
+  if (btnExportHistory) {
+    btnExportHistory.addEventListener("click", () => {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(sessions, null, 2));
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `pesat_agent_history_${Date.now()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      appendLog("📥 Riwayat percakapan berhasil diekspor.");
+    });
+  }
 
   btnSend.addEventListener("click", handleSend);
 });

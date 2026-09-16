@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pesat AI Agent</title>
   <link rel="stylesheet" href="sidepanel.css">
-  <!-- Markdown Parsing Support via marked.js -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <div class="app-container" id="chat-container">
@@ -40,6 +38,7 @@
         <div class="history-empty">Belum ada riwayat sesi.</div>
       </div>
       <div class="drawer-footer">
+        <button class="btn btn-secondary btn-full" id="btnExportHistory" style="margin-bottom:8px; font-size:12px;">📥 Ekspor Riwayat</button>
         <button class="btn btn-danger-link" id="btnClearHistory">Hapus Semua Riwayat</button>
       </div>
     </div>
