@@ -166,9 +166,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
+    const targetUrl = apiUrl.trim();
+
     try {
-      appendLog(`Mengirim request ke API Proxy: ${apiUrl}`);
-      const res = await fetch(apiUrl, {
+      appendLog(`Mengirim request ke API Proxy: ${targetUrl}`);
+      const res = await fetch(targetUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -176,6 +178,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         },
         body: JSON.stringify({ prompt: text })
       });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`HTTP ${res.status}: ${errorText || res.statusText}`);
+      }
 
       const data = await res.json();
       setStatus("Siap", false);

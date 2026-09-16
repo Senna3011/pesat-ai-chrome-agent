@@ -58,5 +58,6 @@
   - `background.js`: Service worker untuk membuka side panel saat ikon diklik dan routing pesan.
   - `content.js`: Injeksi DOM parser awal dan highlighter elemen aktif.
 - [x] Pembuatan template middleware Cloudflare Pages `functions/api/chat.js` dan folder `public/index.html`.
+- [x] Pembuatan worker entrypoint `index.js` & `wrangler.jsonc` untuk kompatibilitas penuh Cloudflare Workers (`*.workers.dev`).
 - [x] Panduan instalasi dan pengujian *Load Unpacked* di Google Chrome.
-- [x] Fix konfigurasi Cloudflare Pages (Build command dikosongkan, Build output directory: `public`).
+- [x] Error handling & response parser di Side Panel UI diperkuat.
