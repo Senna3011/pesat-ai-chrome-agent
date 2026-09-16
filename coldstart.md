@@ -57,5 +57,6 @@
   - `sidepanel/`: UI antarmuka chat, status visual agent, dan panel log aktivitas.
   - `background.js`: Service worker untuk membuka side panel saat ikon diklik dan routing pesan.
   - `content.js`: Injeksi DOM parser awal dan highlighter elemen aktif.
-- [x] Pembuatan template middleware Cloudflare Pages `functions/api/chat.js`.
+- [x] Pembuatan template middleware Cloudflare Pages `functions/api/chat.js` dan folder `public/index.html`.
 - [x] Panduan instalasi dan pengujian *Load Unpacked* di Google Chrome.
+- [x] Fix konfigurasi Cloudflare Pages (Build command dikosongkan, Build output directory: `public`).
