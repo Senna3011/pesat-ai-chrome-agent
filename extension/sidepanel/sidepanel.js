@@ -458,6 +458,31 @@ document.addEventListener("DOMContentLoaded", async () => {
     const userPrompt = promptInput.value.trim();
     if (!userPrompt || isAgentRunning) return;
 
+    // 0. Cek Kuota Harian Gratis (Batas 40 request/hari jika tanpa custom API key)
+    const stored = await chrome.storage.local.get(["apiUrl", "apiKey", "freeUsageDate", "freeUsageCount"]);
+    const hasCustomKey = !!(stored.apiKey && stored.apiKey.trim());
+
+    if (!hasCustomKey) {
+      const today = new Date().toISOString().slice(0, 10);
+      let currentUsage = (stored.freeUsageDate === today) ? (stored.freeUsageCount || 0) : 0;
+
+      if (currentUsage >= 40) {
+        addMessageToCurrentSession(
+          "assistant",
+          "⚠️ **Batas Kuota Gratis Tercapai (40/40 permintaan hari ini).**\n\nUntuk melanjutkan penggunaan tanpa batas, silakan masukkan API Key Anda di menu **⚙️ Pengaturan** di pojok kanan atas."
+        );
+        appendLog("Batas kuota harian gratis 40 permintaan telah tercapai.");
+        return;
+      }
+
+      // Update counter
+      await chrome.storage.local.set({
+        freeUsageDate: today,
+        freeUsageCount: currentUsage + 1
+      });
+      appendLog(`Penggunaan kuota gratis hari ini: ${currentUsage + 1}/40`);
+    }
+
     promptInput.value = "";
     promptInput.style.height = "80px";
     shouldStopAgent = false;
