@@ -1,13 +1,41 @@
-// functions/api/chat.js - Cloudflare Pages Function (Semantic AXTree, Batched Actions & Occlusion-Aware)
+// functions/api/chat.js - Cloudflare Pages Function (Secure CORS, Semantic AXTree & Robust Batching)
+
+function getCorsSecurityHeaders(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  const allowedExtId = env?.ALLOWED_EXTENSION_ID || "";
+
+  let isAllowed = false;
+  if (!origin) {
+    isAllowed = true;
+  } else if (allowedExtId && origin === `chrome-extension://${allowedExtId}`) {
+    isAllowed = true;
+  } else if (!allowedExtId && (origin.startsWith("chrome-extension://") || origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1"))) {
+    isAllowed = true;
+  }
+
+  return {
+    isAllowed,
+    headers: {
+      "Access-Control-Allow-Origin": isAllowed ? (origin || "*") : "null",
+      "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Max-Age": "86400",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY"
+    }
+  };
+}
 
 export async function onRequestPost(context) {
   const { request, env } = context;
+  const { isAllowed, headers: corsHeaders } = getCorsSecurityHeaders(request, env);
 
-  const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  };
+  if (!isAllowed) {
+    return new Response(
+      JSON.stringify({ success: false, error: "Akses ditolak: Origin peramban tidak diizinkan." }),
+      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
 
   try {
     const body = await request.json();
@@ -160,4 +188,10 @@ ATURAN UTAMA AKURASI TINGGI (HIGH-PRECISION RULES)
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
+}
+
+export async function onRequestOptions(context) {
+  const { request, env } = context;
+  const { headers: corsHeaders } = getCorsSecurityHeaders(request, env);
+  return new Response(null, { status: 204, headers: corsHeaders });
 }

@@ -1,23 +1,53 @@
-// index.js - Pesat AI Browser Agent Engine (Semantic AXTree, Batched Actions & Occlusion-Aware)
+// index.js - Pesat AI Browser Agent Engine (Secure CORS, Semantic AXTree & Robust Batching)
+
+function getCorsSecurityHeaders(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  const allowedExtId = env?.ALLOWED_EXTENSION_ID || "";
+
+  let isAllowed = false;
+  if (!origin) {
+    // Non-browser direct requests or internal curls
+    isAllowed = true;
+  } else if (allowedExtId && origin === `chrome-extension://${allowedExtId}`) {
+    isAllowed = true;
+  } else if (!allowedExtId && (origin.startsWith("chrome-extension://") || origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1"))) {
+    isAllowed = true;
+  }
+
+  return {
+    isAllowed,
+    headers: {
+      "Access-Control-Allow-Origin": isAllowed ? (origin || "*") : "null",
+      "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Max-Age": "86400",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY"
+    }
+  };
+}
 
 export default {
   async fetch(request, env, ctx) {
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    };
+    const { isAllowed, headers: corsHeaders } = getCorsSecurityHeaders(request, env);
 
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders });
+    }
+
+    if (!isAllowed) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Akses ditolak: Origin peramban tidak diizinkan." }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     if (request.method === "GET") {
       return new Response(
         JSON.stringify({
           status: "online",
-          version: "4.0.0",
-          message: "⚡ Pesat AI Browser Agent v4.0 — Semantic AXTree, Batching & Occlusion Detection Active"
+          version: "4.1.0",
+          message: "⚡ Pesat AI Browser Agent v4.1 — Hardened Origin Security & Semantic AXTree Active"
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

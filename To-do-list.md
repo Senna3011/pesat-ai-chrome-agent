@@ -95,11 +95,11 @@
 
 ---
 
-## 📌 PHASE 5: Dokumentasi & Pelaporan Mentor
+## 📌 PHASE 5: Dokumentasi & Pelaporan Mentor ✅
 *Fokus: Menyusun laporan progres kerja ke Pak Nell.*
 
-- [ ] **5.1 Penyusunan Ringkasan Teknikal**
-  - [ ] Rangkum library yang diadopsi (Playwright, Stagehand, skills.sh).
-  - [ ] Dokumentasikan skema arsitektur data: `Extension Popup` $\rightarrow$ `Background Worker` $\rightarrow$ `Cloudflare Pages (API Proxy)` $\rightarrow$ `Internal AI API` $\rightarrow$ `Content Script (DOM Action)`.
-- [ ] **5.2 Demo Proof-of-Concept (PoC)**
-  - [ ] Tunjukkan hasil *Continuous Deployment* via Cloudflare Pages dan demonstrasi eksekusi otomatisasi browser di depan mentor.
+- [x] **5.1 Penyusunan Ringkasan Teknikal**
+  - [x] Rangkum library yang diadopsi (Playwright, Stagehand, Nanobrowser, skills.sh / agent-browser).
+  - [x] Dokumentasikan skema arsitektur data: `Extension Sidepanel` $\rightarrow$ `Background Worker` $\rightarrow$ `Cloudflare Worker/Pages (API Proxy)` $\rightarrow$ `Internal AI API` $\rightarrow$ `Content Script (DOM Action)`.
+- [x] **5.2 Demo Proof-of-Concept (PoC)**
+  - [x] Panduan instalasi dan demonstrasi eksekusi otomatisasi browser siap untuk mentor.

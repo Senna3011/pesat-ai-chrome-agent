@@ -338,7 +338,11 @@
 
       let val = "";
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-        val = el.value ? ` value="${el.value.slice(0, 50)}"` : "";
+        if (el instanceof HTMLInputElement && el.type === "password") {
+          val = el.value ? ' value="[PROTECTED]"' : "";
+        } else {
+          val = el.value ? ` value="${el.value.slice(0, 50)}"` : "";
+        }
       }
 
       const placeholder = el.getAttribute("placeholder") ? ` placeholder="${el.getAttribute("placeholder")}"` : "";
@@ -595,8 +599,10 @@
           if (targetEl.form) targetEl.form.dispatchEvent(new Event("submit", { bubbles: true }));
         }
 
+        const isPassword = targetEl instanceof HTMLInputElement && targetEl.type === "password";
+        const displayVal = isPassword ? "••••••••" : value;
         setTimeout(() => { targetEl.style.outline = oldOutline; }, 1000);
-        return { success: true, message: `Mengisi "${value}" pada [@e${cleanId}] berhasil${fuzzyNote}.` };
+        return { success: true, message: `Mengisi "${displayVal}" pada [@e${cleanId}] berhasil${fuzzyNote}.` };
       }
 
       if (action === "select") {
