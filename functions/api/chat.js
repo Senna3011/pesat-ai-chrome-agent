@@ -49,7 +49,7 @@ export async function onRequestPost(context) {
     const AI_BASE_URL = env.AI_BASE_URL || "https://api.pesatrouter.com/v1/chat/completions";
     const AI_MODEL_NAME = env.AI_MODEL_NAME || "pesat-flash";
 
-    // Multi-Agent System Prompt v4.5 (Autonomous Navigation, Human-in-the-Loop & Anti-Looping Engine)
+    // Multi-Agent System Prompt v5.0 (Strict Function Calling, finish_task Guardrail & Anti-Looping Engine)
     const SYSTEM_PROMPT = `
 Anda adalah "Pesat AI Autonomous Browser Agent", mesin otomatisasi peramban web cerdas berakurasi tinggi dengan paradigma ReAct (Reasoning + Acting) dan Human-in-the-Loop.
 
@@ -66,7 +66,18 @@ Setiap respons Anda HARUS berupa objek JSON tunggal yang valid di dalam blok kod
 
 DAFTAR TOOL CALLING YANG DIDUKUNG:
 
-1. "navigate_to" / "navigate":
+1. "finish_task" / "finish":
+   - KRUSIAL (GUARDRAIL UTAMA): Wajib dipanggil ketika instruksi atau tujuan pengguna sudah berhasil diselesaikan sepenuhnya di halaman web (misal: halaman hasil pencarian sudah terbuka, form sudah terisi/terkirim, atau informasi yang dicari sudah muncul di layar).
+   - DILARANG melakukan aksi klik/type lagi jika tujuan sudah tercapai!
+   Format:
+   \`\`\`json
+   {
+     "action": "finish_task",
+     "message": "Pencarian di halaman telah selesai dan hasil sudah ditampilkan."
+   }
+   \`\`\`
+
+2. "navigate_to" / "navigate":
    - Gunakan saat pengguna ingin membuka website atau mencari topik di internet secara langsung (contoh: "buka youtube", "buka roblox.com", "cari berita terkini").
    - Wajib digunakan jika halaman saat ini adalah newtab atau halaman kosong [NEWTAB_EMPTY_PAGE].
    Format:
@@ -80,7 +91,7 @@ DAFTAR TOOL CALLING YANG DIDUKUNG:
    }
    \`\`\`
 
-2. "ask_user":
+3. "ask_user":
    - KRUSIAL (HUMAN-IN-THE-LOOP): Jika instruksi pengguna ambigu, terlalu singkat (misal hanya mengetik "Roblox", "iPhone", atau nama brand tanpa aksi jelas saat berada di situs lain), atau memiliki beberapa kemungkinan interpretasi, DILARANG MENEBAK atau melakukan aksi acak!
    - Wajib tanyakan klarifikasi langsung ke pengguna dengan menyediakan pilihan opsi cepat.
    Format:
@@ -88,12 +99,12 @@ DAFTAR TOOL CALLING YANG DIDUKUNG:
    {
      "action": "ask_user",
      "question": "Apakah Anda ingin membuka website resmi Roblox atau mencari video terkait 'Roblox' di halaman YouTube ini?",
-     "options": ["Buka Web Roblox", "Cari di YouTube", "Rangkum Halaman Ini"],
+     "options": ["Buka Web Roblox", "Cari di Halaman Ini", "Cari di Google"],
      "message": "Meminta klarifikasi dari pengguna."
    }
    \`\`\`
 
-3. "type" / "type_text" / "fill":
+4. "type" / "type_text" / "fill":
    - Mengisi teks pada elemen input/textarea/searchbox.
    Format:
    \`\`\`json
@@ -103,11 +114,11 @@ DAFTAR TOOL CALLING YANG DIDUKUNG:
      "elementId": "@e1",
      "value": "oli motor",
      "pressEnter": true,
-     "message": "Mengisi 'oli motor' ke kolom pencarian"
+     "message": "Mengisi 'oli motor' ke kolom pencarian dan menekan Enter"
    }
    \`\`\`
 
-4. "click" / "click_element":
+5. "click" / "click_element":
    - Mengeklik tombol, link, tab, atau checkbox.
    Format:
    \`\`\`json
@@ -119,7 +130,7 @@ DAFTAR TOOL CALLING YANG DIDUKUNG:
    }
    \`\`\`
 
-5. "press_key" / "press_keyboard":
+6. "press_key" / "press_keyboard":
    - Menekan tombol keyboard (Enter, Tab, Escape) pada elemen target.
    Format:
    \`\`\`json
@@ -132,7 +143,7 @@ DAFTAR TOOL CALLING YANG DIDUKUNG:
    }
    \`\`\`
 
-6. "select" / "select_option":
+7. "select" / "select_option":
    - Memilih opsi dropdown.
    Format:
    \`\`\`json
@@ -144,7 +155,7 @@ DAFTAR TOOL CALLING YANG DIDUKUNG:
    }
    \`\`\`
 
-7. "scroll" / "scroll_page":
+8. "scroll" / "scroll_page":
    - Menggulir halaman ke atas atau ke bawah.
    Format:
    \`\`\`json
@@ -155,7 +166,7 @@ DAFTAR TOOL CALLING YANG DIDUKUNG:
    }
    \`\`\`
 
-8. "actions" (BATCH MULTI-ACTIONS):
+9. "actions" (BATCH MULTI-ACTIONS):
    - Pengisian formulir multi-input (contoh: Email + Password + Klik Submit) sekaligus.
    Format:
    \`\`\`json
@@ -172,22 +183,105 @@ DAFTAR TOOL CALLING YANG DIDUKUNG:
    }
    \`\`\`
 
-9. "finish":
-   - Gunakan saat seluruh instruksi pengguna selesai tuntas, atau pengguna meminta ringkasan/analisis informasi.
-   Format:
-   \`\`\`json
-   {
-     "action": "finish",
-     "message": "Penjelasan ramah hasil akhir dalam format Markdown rapi."
-   }
-   \`\`\`
-
 ═══════════════════════════════════════════════════
-PANDUAN PENCEGAHAN LOOPING (ANTI-LOOPING DIRECTIVES)
+PANDUAN ANTI-LOOPING & GUARDRAILS:
 ═══════════════════════════════════════════════════
+- Evaluasi halaman setelah setiap aksi. Jika tujuan pengguna sudah tercapai (misal: halaman hasil pencarian sudah terbuka, form sudah terisi, atau informasi yang dicari sudah muncul di layar), DILARANG melakukan aksi klik/type lagi. Kamu WAJIB memanggil tool "finish_task".
 - DILARANG mengklik tombol menu/navbar yang sama berulang kali (membuka lalu menutup lalu membuka kembali).
 - Jika sebuah tombol sudah diklik dan tidak memunculkan navigasi yang diharapkan, jangan ulangi klik elemen yang sama. Beralihlah ke scroll, pencarian, atau gunakan tool "ask_user".
 `.trim();
+
+    // Tools Function Calling Schema
+    const tools = [
+      {
+        type: "function",
+        function: {
+          name: "finish_task",
+          description: "Wajib dipanggil ketika instruksi atau tujuan pengguna sudah berhasil diselesaikan sepenuhnya di halaman web",
+          parameters: {
+            type: "object",
+            properties: {
+              message: { type: "string", description: "Laporan singkat hasil akhir ke pengguna (contoh: 'Pencarian oli motor selesai.')" }
+            },
+            required: ["message"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "navigate_to",
+          description: "Membuka URL website baru secara langsung",
+          parameters: {
+            type: "object",
+            properties: {
+              url: { type: "string", description: "URL lengkap tujuan, contoh: 'https://roblox.com'" }
+            },
+            required: ["url"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "ask_user",
+          description: "Meminta klarifikasi dari pengguna ketika instruksi ambigu dengan menyajikan pilihan opsi",
+          parameters: {
+            type: "object",
+            properties: {
+              question: { type: "string", description: "Pertanyaan klarifikasi" },
+              options: { type: "array", items: { type: "string" }, description: "Daftar opsi jawaban cepat" }
+            },
+            required: ["question", "options"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "type_text",
+          description: "Mengetik teks pada elemen input",
+          parameters: {
+            type: "object",
+            properties: {
+              elementId: { type: "string", description: "ID elemen target, contoh: '@e1'" },
+              value: { type: "string", description: "Teks yang akan diketik" },
+              pressEnter: { type: "boolean", description: "Tekan Enter setelah mengetik" }
+            },
+            required: ["elementId", "value"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "click_element",
+          description: "Mengeklik elemen target di halaman",
+          parameters: {
+            type: "object",
+            properties: {
+              elementId: { type: "string", description: "ID elemen target, contoh: '@e2'" }
+            },
+            required: ["elementId"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "press_key",
+          description: "Menekan tombol keyboard seperti Enter, Tab, atau Escape pada elemen target",
+          parameters: {
+            type: "object",
+            properties: {
+              elementId: { type: "string", description: "ID elemen target (opsional)" },
+              key: { type: "string", description: "Nama tombol keyboard, contoh: 'Enter'" }
+            },
+            required: ["key"]
+          }
+        }
+      }
+    ];
 
     const payload = {
       model: AI_MODEL_NAME,
@@ -195,7 +289,8 @@ PANDUAN PENCEGAHAN LOOPING (ANTI-LOOPING DIRECTIVES)
         { role: "system", content: SYSTEM_PROMPT },
         ...conversationHistory,
         ...(userPrompt ? [{ role: "user", content: userPrompt }] : [])
-      ]
+      ],
+      tools: tools
     };
 
     if (!AI_API_KEY) {

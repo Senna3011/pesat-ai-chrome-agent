@@ -97,26 +97,44 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
       }
 
-      // 2. Anti-Looping: Cek apakah aksi dan target yang sama dieksekusi 3x berturut-turut
+      // 2. Action-Signature Hash & Circuit Breaker Anti-Looping
       if (request.payload?.type === "EXECUTE_ACTION" || request.payload?.type === "EXECUTE_TOOL") {
         const actData = request.payload.actionData || {};
-        const actKey = `${actData.action || actData.tool || ''}:${actData.elementId || actData.selector || ''}:${actData.value || ''}`;
+        const actionName = actData.action || actData.tool || "";
+
+        // Handler jika AI memanggil finish_task: langsung sukses dan hentikan loop
+        if (actionName === "finish_task" || actionName === "finish") {
+          actionHistoryPerTab.delete(activeTabId);
+          sendResponse({
+            success: true,
+            isFinished: true,
+            message: actData.message || "Tugas telah diselesaikan sepenuhnya."
+          });
+          return;
+        }
+
+        // Action-Signature Hash
+        const actionSignature = `${actionName}:${JSON.stringify(actData)}`;
 
         if (!actionHistoryPerTab.has(activeTabId)) {
           actionHistoryPerTab.set(activeTabId, []);
         }
         const hist = actionHistoryPerTab.get(activeTabId);
-        hist.push(actKey);
+        hist.push(actionSignature);
 
         if (hist.length > 3) {
           hist.shift();
         }
 
-        if (hist.length === 3 && hist[0] === hist[1] && hist[1] === hist[2] && hist[0] !== "scroll::") {
+        // Circuit Breaker: jika aksi 100% identik dipanggil 2-3x berturut-turut (kecuali scroll)
+        const isLooping = (hist.length >= 2 && hist[hist.length - 1] === hist[hist.length - 2] && !actionSignature.includes('"action":"scroll"')) ||
+                          (hist.length === 3 && hist[0] === hist[1] && hist[1] === hist[2] && !actionSignature.includes('"action":"scroll"'));
+
+        if (isLooping) {
           actionHistoryPerTab.delete(activeTabId);
           sendResponse({
             success: false,
-            error: "Terdeteksi aksi berulang (looping), penghentian otomatis dilakukan untuk keselamatan.",
+            error: "Looping terdeteksi: AI mencoba mengeksekusi aksi yang sama berulang kali. Menghentikan proses secara aman.",
             isLoopDetected: true
           });
           return;

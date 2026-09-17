@@ -870,10 +870,11 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           }
         }
 
-        // Jika AI memutuskan tugas selesai
-        if (actionType === "finish" || (!actionType && !isBatch && resObj.message)) {
+        // Jika AI memanggil finish_task atau finish
+        if (actionType === "finish_task" || actionType === "finish" || (!actionType && !isBatch && resObj.message)) {
           const finalMsg = resObj.message || resObj.answer || "Tugas telah selesai dikerjakan!";
           addMessageToCurrentSession("assistant", finalMsg);
+          appendLog(`✅ AI memanggil finish_task: ${finalMsg}`);
           return { isFinished: true, hasAction: false };
         }
 
