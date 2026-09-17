@@ -585,6 +585,80 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const targetUrl = stored.apiUrl || "https://pesat-ai-chrome-agent.senna-947.workers.dev/";
 
+    // Deteksi jika prompt adalah instruksi perangkuman halaman (Bypass AXTree DOM & kirim Readable Text murni)
+    const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
+
+    if (isSummarize) {
+      try {
+        setAgentRunning(true, "Merangkum artikel...");
+        showStatusIndicator("Mengekstrak teks utama artikel...");
+        appendLog("Mengambil konten teks utama (Readable Content) tanpa elemen UI/navigasi...");
+
+        const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
+        const cleanText = textRes?.text || "";
+        const pageTitle = textRes?.title || "Halaman Web";
+        const pageUrl = textRes?.url || "";
+
+        if (!cleanText || cleanText.length < 20) {
+          addMessageToCurrentSession("assistant", "⚠️ Tidak ditemukan artikel atau teks utama yang memadai untuk dirangkum pada halaman ini.");
+          return;
+        }
+
+        const promptPayload = `[TEKS UTAMA ARTIKEL / HALAMAN WEB]
+Judul: ${pageTitle}
+URL: ${pageUrl}
+
+${cleanText}
+
+[INSTRUKSI PERANGKUMAN]
+${userPrompt}`;
+
+        showStatusIndicator("AI sedang menyusun ringkasan poin penting...");
+        appendLog("Mengirimkan teks artikel ke AI Engine...");
+
+        activeAbortController = new AbortController();
+        const res = await fetch(targetUrl, {
+          method: "POST",
+          signal: activeAbortController.signal,
+          headers: {
+            "Content-Type": "application/json",
+            ...(stored.apiKey ? { Authorization: `Bearer ${stored.apiKey}` } : {})
+          },
+          body: JSON.stringify({
+            prompt: promptPayload,
+            userQuery: userPrompt,
+            isSummarize: true
+          })
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errText}`);
+        }
+
+        const data = await res.json();
+        if (data.success === false && data.error) {
+          throw new Error(data.error);
+        }
+
+        const aiReply = data.reply || "Gagal menghasilkan rangkuman.";
+        addMessageToCurrentSession("assistant", aiReply);
+        appendLog("✅ Rangkuman berhasil dibuat.");
+        return;
+      } catch (err) {
+        if (err.name === "AbortError" || shouldStopAgent) {
+          appendLog("🛑 Perangkuman dibatalkan.");
+        } else {
+          appendLog(`Error perangkuman: ${err.message}`);
+          addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat merangkum: ${err.message}`);
+        }
+        return;
+      } finally {
+        setAgentRunning(false);
+        hideStatusIndicator();
+      }
+    }
+
     const MAX_STEPS = 8;
     let stepCount = 0;
     let lastActionSuccess = true;

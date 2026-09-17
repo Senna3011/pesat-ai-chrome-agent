@@ -49,12 +49,33 @@ export async function onRequestPost(context) {
     const AI_BASE_URL = env.AI_BASE_URL || "https://api.pesatrouter.com/v1/chat/completions";
     const AI_MODEL_NAME = env.AI_MODEL_NAME || "pesat-flash";
 
+    const isSummarize =
+      !!body.isSummarize ||
+      (typeof userPrompt === "string" &&
+        (/\[TEKS UTAMA ARTIKEL/i.test(userPrompt) ||
+          /(?:^|\s)(?:rangkum|ringkas|summarize|ringkasan|rangkuman)(?:\s|$)/i.test(body.userQuery || userPrompt)));
+
+    const SUMMARIZE_SYSTEM_PROMPT = `
+Kamu adalah asisten perangkum halaman web. Diberikan teks utama dari halaman web berikut, buat ringkasan poin-poin penting (bullet points) dari isi substansi artikel/informasi utama. ABAIKAN menu navigasi, tautan terkait, atau elemen header/footer jika ada yang tersisa.
+
+Gunakan format Markdown yang rapi dengan:
+- Judul topik utama
+- Poin-poin penting (bullet points)
+- Kesimpulan singkat (jika ada)
+    `.trim();
+
     // Multi-Agent System Prompt v5.0 (Strict Function Calling, finish_task Guardrail & Anti-Looping Engine)
     const SYSTEM_PROMPT = `
 Anda adalah "Pesat AI Autonomous Browser Agent", mesin otomatisasi peramban web cerdas berakurasi tinggi dengan paradigma ReAct (Reasoning + Acting) dan Human-in-the-Loop.
 
 TUGAS UTAMA ANDA:
 Mengeksekusi aksi peramban web fisik secara tepat, presisi, dan aman untuk memenuhi tujuan pengguna.
+
+═══════════════════════════════════════════════════
+MODE PERANGKUMAN (SUMMARIZATION MODE):
+═══════════════════════════════════════════════════
+Kamu adalah asisten perangkum halaman web. Diberikan teks utama dari halaman web berikut, buat ringkasan poin-poin penting (bullet points) dari isi substansi artikel/informasi utama. ABAIKAN menu navigasi, tautan terkait, atau elemen header/footer jika ada yang tersisa.
+Jika pengguna meminta rangkuman artikel atau konten teks, jawablah langsung dengan format Markdown poin-poin penting tanpa memanggil tool/fungsi aksi browser.
 
 ═══════════════════════════════════════════════════
 ATURAN STRICT FUNCTION CALLING (FORMAT WAJIB JSON)
@@ -286,11 +307,11 @@ PANDUAN ANTI-LOOPING & GUARDRAILS:
     const payload = {
       model: AI_MODEL_NAME,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: isSummarize ? SUMMARIZE_SYSTEM_PROMPT : SYSTEM_PROMPT },
         ...conversationHistory,
         ...(userPrompt ? [{ role: "user", content: userPrompt }] : [])
       ],
-      tools: tools
+      ...(isSummarize ? {} : { tools: tools })
     };
 
     if (!AI_API_KEY) {

@@ -16,10 +16,158 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log("[Pesat AI Agent] Background Service Worker installed successfully.");
 });
 
+// Helper: Cek apakah prompt atau instruksi adalah perangkuman halaman
+function isSummarizePrompt(text = "") {
+  const t = String(text).toLowerCase();
+  return (
+    t.includes("rangkum") ||
+    t.includes("ringkas") ||
+    t.includes("summarize") ||
+    t.includes("summary") ||
+    t.includes("rangkuman") ||
+    t.includes("ringkasan")
+  );
+}
+
+// Helper: Ambil teks artikel bersih (readable text) dari content.js pada tab aktif
+async function getReadableTextFromTab(tabId) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, { type: "GET_READABLE_TEXT" }, (response) => {
+      if (chrome.runtime.lastError) {
+        // Coba inject content.js jika belum dimuat
+        chrome.scripting
+          .executeScript({
+            target: { tabId },
+            files: ["content.js"]
+          })
+          .then(() => {
+            chrome.tabs.sendMessage(tabId, { type: "GET_READABLE_TEXT" }, (retryRes) => {
+              if (chrome.runtime.lastError) {
+                resolve({ success: false, text: "", error: chrome.runtime.lastError.message });
+              } else {
+                resolve(retryRes || { success: false, text: "" });
+              }
+            });
+          })
+          .catch((err) => resolve({ success: false, text: "", error: err.message }));
+      } else {
+        resolve(response || { success: false, text: "" });
+      }
+    });
+  });
+}
+
+// Helper: Kirim teks artikel ke Cloudflare Pages Function (chat.js)
+async function requestSummaryFromAI({ text, title, url, userPrompt, apiUrl, apiKey }) {
+  const targetUrl = apiUrl || "https://pesat-ai-chrome-agent.senna-947.workers.dev/";
+  
+  const promptPayload = `[TEKS UTAMA ARTIKEL / HALAMAN WEB]
+Judul: ${title || "Halaman Web"}
+URL: ${url || ""}
+
+${text || "(Tidak ada teks konten terdeteksi)"}
+
+[INSTRUKSI PERANGKUMAN]
+${userPrompt || "Tolong buat ringkasan poin-poin penting (bullet points) dari isi substansi informasi/artikel di atas."}`;
+
+  const response = await fetch(targetUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+    },
+    body: JSON.stringify({
+      prompt: promptPayload,
+      userQuery: userPrompt,
+      isSummarize: true
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`AI Router Error (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+  if (data.success === false && data.error) {
+    throw new Error(data.error);
+  }
+
+  return data.reply || "Gagal menghasilkan rangkuman.";
+}
+
 // Listener komunikasi pesan dari Side Panel atau Content Script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "PING") {
     sendResponse({ status: "OK", message: "Background service worker active" });
+    return true;
+  }
+
+  // Ambil teks murni artikel (Readable Text) secara langsung dari tab aktif
+  if (request.action === "GET_READABLE_TEXT" || request.type === "GET_READABLE_TEXT") {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      if (!tabs || tabs.length === 0 || !tabs[0].id) {
+        sendResponse({ success: false, error: "Tidak ada tab aktif yang ditemukan." });
+        return;
+      }
+      try {
+        const res = await getReadableTextFromTab(tabs[0].id);
+        sendResponse(res);
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    });
+    return true;
+  }
+
+  // Handler khusus Perangkuman Halaman (Bypass AXTree DOM & kirim Readable Text murni)
+  if (request.action === "SUMMARIZE_PAGE") {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      if (!tabs || tabs.length === 0 || !tabs[0].id) {
+        sendResponse({ success: false, error: "Tidak ada tab aktif yang ditemukan." });
+        return;
+      }
+
+      const activeTab = tabs[0];
+      const tabUrl = activeTab.url || "";
+
+      // Handling internal page
+      if (/^(chrome|edge|about|chrome-extension):\/\//i.test(tabUrl) || !tabUrl || tabUrl === "about:blank") {
+        sendResponse({
+          success: true,
+          reply: "⚠️ Halaman internal peramban tidak memiliki artikel/teks untuk dirangkum."
+        });
+        return;
+      }
+
+      try {
+        // 1. Panggil GET_READABLE_TEXT ke content.js
+        const textData = await getReadableTextFromTab(activeTab.id);
+        const articleText = textData.text || "";
+
+        if (!articleText || articleText.length < 20) {
+          sendResponse({
+            success: true,
+            reply: "⚠️ Tidak ditemukan artikel atau teks utama yang cukup untuk dirangkum pada halaman ini."
+          });
+          return;
+        }
+
+        // 2. Kirim teks murni artikel ke Cloudflare Pages Function (chat.js)
+        const summary = await requestSummaryFromAI({
+          text: articleText,
+          title: textData.title || activeTab.title,
+          url: textData.url || activeTab.url,
+          userPrompt: request.prompt || request.userPrompt,
+          apiUrl: request.apiUrl,
+          apiKey: request.apiKey
+        });
+
+        sendResponse({ success: true, reply: summary, isSummarize: true });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    });
     return true;
   }
 

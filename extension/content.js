@@ -375,25 +375,61 @@
     };
   }
 
-  // Ekstraksi teks konten utama halaman
-  function extractReadablePageText() {
+  // ─────────────────────────────────────────────────────
+  // EKSTRAKSI KONTEN UTAMA (READABLE CONTENT) UNTUK PERANGKUMAN
+  // ─────────────────────────────────────────────────────
+  function getReadableContent() {
     try {
-      const mainContainer = document.querySelector("main, article, [role='main'], #main-content, .dashboard, .kanban-board, .content, body");
-      if (!mainContainer) return "";
+      // 1. Cari elemen konten utama menggunakan selector prioritas
+      const target =
+        document.querySelector("article") ||
+        document.querySelector("main") ||
+        document.querySelector("#content") ||
+        document.querySelector("[role='main']") ||
+        document.querySelector("#main-content") ||
+        document.body;
 
-      const clone = mainContainer.cloneNode(true);
-      clone.querySelectorAll("script, style, noscript, svg, #pesat-markers-overlay").forEach((el) => el.remove());
+      if (!target) return "";
 
-      const rawText = clone.innerText || clone.textContent || "";
-      return rawText
-        .split("\n")
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0)
-        .join("\n")
-        .substring(0, 4500);
-    } catch {
+      // 2. Clone elemen tersebut agar DOM asli tidak terganggu
+      const clone = target.cloneNode(true);
+
+      // 3. Hapus / buang tag-tag yang mengganggu (UI, navigasi, header, footer, tombol, skrip)
+      const unwanted = clone.querySelectorAll(
+        'nav, header, footer, aside, script, style, button, [role="navigation"], [role="banner"], [role="contentinfo"], noscript, svg, iframe, #pesat-markers-overlay, #pesat-markers-legend, [aria-hidden="true"]'
+      );
+      unwanted.forEach((el) => el.remove());
+
+      // 4. Ambil seluruh isi teks (innerText) yang sudah bersih
+      let rawText = (clone.innerText || clone.textContent || "").trim();
+
+      // Kumpulkan teks dari seluruh tag <p> yang panjang teksnya > 30 karakter untuk fallback/pemurnian
+      const paragraphs = Array.from(clone.querySelectorAll("p"))
+        .map((p) => (p.innerText || p.textContent || "").trim())
+        .filter((t) => t.length > 30);
+
+      let cleanText = "";
+      if (paragraphs.length > 0 && (!rawText || rawText.length < 100)) {
+        cleanText = paragraphs.join("\n\n");
+      } else {
+        cleanText = rawText
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0)
+          .join("\n");
+      }
+
+      // 5. Batasi teks maksimal ~6.000 karakter agar tidak membuang token API
+      return cleanText.substring(0, 6000);
+    } catch (err) {
+      console.warn("[Pesat] Gagal mengambil readable content:", err);
       return "";
     }
+  }
+
+  // Ekstraksi teks konten halaman untuk snapshot AXTree
+  function extractReadablePageText() {
+    return getReadableContent().substring(0, 4500);
   }
 
   // ─────────────────────────────────────────────────────
@@ -744,6 +780,17 @@
   // MESSAGE LISTENER
   // ─────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.type === "GET_READABLE_TEXT") {
+      const text = getReadableContent();
+      sendResponse({
+        success: true,
+        title: document.title || "",
+        url: window.location.href || "",
+        text: text
+      });
+      return true;
+    }
+
     if (request.type === "SCAN_DOM") {
       const data = scanInteractiveDOM(request.showOverlay !== false);
       sendResponse({ success: true, data });
