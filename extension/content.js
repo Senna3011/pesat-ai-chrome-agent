@@ -609,16 +609,25 @@
         targetEl.focus();
         if (targetEl instanceof HTMLSelectElement) {
           let optionFound = false;
+          const targetVal = String(value || "").toLowerCase().trim();
           for (let i = 0; i < targetEl.options.length; i++) {
             const opt = targetEl.options[i];
-            if (opt.value === value || opt.text.trim().toLowerCase() === String(value).toLowerCase()) {
+            const optVal = (opt.value || "").toLowerCase().trim();
+            const optTxt = (opt.text || "").toLowerCase().trim();
+            if (optVal === targetVal || optTxt === targetVal || optTxt.includes(targetVal) || (targetVal.length > 2 && optVal.includes(targetVal))) {
               targetEl.selectedIndex = i;
               optionFound = true;
               break;
             }
           }
+          targetEl.dispatchEvent(new Event("input", { bubbles: true }));
           targetEl.dispatchEvent(new Event("change", { bubbles: true }));
-          return { success: optionFound, message: `Select dropdown [@e${cleanId}] ke "${value}".` };
+          return {
+            success: optionFound,
+            message: optionFound
+              ? `Select dropdown [@e${cleanId}] ke "${targetEl.options[targetEl.selectedIndex].text}".`
+              : `Pilihan "${value}" tidak ditemukan pada dropdown [@e${cleanId}].`
+          };
         }
       }
 

@@ -188,6 +188,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function saveSessions() {
+    // Session Pruning: Batasi maksimum 30 sesi terbaru agar storage tidak overflow
+    if (sessions.length > 30) {
+      sessions = sessions.slice(0, 30);
+    }
     await chrome.storage.local.set({
       agent_sessions: sessions,
       current_session_id: currentSessionId
@@ -559,7 +563,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         let pageContext = "";
         if (scanRes && scanRes.success && scanRes.data) {
           const d = scanRes.data;
-          pageContext = `
+          if (stepCount === 1) {
+            pageContext = `
 [INFORMASI WEB AKTIF]
 Judul: ${d.title}
 URL: ${d.url}
@@ -570,7 +575,17 @@ ${d.pageContent || "(Tidak ada konten teks utama)"}
 
 [DAFTAR ELEMEN SEMANTIK AKSI TERTANDA [@eN]]
 ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
-          `.trim();
+            `.trim();
+          } else {
+            // Adaptive Token Diffing: Pada step 2+, skip full page text, fokus ke reduced semantic DOM
+            pageContext = `
+[INFORMASI WEB AKTIF (Step ${stepCount})]
+Judul: ${d.title} | URL: ${d.url} | Elemen: ${d.elementsCount}
+
+[DAFTAR ELEMEN SEMANTIK TERKINI [@eN]]
+${d.reducedDOM || "(Tidak ada elemen interaktif)"}
+            `.trim();
+          }
           appendLog(`DOM terpindai: ${d.elementsCount} elemen.`);
         }
 
@@ -668,8 +683,44 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
   }
 
   // Natural Language Action Recovery Parser (Fallback jika LLM menjawab teks instruktif bukan JSON)
-  function tryParseNaturalLanguageActions(text) {
-    if (!text) return null;
+  function tryParseNaturalLanguageActions(text, userPrompt = "") {
+    if (!text && !userPrompt) return null;
+    const combined = `${text}\n${userPrompt}`;
+
+    // 1. Deteksi Perintah Navigasi & Search
+    const navRegex = /(?:buka|kunjungi|pergi ke|navigate to|open|go to)\s+(?:website|halaman|situs)?\s*[`"']?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s`"']*)?|https?:\/\/[^\s`"']+|cnn|youtube|google|wikipedia|github|twitter|facebook|instagram)[`"']?/i;
+    const searchRegex = /(?:cari|search|googling|temukan)\s+(?:di google|di internet)?\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i;
+
+    const navMatch = combined.match(navRegex);
+    if (navMatch) {
+      let dest = navMatch[1].trim();
+      if (!dest.includes(".") && !dest.startsWith("http")) {
+        dest = dest + ".com";
+      }
+      if (!/^https?:\/\//i.test(dest)) dest = "https://" + dest;
+
+      return {
+        planner: { steps: [`1. Membuka alamat website ${dest}`, "2. Menunggu halaman termuat sempurna"] },
+        action: "navigate",
+        value: dest,
+        url: dest,
+        message: `Membuka website ${dest}...`
+      };
+    }
+
+    const searchMatch = combined.match(searchRegex);
+    if (searchMatch) {
+      const query = searchMatch[1].trim();
+      const dest = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      return {
+        planner: { steps: [`1. Mencari "${query}" di Google`, "2. Menunggu hasil pencarian"] },
+        action: "navigate",
+        value: dest,
+        url: dest,
+        message: `Mencari "${query}" di Google...`
+      };
+    }
+
     const lines = text.split('\n');
     const actions = [];
 
@@ -727,17 +778,35 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       }
     }
 
-    // Jika JSON tidak ditemukan, coba pulihkan dari teks instruksi alami
-    if (!resObj) {
-      resObj = tryParseNaturalLanguageActions(rawReply);
+    // Jika JSON tidak ditemukan atau aksi tidak terdefinisi, coba pulihkan dari teks instruksi alami
+    if (!resObj || (!resObj.action && !resObj.actions && !resObj.message)) {
+      resObj = tryParseNaturalLanguageActions(rawReply, userPrompt);
     }
 
     if (resObj) {
       try {
         const isBatch = Array.isArray(resObj.actions) && resObj.actions.length > 0;
-        const actionType = isBatch ? "batch" : (resObj.action || resObj.navigator?.action);
+        let actionType = isBatch ? "batch" : (resObj.action || resObj.navigator?.action);
         const targetId = resObj.elementId || resObj.navigator?.elementId || (isBatch ? resObj.actions.map(a => a.elementId || a.target).join(", ") : "");
-        const actionValue = resObj.value || resObj.navigator?.value;
+        let actionValue = resObj.value || resObj.url || resObj.target || resObj.navigator?.value || resObj.navigator?.url;
+
+        // Normalisasi aksi search menjadi navigate Google
+        if (actionType === "search" || actionType === "google") {
+          actionType = "navigate";
+          actionValue = `https://www.google.com/search?q=${encodeURIComponent(actionValue || userPrompt)}`;
+        }
+
+        // Recovery jika actionType navigate tapi actionValue kosong / undefined
+        if (actionType === "navigate" && (!actionValue || typeof actionValue !== "string" || !actionValue.trim() || actionValue === "undefined")) {
+          const navInText = (resObj.message || userPrompt || "").match(/(?:https?:\/\/[^\s`"']+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s`"']*)?|cnn|youtube|google|wikipedia|github)/i);
+          if (navInText) {
+            let dest = navInText[0].trim();
+            if (!dest.includes(".") && !dest.startsWith("http")) dest = dest + ".com";
+            actionValue = /^https?:\/\//i.test(dest) ? dest : `https://${dest}`;
+          } else {
+            actionValue = `https://www.google.com/search?q=${encodeURIComponent(userPrompt)}`;
+          }
+        }
 
         // Jika AI memutuskan tugas selesai
         if (actionType === "finish" || (!actionType && !isBatch && resObj.message)) {
@@ -751,14 +820,14 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           navigator: {
             action: isBatch ? `Batch (${resObj.actions.length} aksi)` : actionType,
             elementId: targetId,
-            description: resObj.message || (isBatch ? `Mengeksekusi ${resObj.actions.length} langkah berurutan` : `Mengeksekusi ${actionType} pada elemen [${targetId || ''}]`),
+            description: resObj.message || (isBatch ? `Mengeksekusi ${resObj.actions.length} langkah berurutan` : `Mengeksekusi ${actionType} ${actionType === 'navigate' ? actionValue : `pada [${targetId || ''}]`}`),
             status: "Sedang berjalan..."
           },
           validator: null,
           finalAnswer: resObj.answer || ""
         };
 
-        const statusLabel = isBatch ? `Mengeksekusi: Batch (${resObj.actions.length} aksi)...` : `Mengeksekusi: ${actionType} [${targetId || '—'}]...`;
+        const statusLabel = isBatch ? `Mengeksekusi: Batch (${resObj.actions.length} aksi)...` : `Mengeksekusi: ${actionType} ${actionType === 'navigate' ? actionValue : `[${targetId || '—'}]`}...`;
         showStatusIndicator(statusLabel);
         setAgentRunning(true, `Aksi: ${isBatch ? `Batch (${resObj.actions.length})` : `${actionType} [${targetId || '—'}]`}`);
         appendLog(`▶ Menjalankan [Step ${stepNum}]: ${isBatch ? `Batch (${resObj.actions.length} aksi)` : `${actionType} ${actionType === 'navigate' ? actionValue : `[${targetId || '—'}]`}`}`);
@@ -772,7 +841,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
                 if (chrome.runtime.lastError) {
                   resolve({ success: false, error: chrome.runtime.lastError.message });
                 } else {
-                  resolve(response || { success: true });
+                  resolve(response || { success: true, url: actionValue });
                 }
               }
             );
@@ -826,18 +895,18 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           multiAgentData.navigator.status = `Selesai (${elapsed})`;
           multiAgentData.validator = {
             success: true,
-            message: execResult.message || `Aksi ${actionType} berhasil.`
+            message: execResult.message || `Aksi ${actionType} ${actionType === 'navigate' ? `ke ${actionValue}` : `pada [${targetId || '—'}]`} berhasil.`
           };
 
           addMessageToCurrentSession("assistant", "", multiAgentData);
 
           // Cek apakah perintah hanya membuka website
-          const isOnlyNavigate = actionType === "navigate" && /^(buka|open|go to|pergi ke|kunjungi)\s+[a-zA-Z0-9.-]+/i.test(userPrompt.trim());
+          const isOnlyNavigate = actionType === "navigate" && /^(buka|open|go to|pergi ke|kunjungi|cari|search)\s+[a-zA-Z0-9.-]+/i.test(userPrompt.trim());
 
           if (isOnlyNavigate) {
             appendLog(`✅ Navigasi ke ${actionValue} selesai. Tugas utama tuntas.`);
             return {
-              isFinished: true, // Berhenti langsung, tidak looping
+              isFinished: true,
               hasAction: true,
               actionSuccess: true,
               actionType,

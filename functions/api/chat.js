@@ -102,7 +102,21 @@ CONTOH 2: AKSI TUNGGAL (KLIK / KETIK / SCROLL / NAVIGATE):
 }
 \`\`\`
 
-CONTOH 3: PERINTAH RANGKUM / TANYA JAWAB / TUGAS TUNTAS:
+CONTOH 3: NAVIGASI KE WEBSITE ATAU PENCARIAN GOOGLE:
+Jika pengguna meminta membuka website atau mencari topik di internet (contoh: "buka cnn.com", "buka youtube", "cari berita terkini"):
+\`\`\`json
+{
+  "planner": {
+    "steps": ["1. Membuka alamat website https://www.cnn.com", "2. Menunggu halaman termuat sempurna"]
+  },
+  "action": "navigate",
+  "value": "https://www.cnn.com",
+  "url": "https://www.cnn.com",
+  "message": "Membuka website https://www.cnn.com"
+}
+\`\`\`
+
+CONTOH 4: PERINTAH RANGKUM / TANYA JAWAB / TUGAS TUNTAS:
 Hanya jika pengguna meminta ringkasan, ekstraksi data, atau seluruh tugas telah tuntas:
 \`\`\`json
 {

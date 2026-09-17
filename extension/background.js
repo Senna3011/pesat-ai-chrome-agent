@@ -9,7 +9,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
     .catch((error) => console.error("Error setting panel behavior:", error));
-  
+
   console.log("Pesat AI Browser Agent installed successfully!");
 });
 
@@ -28,12 +28,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return;
       }
       try {
-        let url = request.url || "";
-        if (url && !/^https?:\/\//i.test(url)) {
-          url = "https://" + url;
+        let rawUrl = (request.url || "").trim();
+        if (!rawUrl || rawUrl === "undefined" || rawUrl === "null") {
+          sendResponse({ success: false, error: "URL tujuan navigasi kosong atau tidak valid." });
+          return;
         }
+
+        let url = rawUrl;
+        if (!/^https?:\/\//i.test(url)) {
+          if (url.includes(".") || url.startsWith("localhost")) {
+            url = "https://" + url;
+          } else {
+            // Fallback ke Google Search jika bukan domain yang valid
+            url = "https://www.google.com/search?q=" + encodeURIComponent(url);
+          }
+        }
+
         await chrome.tabs.update(tabs[0].id, { url });
-        sendResponse({ success: true, message: `Membuka URL: ${url}` });
+        sendResponse({ success: true, message: `Membuka URL: ${url}`, url });
       } catch (err) {
         sendResponse({ success: false, error: err.message });
       }
@@ -74,7 +86,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           return;
         }
       }
-      
+
       const sendMessageToTab = () => {
         chrome.tabs.sendMessage(activeTabId, request.payload, (response) => {
           if (chrome.runtime.lastError) {
@@ -106,3 +118,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
+// Auto-clean visual markers saat user berpindah tab atau tab di-refresh
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  if (!activeInfo?.tabId) return;
+  chrome.tabs.sendMessage(activeInfo.tabId, { type: "CLEAR_MARKERS" }, () => {
+    if (chrome.runtime.lastError) {}
+  });
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === "loading") {
+    chrome.tabs.sendMessage(tabId, { type: "CLEAR_MARKERS" }, () => {
+      if (chrome.runtime.lastError) {}
+    });
+  }
+});

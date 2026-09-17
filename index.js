@@ -314,11 +314,11 @@ function generateAutonomousAction(rawPrompt, messages) {
   const currentUrlMatch = rawPrompt.match(/URL:\s*(https?:\/\/[^\s\n]+)/i);
   const currentUrl = currentUrlMatch ? currentUrlMatch[1].toLowerCase() : "";
 
-  // 1. Deteksi Perintah Navigasi Web
-  const navMatch = rawPrompt.match(/(?:buka|pergi ke|kunjungi|navigate to|open|go to)\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/i) || rawPrompt.match(/(?:buka|open)\s+(cnn|google|youtube|wikipedia|github)/i);
+  // 1. Deteksi Perintah Navigasi Web (misal: "buka cnn.com", "buka youtube", "buka google")
+  const navMatch = rawPrompt.match(/(?:buka|pergi ke|kunjungi|navigate to|open|go to)\s+(?:website|halaman|situs)?\s*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?|https?:\/\/[^\s]+|cnn|youtube|google|wikipedia|github|twitter|facebook|instagram)/i);
   if (navMatch) {
-    let dest = navMatch[1].toLowerCase();
-    if (!dest.includes(".")) {
+    let dest = navMatch[1].toLowerCase().trim();
+    if (!dest.includes(".") && !dest.startsWith("http")) {
       dest = dest + ".com";
     }
     const fullUrl = dest.startsWith("http") ? dest : "https://" + dest;
@@ -331,10 +331,25 @@ function generateAutonomousAction(rawPrompt, messages) {
     }
 
     return JSON.stringify({
-      planner: { steps: [`1. Membuka alamat website ${dest}`, "2. Menunggu halaman termuat sempurna"] },
+      planner: { steps: [`1. Membuka alamat website ${fullUrl}`, "2. Menunggu halaman termuat sempurna"] },
       action: "navigate",
       value: fullUrl,
+      url: fullUrl,
       message: `Membuka website ${fullUrl}...`
+    });
+  }
+
+  // 1.b Deteksi Perintah Search / Cari di Google
+  const searchMatch = rawPrompt.match(/(?:cari|search|googling|temukan)\s+(?:di google|di internet)?\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i);
+  if (searchMatch && !promptLower.includes("elemen") && !promptLower.includes("tombol") && !promptLower.includes("kolom")) {
+    const query = searchMatch[1].trim();
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+    return JSON.stringify({
+      planner: { steps: [`1. Mencari "${query}" di Google`, "2. Menunggu hasil pencarian"] },
+      action: "navigate",
+      value: searchUrl,
+      url: searchUrl,
+      message: `Mencari "${query}" di Google...`
     });
   }
 
@@ -539,7 +554,21 @@ CONTOH 2: AKSI TUNGGAL (KLIK / KETIK / SCROLL / NAVIGATE):
 }
 \`\`\`
 
-CONTOH 3: PERINTAH RANGKUM / TANYA JAWAB / TUGAS TUNTAS:
+CONTOH 3: NAVIGASI KE WEBSITE ATAU PENCARIAN GOOGLE:
+Jika pengguna meminta membuka website atau mencari topik di internet (contoh: "buka cnn.com", "buka youtube", "cari berita terkini"):
+\`\`\`json
+{
+  "planner": {
+    "steps": ["1. Membuka alamat website https://www.cnn.com", "2. Menunggu halaman termuat sempurna"]
+  },
+  "action": "navigate",
+  "value": "https://www.cnn.com",
+  "url": "https://www.cnn.com",
+  "message": "Membuka website https://www.cnn.com"
+}
+\`\`\`
+
+CONTOH 4: PERINTAH RANGKUM / TANYA JAWAB / TUGAS TUNTAS:
 Hanya jika pengguna meminta ringkasan, ekstraksi data, atau seluruh tugas telah tuntas:
 \`\`\`json
 {
