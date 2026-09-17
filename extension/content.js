@@ -536,12 +536,33 @@
       return { success: true, message: `Menunggu ${waitMs}ms` };
     }
 
-    // Cari elemen berdasarkan ID angka atau ref @eN
+    // 1. Cari elemen langsung via ID aktif
     let targetEl = activeElementsMap.get(Number(cleanId)) || document.querySelector(`[data-pesat-id="${cleanId}"]`);
 
+    // 2. Auto-Waiting: Jika elemen belum muncul (misal sedang loading render SPA), tunggu hingga 3 detik
+    if (!targetEl) {
+      const waitStart = Date.now();
+      while (Date.now() - waitStart < 3000) {
+        await new Promise((r) => setTimeout(r, 150));
+        targetEl = activeElementsMap.get(Number(cleanId)) || document.querySelector(`[data-pesat-id="${cleanId}"]`);
+        if (targetEl && isElementVisible(targetEl)) break;
+      }
+    }
+
+    // 3. Fallback Selector: Cari via selector jika diberikan
+    if (!targetEl && actionData.selector) {
+      try {
+        const foundBySelector = document.querySelector(actionData.selector);
+        if (foundBySelector && isElementVisible(foundBySelector)) {
+          targetEl = foundBySelector;
+        }
+      } catch (e) {}
+    }
+
+    // 4. Fallback Fuzzy Text / Aria-label: Cari via kecocokan teks
     let usedFuzzy = false;
     if (!targetEl) {
-      const hint = value || String(cleanId);
+      const hint = actionData.fallbackText || value || String(cleanId);
       targetEl = findElementByFuzzy(hint, action);
       if (targetEl) {
         usedFuzzy = true;
@@ -551,7 +572,7 @@
     if (!targetEl) {
       return {
         success: false,
-        error: `Elemen [@e${cleanId || "?"}] tidak ditemukan di layar.`,
+        error: `Elemen [@e${cleanId || "?"}] tidak ditemukan di layar setelah menunggu.`,
         suggestion: "scroll"
       };
     }
