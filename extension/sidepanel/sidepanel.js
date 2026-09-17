@@ -356,6 +356,28 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (isUser) {
       contentHtml = `<div class="message-bubble">${escapeHtml(msg.content)}</div>`;
+    } else if (msg.askUser) {
+      // Render Human-in-the-Loop Clarification Question & Interactive Option Chips
+      const { question, options } = msg.askUser;
+      let askHtml = `
+        <div class="message-bubble">
+          <div class="ask-user-container">
+            <div class="ask-user-question">🤔 ${escapeHtml(question || msg.content)}</div>
+      `;
+
+      if (Array.isArray(options) && options.length > 0) {
+        askHtml += `<div class="ask-user-options">`;
+        options.forEach((opt) => {
+          askHtml += `<button class="ask-user-option-btn" data-answer="${escapeHtml(opt)}">⚡ ${escapeHtml(opt)}</button>`;
+        });
+        askHtml += `</div>`;
+      }
+
+      askHtml += `
+          </div>
+        </div>
+      `;
+      contentHtml = askHtml;
     } else if (msg.multiAgent) {
       // Render Multi-Agent Pipeline Cards (Planner, Navigator, Validator)
       const { planner, navigator, validator, finalAnswer } = msg.multiAgent;
@@ -420,7 +442,21 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (isUser) {
       const btnEdit = msgDiv.querySelector(".btn-edit-prompt");
-      btnEdit.addEventListener("click", () => editPromptAt(index));
+      if (btnEdit) {
+        btnEdit.addEventListener("click", () => editPromptAt(index));
+      }
+    } else if (msg.askUser) {
+      // Attach click listener ke tombol opsi Human-in-the-Loop
+      const optionBtns = msgDiv.querySelectorAll(".ask-user-option-btn");
+      optionBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const selectedAnswer = btn.getAttribute("data-answer");
+          if (selectedAnswer && !isAgentRunning) {
+            promptInput.value = selectedAnswer;
+            handleSend();
+          }
+        });
+      });
     }
 
     chatArea.appendChild(msgDiv);
@@ -439,11 +475,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     appendLog(`Prompt ke-${index + 1} dimuat kembali untuk diedit.`);
   }
 
-  function addMessageToCurrentSession(role, content, multiAgent = null) {
+  function addMessageToCurrentSession(role, content, multiAgent = null, askUser = null) {
     const session = getCurrentSession();
     if (!session) return;
 
-    const msgObj = { role, content, timestamp: Date.now(), multiAgent };
+    const msgObj = { role, content, timestamp: Date.now(), multiAgent, askUser };
     session.messages.push(msgObj);
 
     if (session.messages.length === 1 && role === "user") {
@@ -536,6 +572,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     promptInput.value = "";
     promptInput.style.height = "80px";
     shouldStopAgent = false;
+
+    // Reset Anti-Loop Tracker di background worker setiap kali user mengirim perintah baru
+    chrome.runtime.sendMessage({ action: "RESET_LOOP_TRACKER" }, () => {
+      if (chrome.runtime.lastError) {}
+    });
 
     addMessageToCurrentSession("user", userPrompt);
     setAgentRunning(true, "Memulai Agentic Loop...");
@@ -789,6 +830,26 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         let actionType = isBatch ? "batch" : (resObj.action || resObj.navigator?.action);
         const targetId = resObj.elementId || resObj.navigator?.elementId || (isBatch ? resObj.actions.map(a => a.elementId || a.target).join(", ") : "");
         let actionValue = resObj.value || resObj.url || resObj.target || resObj.navigator?.value || resObj.navigator?.url;
+
+        // Human-in-the-Loop: Handler jika AI memanggil tool 'ask_user'
+        if (actionType === "ask_user" || resObj.question) {
+          const askQuestion = resObj.question || resObj.message || "Terdapat beberapa kemungkinan tindakan. Silakan pilih salah satu:";
+          const askOptions = Array.isArray(resObj.options) && resObj.options.length > 0
+            ? resObj.options
+            : ["Buka Website", "Cari di Halaman Ini", "Rangkum Informasi"];
+
+          addMessageToCurrentSession("assistant", askQuestion, null, {
+            question: askQuestion,
+            options: askOptions
+          });
+          appendLog(`🤔 AI meminta klarifikasi pengguna: "${askQuestion}"`);
+          return { isFinished: true, hasAction: false };
+        }
+
+        // Normalisasi nama aksi navigasi
+        if (actionType === "navigate_to") {
+          actionType = "navigate";
+        }
 
         // Normalisasi aksi search menjadi navigate Google
         if (actionType === "search" || actionType === "google") {

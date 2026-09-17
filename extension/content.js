@@ -227,6 +227,18 @@
   function scanInteractiveDOM(showOverlay = true) {
     clearVisualMarkers();
 
+    const currentUrl = window.location.href || "";
+    // Handling Newtab / Empty Page
+    if (!currentUrl || currentUrl.startsWith("chrome://") || currentUrl.startsWith("edge://") || currentUrl.startsWith("about:") || currentUrl === "about:blank") {
+      return {
+        title: document.title || "Tab Baru",
+        url: currentUrl || "chrome://newtab",
+        elementsCount: 0,
+        reducedDOM: "[NEWTAB_EMPTY_PAGE] Halaman kosong. Gunakan tool navigate_to untuk membuka URL atau mencari sesuatu.",
+        pageContent: ""
+      };
+    }
+
     const selector = [
       "a[href]",
       "button",
