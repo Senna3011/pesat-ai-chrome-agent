@@ -626,7 +626,7 @@
         return { success: true, message: `Mengisi "${displayVal}" pada [@e${cleanId}] berhasil${fuzzyNote}.` };
       }
 
-      if (action === "select") {
+      if (action === "select" || action === "select_option") {
         targetEl.focus();
         if (targetEl instanceof HTMLSelectElement) {
           let optionFound = false;
@@ -650,6 +650,45 @@
               : `Pilihan "${value}" tidak ditemukan pada dropdown [@e${cleanId}].`
           };
         }
+      }
+
+      if (action === "press_key" || action === "press_keyboard" || action === "key_press") {
+        targetEl.focus();
+        const keyName = actionData.key || value || "Enter";
+        const isEnter = keyName.toLowerCase() === "enter";
+        const keyCodeVal = isEnter ? 13 : (keyName.toLowerCase() === "tab" ? 9 : (keyName.toLowerCase() === "escape" ? 27 : 0));
+
+        const keyEventInit = {
+          key: keyName,
+          code: isEnter ? "Enter" : keyName,
+          keyCode: keyCodeVal,
+          which: keyCodeVal,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window
+        };
+
+        targetEl.dispatchEvent(new KeyboardEvent("keydown", keyEventInit));
+        targetEl.dispatchEvent(new KeyboardEvent("keypress", keyEventInit));
+        targetEl.dispatchEvent(new KeyboardEvent("keyup", keyEventInit));
+
+        if (isEnter) {
+          if (targetEl.form) {
+            try {
+              if (typeof targetEl.form.requestSubmit === "function") {
+                targetEl.form.requestSubmit();
+              } else {
+                targetEl.form.submit();
+              }
+            } catch (e) {
+              targetEl.form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+            }
+          }
+        }
+
+        setTimeout(() => { targetEl.style.outline = oldOutline; }, 1000);
+        return { success: true, message: `Menekan tombol '${keyName}' pada [@e${cleanId}] berhasil${fuzzyNote}.` };
       }
 
       return { success: false, error: `Aksi "${action}" tidak didukung.` };

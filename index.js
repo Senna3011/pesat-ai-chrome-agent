@@ -568,7 +568,21 @@ Jika pengguna meminta membuka website atau mencari topik di internet (contoh: "b
 }
 \`\`\`
 
-CONTOH 4: PERINTAH RANGKUM / TANYA JAWAB / TUGAS TUNTAS:
+CONTOH 4: TEKAN TOMBOL KEYBOARD (ENTER / TAB / ESCAPE):
+Gunakan saat ingin mengirim pencarian setelah mengetik di kolom input:
+\`\`\`json
+{
+  "planner": {
+    "steps": ["1. Menekan tombol Enter pada kotak pencarian"]
+  },
+  "action": "press_key",
+  "elementId": "@e7",
+  "key": "Enter",
+  "message": "Menekan tombol Enter pada kolom pencarian"
+}
+\`\`\`
+
+CONTOH 5: PERINTAH RANGKUM / TANYA JAWAB / TUGAS TUNTAS:
 Hanya jika pengguna meminta ringkasan, ekstraksi data, atau seluruh tugas telah tuntas:
 \`\`\`json
 {
