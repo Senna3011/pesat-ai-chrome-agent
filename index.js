@@ -307,28 +307,52 @@ function renderLandingPage(env) {
 }
 
 // Autonomous Action Generator untuk Zero-Config & Free Tier
-function generateAutonomousAction(rawPrompt, messages) {
+function generateAutonomousAction(rawPrompt, messages, userRawInput = "") {
   const promptLower = (rawPrompt || "").toLowerCase();
+  const rawInputLower = (userRawInput || "").toLowerCase().trim();
 
   // Ambil URL tab aktif terkini dari konteks prompt
-  const currentUrlMatch = rawPrompt.match(/URL:\s*(https?:\/\/[^\s\n]+)/i);
+  const currentUrlMatch = rawPrompt.match(/URL:\s*(https?:\/\/[^\s\n]+|chrome:\/\/[^\s\n]+|about:[^\s\n]+)/i);
   const currentUrl = currentUrlMatch ? currentUrlMatch[1].toLowerCase() : "";
+  const isNewTab = !currentUrl || currentUrl.includes("chrome://newtab") || currentUrl.includes("about:blank") || promptLower.includes("[newtab_empty_page]");
 
-  // 1. Deteksi Perintah Navigasi Web (misal: "buka cnn.com", "buka youtube", "buka google")
-  const navMatch = rawPrompt.match(/(?:buka|pergi ke|kunjungi|navigate to|open|go to)\s+(?:website|halaman|situs)?\s*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?|https?:\/\/[^\s]+|cnn|youtube|google|wikipedia|github|twitter|facebook|instagram)/i);
-  if (navMatch) {
-    let dest = navMatch[1].toLowerCase().trim();
+  // 1. Ekstraksi Query Asli Pengguna
+  const cleanUserQuery = userRawInput || (rawPrompt.match(/Tugas Utama Pengguna:\s*"([^"]+)"/i)?.[1]) || rawPrompt.split('\n')[0];
+  const queryWords = cleanUserQuery.trim().split(/\s+/);
+
+  // 2. Deteksi Kata Tunggal / Ambigu (Human-in-the-Loop)
+  // Contoh: user hanya mengetik "roblox", "youtube", "tokopedia", "shopee" tanpa kata kerja aksi saat berada di halaman lain
+  if (queryWords.length === 1 && !isNewTab && !cleanUserQuery.includes(".") && !cleanUserQuery.startsWith("http")) {
+    const singleWord = queryWords[0].replace(/[^a-zA-Z0-9]/g, '');
+    const isKnownSite = ["roblox", "youtube", "google", "tokopedia", "shopee", "github", "twitter", "instagram", "facebook", "tiktok"].includes(singleWord.toLowerCase());
+
+    if (isKnownSite) {
+      const capitalized = singleWord.charAt(0).toUpperCase() + singleWord.slice(1);
+      return JSON.stringify({
+        action: "ask_user",
+        question: `Anda memasukkan kata '${cleanUserQuery}'. Apa tindakan yang ingin Anda lakukan?`,
+        options: [
+          `Buka Website ${capitalized}`,
+          `Cari '${cleanUserQuery}' di Halaman Ini`,
+          `Cari '${cleanUserQuery}' di Google`
+        ],
+        message: `Meminta klarifikasi dari pengguna untuk kata '${cleanUserQuery}'.`
+      });
+    }
+  }
+
+  // 3. Deteksi Perintah Navigasi Langsung (misal: "buka roblox", "buka youtube.com", "buka cnn")
+  const navMatch = cleanUserQuery.match(/^(?:buka|pergi ke|kunjungi|navigate to|open|go to)\s+(?:website|halaman|situs)?\s*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?|https?:\/\/[^\s]+|[a-zA-Z0-9_-]+)/i);
+  if (navMatch || (isNewTab && queryWords.length <= 3 && !cleanUserQuery.startsWith("cari") && !cleanUserQuery.startsWith("search"))) {
+    let dest = (navMatch ? navMatch[1] : cleanUserQuery).toLowerCase().trim();
+    
+    // Hilangkan kata awalan jika ada
+    dest = dest.replace(/^(?:buka|open|go to|kunjungi)\s+/i, '').trim();
+
     if (!dest.includes(".") && !dest.startsWith("http")) {
       dest = dest + ".com";
     }
     const fullUrl = dest.startsWith("http") ? dest : "https://" + dest;
-
-    if (currentUrl && (currentUrl.includes(dest.replace(/^https?:\/\//, '').replace(/\/.*$/, '')) || currentUrl.includes(dest.split('.')[0]))) {
-      return JSON.stringify({
-        action: "finish",
-        message: `✅ Website **${dest}** sudah berhasil dibuka dan dimuat sempurna!`
-      });
-    }
 
     return JSON.stringify({
       planner: { steps: [`1. Membuka alamat website ${fullUrl}`, "2. Menunggu halaman termuat sempurna"] },
@@ -339,9 +363,9 @@ function generateAutonomousAction(rawPrompt, messages) {
     });
   }
 
-  // 1.b Deteksi Perintah Search / Cari di Google
-  const searchMatch = rawPrompt.match(/(?:cari|search|googling|temukan)\s+(?:di google|di internet)?\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i);
-  if (searchMatch && !promptLower.includes("elemen") && !promptLower.includes("tombol") && !promptLower.includes("kolom")) {
+  // 4. Deteksi Perintah Search / Cari di Google
+  const searchMatch = cleanUserQuery.match(/^(?:cari|search|googling|temukan)\s+(?:di google|di internet)?\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i);
+  if (searchMatch) {
     const query = searchMatch[1].trim();
     const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
     return JSON.stringify({
@@ -353,13 +377,12 @@ function generateAutonomousAction(rawPrompt, messages) {
     });
   }
 
-  // 2. Deteksi Perintah Login / Isi Form Multi-Kolom (Email + Password + Submit)
+  // 5. Deteksi Perintah Login / Isi Form Multi-Kolom (Email + Password + Submit)
   const isLoginFormRequest = promptLower.includes("login") || promptLower.includes("masuk") || promptLower.includes("sign in") || (promptLower.includes("email") && promptLower.includes("password"));
   if (isLoginFormRequest) {
     const emailMatch = rawPrompt.match(/(?:email|user|username)\s+[:=]?\s*[`"']?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|[^\s,]+)[`"']?/i);
     const passMatch = rawPrompt.match(/(?:password|sandi|pass)\s+[:=]?\s*[`"']?([^\s,`"'\n]+)[`"']?/i);
 
-    // Cari element id untuk email, password, dan submit button dari daftar elemen
     const emailElMatch = rawPrompt.match(/\[?(@e\d+)\]?\s*<textbox[^>]*placeholder=["'][^"']*email[^"']*["']/i) || rawPrompt.match(/\[?(@e\d+)\]?\s*<textbox[^>]*>.*?(?:email|alamat email)/i);
     const passElMatch = rawPrompt.match(/\[?(@e\d+)\]?\s*<textbox[^>]*placeholder=["'][^"']*(?:pass|sandi)[^"']*["']/i) || rawPrompt.match(/\[?(@e\d+)\]?\s*<textbox[^>]*>.*?(?:pass|password|sandi)/i);
     const submitBtnMatch = rawPrompt.match(/\[?(@e\d+)\]?\s*<button[^>]*>.*?(?:sign in|masuk|login|submit)/i) || rawPrompt.match(/\[?(@e\d+)\]?\s*<button/i);
@@ -388,7 +411,7 @@ function generateAutonomousAction(rawPrompt, messages) {
     });
   }
 
-  // 3. Deteksi Perintah Rangkum Web / Summary
+  // 6. Deteksi Perintah Rangkum Web / Summary
   if (promptLower.includes("rangkum") || promptLower.includes("ringkas") || promptLower.includes("summarize") || promptLower.includes("poin-poin utama")) {
     const contentMatch = rawPrompt.match(/\[KONTEN TEKS LENGKAP HALAMAN[^\]]*\]\s*([\s\S]*?)(\[DAFTAR ELEMEN|$)/i);
     const textContent = contentMatch ? contentMatch[1].trim() : "";
@@ -407,7 +430,7 @@ function generateAutonomousAction(rawPrompt, messages) {
     });
   }
 
-  // 4. Deteksi Perintah Ekstraksi Tabel / Data
+  // 7. Deteksi Perintah Ekstraksi Tabel / Data
   if (promptLower.includes("ekstrak") || promptLower.includes("tabel") || promptLower.includes("extract")) {
     return JSON.stringify({
       action: "finish",
@@ -415,9 +438,9 @@ function generateAutonomousAction(rawPrompt, messages) {
     });
   }
 
-  // 5. Deteksi Interaksi Form / Klik Otomatis Tunggal
-  const clickMatch = rawPrompt.match(/(?:klik|tekan|pilih|click)\s+(?:tombol\s+)?([^\n,]+)/i);
-  const typeMatch = rawPrompt.match(/(?:ketik|isi|tulis|masukkan|type)\s+["']?([^"'\n,]+)["']?/i);
+  // 8. Deteksi Interaksi Form / Klik Otomatis Tunggal
+  const clickMatch = cleanUserQuery.match(/(?:klik|tekan|pilih|click)\s+(?:tombol\s+)?([^\n,]+)/i);
+  const typeMatch = cleanUserQuery.match(/(?:ketik|isi|tulis|masukkan|type)\s+["']?([^"'\n,]+)["']?/i);
   const elementMatch = rawPrompt.match(/\[?(@e\d+)\]?/);
 
   if (clickMatch && elementMatch) {
@@ -440,9 +463,16 @@ function generateAutonomousAction(rawPrompt, messages) {
     });
   }
 
+  // 9. Jika perintah ambigu atau tidak cocok dengan pola aksi, gunakan ask_user
   return JSON.stringify({
-    action: "finish",
-    message: `✅ Perintah diproses: "${rawPrompt.split('\n')[0]}". Seluruh langkah otomatisasi telah selesai dijalankan.`
+    action: "ask_user",
+    question: `Saya menerima perintah: '${cleanUserQuery}'. Apa tindakan yang ingin Anda lakukan selanjutnya?`,
+    options: [
+      `Cari '${cleanUserQuery}' di Google`,
+      `Buka Website ${cleanUserQuery}.com`,
+      `Rangkum Halaman Ini`
+    ],
+    message: `Meminta klarifikasi dari pengguna.`
   });
 }
 
@@ -642,7 +672,8 @@ ATURAN AKURASI ELEMENT ID (@eN):
         // =========================================================================
         // AUTONOMOUS HEURISTIC ENGINE (Free Quota & Zero-Config Automation)
         // =========================================================================
-        const simulatedReply = generateAutonomousAction(userPrompt, body.messages || []);
+        const rawUserQuery = body.userQuery || "";
+        const simulatedReply = generateAutonomousAction(userPrompt, body.messages || [], rawUserQuery);
         return new Response(
           JSON.stringify({
             success: true,

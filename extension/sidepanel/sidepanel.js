@@ -660,6 +660,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           },
           body: JSON.stringify({
             prompt: promptPayload,
+            userQuery: userPrompt,
             messages: history
           })
         });
