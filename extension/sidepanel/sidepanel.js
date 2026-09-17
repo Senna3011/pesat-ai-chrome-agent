@@ -595,12 +595,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         appendLog("Mengambil konten teks utama (Readable Content) tanpa elemen UI/navigasi...");
 
         const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
-        const cleanText = textRes?.text || "";
-        const pageTitle = textRes?.title || "Halaman Web";
-        const pageUrl = textRes?.url || "";
+        let cleanText = textRes?.text || "";
+        let pageTitle = textRes?.title || "Halaman Web";
+        let pageUrl = textRes?.url || "";
+
+        // Fallback jika GET_READABLE_TEXT belum siap: coba scan DOM dan ambil pageContent
+        if (!cleanText || cleanText.length < 20) {
+          const scanFallback = await sendToContentScript({ type: "SCAN_DOM", showOverlay: false });
+          cleanText = scanFallback?.data?.pageContent || "";
+          pageTitle = scanFallback?.data?.title || pageTitle;
+          pageUrl = scanFallback?.data?.url || pageUrl;
+        }
 
         if (!cleanText || cleanText.length < 20) {
-          addMessageToCurrentSession("assistant", "⚠️ Tidak ditemukan artikel atau teks utama yang memadai untuk dirangkum pada halaman ini.");
+          addMessageToCurrentSession("assistant", "⚠️ Tidak ditemukan artikel atau teks utama yang memadai untuk dirangkum pada halaman ini. Pastikan halaman sudah termuat sempurna.");
           return;
         }
 

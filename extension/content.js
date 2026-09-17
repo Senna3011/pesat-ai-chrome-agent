@@ -380,47 +380,59 @@
   // ─────────────────────────────────────────────────────
   function getReadableContent() {
     try {
-      // 1. Cari elemen konten utama menggunakan selector prioritas
+      // 1. Selector container artikel/konten
       const target =
         document.querySelector("article") ||
         document.querySelector("main") ||
         document.querySelector("#content") ||
         document.querySelector("[role='main']") ||
         document.querySelector("#main-content") ||
+        document.querySelector(".content") ||
+        document.querySelector(".post") ||
+        document.querySelector(".article") ||
         document.body;
 
       if (!target) return "";
 
-      // 2. Clone elemen tersebut agar DOM asli tidak terganggu
-      const clone = target.cloneNode(true);
-
-      // 3. Hapus / buang tag-tag yang mengganggu (UI, navigasi, header, footer, tombol, skrip)
-      const unwanted = clone.querySelectorAll(
-        'nav, header, footer, aside, script, style, button, [role="navigation"], [role="banner"], [role="contentinfo"], noscript, svg, iframe, #pesat-markers-overlay, #pesat-markers-legend, [aria-hidden="true"]'
+      // 2. Kumpulkan semua blok teks bermakna (Heading, Paragraf, List item, Blockquote)
+      const textElements = Array.from(
+        target.querySelectorAll("h1, h2, h3, h4, h5, h6, p, li, blockquote, figcaption, [class*='desc'], [class*='text'], [class*='title']")
       );
-      unwanted.forEach((el) => el.remove());
 
-      // 4. Ambil seluruh isi teks (innerText) yang sudah bersih
-      let rawText = (clone.innerText || clone.textContent || "").trim();
+      const cleanedBlocks = [];
+      const seenText = new Set();
 
-      // Kumpulkan teks dari seluruh tag <p> yang panjang teksnya > 30 karakter untuk fallback/pemurnian
-      const paragraphs = Array.from(clone.querySelectorAll("p"))
-        .map((p) => (p.innerText || p.textContent || "").trim())
-        .filter((t) => t.length > 30);
+      for (const el of textElements) {
+        // Skip elemen dalam nav/header/footer/script/style/sidebar
+        if (el.closest("nav, header, footer, aside, [role='navigation'], [role='banner'], [role='contentinfo'], #pesat-markers-overlay, #pesat-markers-legend")) {
+          continue;
+        }
 
-      let cleanText = "";
-      if (paragraphs.length > 0 && (!rawText || rawText.length < 100)) {
-        cleanText = paragraphs.join("\n\n");
-      } else {
-        cleanText = rawText
+        const str = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+        if (str.length >= 8 && !seenText.has(str)) {
+          seenText.add(str);
+          cleanedBlocks.push(str);
+        }
+      }
+
+      let resultText = cleanedBlocks.join("\n\n");
+
+      // 3. Fallback jika querySelector semantik gagal: gunakan clone & sanitize body
+      if (!resultText || resultText.length < 50) {
+        const clone = target.cloneNode(true);
+        const unwanted = clone.querySelectorAll(
+          'nav, header, footer, aside, script, style, button, [role="navigation"], [role="banner"], [role="contentinfo"], noscript, svg, iframe, #pesat-markers-overlay, #pesat-markers-legend, [aria-hidden="true"]'
+        );
+        unwanted.forEach((el) => el.remove());
+        resultText = (clone.innerText || clone.textContent || "")
           .split("\n")
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0)
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0)
           .join("\n");
       }
 
-      // 5. Batasi teks maksimal ~6.000 karakter agar tidak membuang token API
-      return cleanText.substring(0, 6000);
+      // 4. Batasi teks maksimal ~6.000 karakter agar tidak melebihi kuota token
+      return resultText.substring(0, 6000).trim();
     } catch (err) {
       console.warn("[Pesat] Gagal mengambil readable content:", err);
       return "";
