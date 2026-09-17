@@ -1072,8 +1072,25 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
             targetId
           };
         } else {
-          // Aksi gagal
+          // Aksi gagal atau Circuit Breaker Loop Terdeteksi
           multiAgentData.navigator.status = "Gagal";
+
+          if (execResult?.isLoopDetected) {
+            multiAgentData.validator = {
+              success: false,
+              message: `🛑 ${execResult.error}`
+            };
+            appendLog(`🛑 Circuit Breaker: ${execResult.error}`);
+            addMessageToCurrentSession("assistant", "", multiAgentData);
+            return {
+              isFinished: true,
+              hasAction: false,
+              actionSuccess: false,
+              actionType,
+              targetId
+            };
+          }
+
           const suggestion = execResult?.suggestion === "scroll"
             ? "💡 Coba gulir halaman ke bawah terlebih dahulu."
             : "💡 Coba muat ulang halaman, lalu ulangi perintah.";
