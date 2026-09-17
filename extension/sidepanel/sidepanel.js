@@ -475,11 +475,37 @@ document.addEventListener("DOMContentLoaded", async () => {
     appendLog(`Prompt ke-${index + 1} dimuat kembali untuk diedit.`);
   }
 
+  function cleanAssistantReply(text) {
+    if (!text || typeof text !== "string") return text || "";
+    const trimmed = text.trim();
+    // Jika formatnya JSON mentah {"action": "finish", "message": "..."}
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed.message) return parsed.message;
+        if (parsed.answer) return parsed.answer;
+        if (parsed.final_answer) return parsed.final_answer;
+      } catch (e) {}
+    }
+    // Jika di dalam code block ```json ... ```
+    const jsonBlock = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+    if (jsonBlock) {
+      try {
+        const parsed = JSON.parse(jsonBlock[1]);
+        if (parsed.message) return parsed.message;
+        if (parsed.answer) return parsed.answer;
+        if (parsed.final_answer) return parsed.final_answer;
+      } catch (e) {}
+    }
+    return text;
+  }
+
   function addMessageToCurrentSession(role, content, multiAgent = null, askUser = null) {
     const session = getCurrentSession();
     if (!session) return;
 
-    const msgObj = { role, content, timestamp: Date.now(), multiAgent, askUser };
+    const cleanContent = role === "assistant" ? cleanAssistantReply(content) : content;
+    const msgObj = { role, content: cleanContent, timestamp: Date.now(), multiAgent, askUser };
     session.messages.push(msgObj);
 
     if (session.messages.length === 1 && role === "user") {
