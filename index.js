@@ -341,7 +341,44 @@ function generateAutonomousAction(rawPrompt, messages, userRawInput = "") {
     }
   }
 
-  // 3. Deteksi Perintah Navigasi Langsung (misal: "buka roblox", "buka youtube.com", "buka cnn")
+  // 3. Deteksi Perintah Pencarian di Halaman Aktif (Contoh: "Cari 'roblox' di Halaman Ini")
+  const inPageSearchMatch = cleanUserQuery.match(/^(?:cari|search|temukan)\s+['"“]([^'"”\n]+)['"”]\s+(?:di|pada)\s+halaman\s+ini/i) ||
+                           cleanUserQuery.match(/^(?:cari|search)\s+([^'"”\n]+)\s+(?:di|pada)\s+halaman\s+ini/i);
+
+  if (inPageSearchMatch) {
+    const searchTerm = inPageSearchMatch[1].trim();
+
+    // Cari kolom search/input di daftar elemen halaman
+    const searchInputMatch = rawPrompt.match(/\[?(@e\d+)\]?\s*<(?:textbox|searchbox)[^>]*placeholder=["'][^"']*(?:cari|search|search\s+roblox|temukan)[^"']*["']/i) ||
+                             rawPrompt.match(/\[?(@e\d+)\]?\s*<(?:textbox|searchbox)/i) ||
+                             rawPrompt.match(/\[?(@e\d+)\]?\s*<input[^>]*type=["']search["']/i);
+
+    if (searchInputMatch) {
+      const searchInputId = searchInputMatch[1];
+      return JSON.stringify({
+        planner: {
+          steps: [
+            `1. Menemukan kolom pencarian pada halaman [${searchInputId}]`,
+            `2. Mengetik '${searchTerm}' ke kolom pencarian`,
+            `3. Menekan tombol Enter untuk memulai pencarian`
+          ]
+        },
+        action: "type",
+        elementId: searchInputId,
+        value: searchTerm,
+        pressEnter: true,
+        message: `Mencari '${searchTerm}' di kolom pencarian [${searchInputId}] dan menekan Enter.`
+      });
+    }
+
+    // Jika tidak ada kolom input search di halaman, lakukan scroll & cari
+    return JSON.stringify({
+      action: "finish",
+      message: `🔍 Hasil pencarian kata '**${searchTerm}**' pada halaman ini:\n- Halaman aktif: ${currentUrl}\n- Silakan periksa daftar konten yang ditampilkan pada layar.`
+    });
+  }
+
+  // 4. Deteksi Perintah Navigasi Langsung (misal: "buka roblox", "buka youtube.com", "buka cnn")
   const navMatch = cleanUserQuery.match(/^(?:buka|pergi ke|kunjungi|navigate to|open|go to)\s+(?:website|halaman|situs)?\s*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?|https?:\/\/[^\s]+|[a-zA-Z0-9_-]+)/i);
   if (navMatch || (isNewTab && queryWords.length <= 3 && !cleanUserQuery.startsWith("cari") && !cleanUserQuery.startsWith("search"))) {
     let dest = (navMatch ? navMatch[1] : cleanUserQuery).toLowerCase().trim();
@@ -363,7 +400,7 @@ function generateAutonomousAction(rawPrompt, messages, userRawInput = "") {
     });
   }
 
-  // 4. Deteksi Perintah Search / Cari di Google
+  // 5. Deteksi Perintah Search / Cari di Google
   const searchMatch = cleanUserQuery.match(/^(?:cari|search|googling|temukan)\s+(?:di google|di internet)?\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i);
   if (searchMatch) {
     const query = searchMatch[1].trim();

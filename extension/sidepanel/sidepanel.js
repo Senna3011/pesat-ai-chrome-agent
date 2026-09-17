@@ -976,6 +976,19 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
             };
           }
 
+          // Cek apakah perintah pengetikan pencarian dengan pressEnter sudah tuntas
+          const isSearchTypeSubmitted = (actionType === "type" || actionType === "type_text") && resObj.pressEnter;
+          if (isSearchTypeSubmitted) {
+            appendLog(`✅ Pengetikan dan pengiriman formulir pencarian selesai.`);
+            return {
+              isFinished: true,
+              hasAction: true,
+              actionSuccess: true,
+              actionType,
+              targetId
+            };
+          }
+
           return {
             isFinished: false,
             hasAction: true,
