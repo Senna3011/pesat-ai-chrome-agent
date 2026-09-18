@@ -1,5 +1,21 @@
 // background.js - Service Worker & ReAct Message Orchestrator (MV3 Compliant with Anti-Looping & Human-in-the-Loop)
 
+try {
+  importScripts('logger.js');
+} catch (e) {
+  console.warn("[Pesat SW] Logger import fallback:", e);
+}
+
+function bgLog(level, type, message, details = null, tabId = null) {
+  try {
+    if (typeof sendRemoteLog === "function") {
+      sendRemoteLog({ level, source: "BACKGROUND", type, message, details, tabId });
+    } else if (globalThis.PesatLogger?.sendRemoteLog) {
+      globalThis.PesatLogger.sendRemoteLog({ level, source: "BACKGROUND", type, message, details, tabId });
+    }
+  } catch (e) {}
+}
+
 // Action history tracker untuk pencegahan infinite loop
 const actionHistoryPerTab = new Map();
 
@@ -13,6 +29,7 @@ chrome.runtime.onInstalled.addListener(() => {
     .setPanelBehavior({ openPanelOnActionClick: true })
     .catch((error) => console.error("[Pesat SW] Error setting panel behavior:", error));
 
+  bgLog("INFO", "SW_INSTALLED", "Background Service Worker berhasil diinstal & aktif.");
   console.log("[Pesat AI Agent] Background Service Worker installed successfully.");
 });
 
@@ -253,6 +270,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Handler jika AI memanggil finish_task: langsung sukses dan hentikan loop
         if (actionName === "finish_task" || actionName === "finish") {
           actionHistoryPerTab.delete(activeTabId);
+          bgLog("ACTION", "FINISH_TASK", `finish_task dieksekusi: ${actData.message || 'Selesai'}`, actData, activeTabId);
           sendResponse({
             success: true,
             isFinished: true,
@@ -280,6 +298,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
         if (isLooping) {
           actionHistoryPerTab.delete(activeTabId);
+          bgLog("WARN", "CIRCUIT_BREAKER", `Looping terdeteksi pada tab ${activeTabId}! Mencegah infinite loop.`, { actionSignature, history: hist }, activeTabId);
           sendResponse({
             success: false,
             error: "Looping terdeteksi: AI mencoba mengeksekusi aksi yang sama berulang kali. Menghentikan proses secara aman.",
@@ -287,6 +306,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           });
           return;
         }
+
+        bgLog("ACTION", "EXEC_ACTION", `Mengeksekusi aksi: ${actionName}`, actData, activeTabId);
       }
 
       // 3. Kirim pesan ke tab aktif

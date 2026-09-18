@@ -227,6 +227,18 @@
   function scanInteractiveDOM(showOverlay = true) {
     clearVisualMarkers();
 
+    const currentUrl = window.location.href || "";
+    // Handling Newtab / Empty Page
+    if (!currentUrl || currentUrl.startsWith("chrome://") || currentUrl.startsWith("edge://") || currentUrl.startsWith("about:") || currentUrl === "about:blank") {
+      return {
+        title: document.title || "Tab Baru",
+        url: currentUrl || "chrome://newtab",
+        elementsCount: 0,
+        reducedDOM: "[NEWTAB_EMPTY_PAGE] Halaman kosong. Gunakan tool navigate_to untuk membuka URL atau mencari sesuatu.",
+        pageContent: ""
+      };
+    }
+
     const selector = [
       "a[href]",
       "button",
@@ -363,25 +375,73 @@
     };
   }
 
-  // Ekstraksi teks konten utama halaman
-  function extractReadablePageText() {
+  // ─────────────────────────────────────────────────────
+  // EKSTRAKSI KONTEN UTAMA (READABLE CONTENT) UNTUK PERANGKUMAN
+  // ─────────────────────────────────────────────────────
+  function getReadableContent() {
     try {
-      const mainContainer = document.querySelector("main, article, [role='main'], #main-content, .dashboard, .kanban-board, .content, body");
-      if (!mainContainer) return "";
+      // 1. Selector container artikel/konten
+      const target =
+        document.querySelector("article") ||
+        document.querySelector("main") ||
+        document.querySelector("#content") ||
+        document.querySelector("[role='main']") ||
+        document.querySelector("#main-content") ||
+        document.querySelector(".content") ||
+        document.querySelector(".post") ||
+        document.querySelector(".article") ||
+        document.body;
 
-      const clone = mainContainer.cloneNode(true);
-      clone.querySelectorAll("script, style, noscript, svg, #pesat-markers-overlay").forEach((el) => el.remove());
+      if (!target) return "";
 
-      const rawText = clone.innerText || clone.textContent || "";
-      return rawText
-        .split("\n")
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0)
-        .join("\n")
-        .substring(0, 4500);
-    } catch {
+      // 2. Kumpulkan semua blok teks bermakna (Heading, Paragraf, List item, Blockquote)
+      const textElements = Array.from(
+        target.querySelectorAll("h1, h2, h3, h4, h5, h6, p, li, blockquote, figcaption, [class*='desc'], [class*='text'], [class*='title']")
+      );
+
+      const cleanedBlocks = [];
+      const seenText = new Set();
+
+      for (const el of textElements) {
+        // Skip elemen dalam nav/header/footer/script/style/sidebar
+        if (el.closest("nav, header, footer, aside, [role='navigation'], [role='banner'], [role='contentinfo'], #pesat-markers-overlay, #pesat-markers-legend")) {
+          continue;
+        }
+
+        const str = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+        if (str.length >= 8 && !seenText.has(str)) {
+          seenText.add(str);
+          cleanedBlocks.push(str);
+        }
+      }
+
+      let resultText = cleanedBlocks.join("\n\n");
+
+      // 3. Fallback jika querySelector semantik gagal: gunakan clone & sanitize body
+      if (!resultText || resultText.length < 50) {
+        const clone = target.cloneNode(true);
+        const unwanted = clone.querySelectorAll(
+          'nav, header, footer, aside, script, style, button, [role="navigation"], [role="banner"], [role="contentinfo"], noscript, svg, iframe, #pesat-markers-overlay, #pesat-markers-legend, [aria-hidden="true"]'
+        );
+        unwanted.forEach((el) => el.remove());
+        resultText = (clone.innerText || clone.textContent || "")
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0)
+          .join("\n");
+      }
+
+      // 4. Batasi teks maksimal ~6.000 karakter agar tidak melebihi kuota token
+      return resultText.substring(0, 6000).trim();
+    } catch (err) {
+      console.warn("[Pesat] Gagal mengambil readable content:", err);
       return "";
     }
+  }
+
+  // Ekstraksi teks konten halaman untuk snapshot AXTree
+  function extractReadablePageText() {
+    return getReadableContent().substring(0, 4500);
   }
 
   // ─────────────────────────────────────────────────────
@@ -536,12 +596,33 @@
       return { success: true, message: `Menunggu ${waitMs}ms` };
     }
 
-    // Cari elemen berdasarkan ID angka atau ref @eN
+    // 1. Cari elemen langsung via ID aktif
     let targetEl = activeElementsMap.get(Number(cleanId)) || document.querySelector(`[data-pesat-id="${cleanId}"]`);
 
+    // 2. Auto-Waiting: Jika elemen belum muncul (misal sedang loading render SPA), tunggu hingga 3 detik
+    if (!targetEl) {
+      const waitStart = Date.now();
+      while (Date.now() - waitStart < 3000) {
+        await new Promise((r) => setTimeout(r, 150));
+        targetEl = activeElementsMap.get(Number(cleanId)) || document.querySelector(`[data-pesat-id="${cleanId}"]`);
+        if (targetEl && isElementVisible(targetEl)) break;
+      }
+    }
+
+    // 3. Fallback Selector: Cari via selector jika diberikan
+    if (!targetEl && actionData.selector) {
+      try {
+        const foundBySelector = document.querySelector(actionData.selector);
+        if (foundBySelector && isElementVisible(foundBySelector)) {
+          targetEl = foundBySelector;
+        }
+      } catch (e) {}
+    }
+
+    // 4. Fallback Fuzzy Text / Aria-label: Cari via kecocokan teks
     let usedFuzzy = false;
     if (!targetEl) {
-      const hint = value || String(cleanId);
+      const hint = actionData.fallbackText || value || String(cleanId);
       targetEl = findElementByFuzzy(hint, action);
       if (targetEl) {
         usedFuzzy = true;
@@ -551,7 +632,7 @@
     if (!targetEl) {
       return {
         success: false,
-        error: `Elemen [@e${cleanId || "?"}] tidak ditemukan di layar.`,
+        error: `Elemen [@e${cleanId || "?"}] tidak ditemukan di layar setelah menunggu.`,
         suggestion: "scroll"
       };
     }
@@ -605,21 +686,69 @@
         return { success: true, message: `Mengisi "${displayVal}" pada [@e${cleanId}] berhasil${fuzzyNote}.` };
       }
 
-      if (action === "select") {
+      if (action === "select" || action === "select_option") {
         targetEl.focus();
         if (targetEl instanceof HTMLSelectElement) {
           let optionFound = false;
+          const targetVal = String(value || "").toLowerCase().trim();
           for (let i = 0; i < targetEl.options.length; i++) {
             const opt = targetEl.options[i];
-            if (opt.value === value || opt.text.trim().toLowerCase() === String(value).toLowerCase()) {
+            const optVal = (opt.value || "").toLowerCase().trim();
+            const optTxt = (opt.text || "").toLowerCase().trim();
+            if (optVal === targetVal || optTxt === targetVal || optTxt.includes(targetVal) || (targetVal.length > 2 && optVal.includes(targetVal))) {
               targetEl.selectedIndex = i;
               optionFound = true;
               break;
             }
           }
+          targetEl.dispatchEvent(new Event("input", { bubbles: true }));
           targetEl.dispatchEvent(new Event("change", { bubbles: true }));
-          return { success: optionFound, message: `Select dropdown [@e${cleanId}] ke "${value}".` };
+          return {
+            success: optionFound,
+            message: optionFound
+              ? `Select dropdown [@e${cleanId}] ke "${targetEl.options[targetEl.selectedIndex].text}".`
+              : `Pilihan "${value}" tidak ditemukan pada dropdown [@e${cleanId}].`
+          };
         }
+      }
+
+      if (action === "press_key" || action === "press_keyboard" || action === "key_press") {
+        targetEl.focus();
+        const keyName = actionData.key || value || "Enter";
+        const isEnter = keyName.toLowerCase() === "enter";
+        const keyCodeVal = isEnter ? 13 : (keyName.toLowerCase() === "tab" ? 9 : (keyName.toLowerCase() === "escape" ? 27 : 0));
+
+        const keyEventInit = {
+          key: keyName,
+          code: isEnter ? "Enter" : keyName,
+          keyCode: keyCodeVal,
+          which: keyCodeVal,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window
+        };
+
+        targetEl.dispatchEvent(new KeyboardEvent("keydown", keyEventInit));
+        targetEl.dispatchEvent(new KeyboardEvent("keypress", keyEventInit));
+        targetEl.dispatchEvent(new KeyboardEvent("keyup", keyEventInit));
+
+        if (isEnter) {
+          if (targetEl.form) {
+            try {
+              if (typeof targetEl.form.requestSubmit === "function") {
+                targetEl.form.requestSubmit();
+              } else {
+                targetEl.form.submit();
+              }
+            } catch (e) {
+              targetEl.form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+            }
+          }
+        }
+
+        setTimeout(() => { targetEl.style.outline = oldOutline; }, 1000);
+        return { success: true, message: `Menekan tombol '${keyName}' pada [@e${cleanId}] berhasil${fuzzyNote}.` };
       }
 
       return { success: false, error: `Aksi "${action}" tidak didukung.` };
@@ -663,6 +792,17 @@
   // MESSAGE LISTENER
   // ─────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.type === "GET_READABLE_TEXT") {
+      const text = getReadableContent();
+      sendResponse({
+        success: true,
+        title: document.title || "",
+        url: window.location.href || "",
+        text: text
+      });
+      return true;
+    }
+
     if (request.type === "SCAN_DOM") {
       const data = scanInteractiveDOM(request.showOverlay !== false);
       sendResponse({ success: true, data });

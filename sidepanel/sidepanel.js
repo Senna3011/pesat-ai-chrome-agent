@@ -188,6 +188,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function saveSessions() {
+    // Session Pruning: Batasi maksimum 30 sesi terbaru agar storage tidak overflow
+    if (sessions.length > 30) {
+      sessions = sessions.slice(0, 30);
+    }
     await chrome.storage.local.set({
       agent_sessions: sessions,
       current_session_id: currentSessionId
@@ -352,6 +356,28 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (isUser) {
       contentHtml = `<div class="message-bubble">${escapeHtml(msg.content)}</div>`;
+    } else if (msg.askUser) {
+      // Render Human-in-the-Loop Clarification Question & Interactive Option Chips
+      const { question, options } = msg.askUser;
+      let askHtml = `
+        <div class="message-bubble">
+          <div class="ask-user-container">
+            <div class="ask-user-question">🤔 ${escapeHtml(question || msg.content)}</div>
+      `;
+
+      if (Array.isArray(options) && options.length > 0) {
+        askHtml += `<div class="ask-user-options">`;
+        options.forEach((opt) => {
+          askHtml += `<button class="ask-user-option-btn" data-answer="${escapeHtml(opt)}">⚡ ${escapeHtml(opt)}</button>`;
+        });
+        askHtml += `</div>`;
+      }
+
+      askHtml += `
+          </div>
+        </div>
+      `;
+      contentHtml = askHtml;
     } else if (msg.multiAgent) {
       // Render Multi-Agent Pipeline Cards (Planner, Navigator, Validator)
       const { planner, navigator, validator, finalAnswer } = msg.multiAgent;
@@ -416,7 +442,21 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (isUser) {
       const btnEdit = msgDiv.querySelector(".btn-edit-prompt");
-      btnEdit.addEventListener("click", () => editPromptAt(index));
+      if (btnEdit) {
+        btnEdit.addEventListener("click", () => editPromptAt(index));
+      }
+    } else if (msg.askUser) {
+      // Attach click listener ke tombol opsi Human-in-the-Loop
+      const optionBtns = msgDiv.querySelectorAll(".ask-user-option-btn");
+      optionBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const selectedAnswer = btn.getAttribute("data-answer");
+          if (selectedAnswer && !isAgentRunning) {
+            promptInput.value = selectedAnswer;
+            handleSend();
+          }
+        });
+      });
     }
 
     chatArea.appendChild(msgDiv);
@@ -435,11 +475,37 @@ document.addEventListener("DOMContentLoaded", async () => {
     appendLog(`Prompt ke-${index + 1} dimuat kembali untuk diedit.`);
   }
 
-  function addMessageToCurrentSession(role, content, multiAgent = null) {
+  function cleanAssistantReply(text) {
+    if (!text || typeof text !== "string") return text || "";
+    const trimmed = text.trim();
+    // Jika formatnya JSON mentah {"action": "finish", "message": "..."}
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed.message) return parsed.message;
+        if (parsed.answer) return parsed.answer;
+        if (parsed.final_answer) return parsed.final_answer;
+      } catch (e) {}
+    }
+    // Jika di dalam code block ```json ... ```
+    const jsonBlock = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+    if (jsonBlock) {
+      try {
+        const parsed = JSON.parse(jsonBlock[1]);
+        if (parsed.message) return parsed.message;
+        if (parsed.answer) return parsed.answer;
+        if (parsed.final_answer) return parsed.final_answer;
+      } catch (e) {}
+    }
+    return text;
+  }
+
+  function addMessageToCurrentSession(role, content, multiAgent = null, askUser = null) {
     const session = getCurrentSession();
     if (!session) return;
 
-    const msgObj = { role, content, timestamp: Date.now(), multiAgent };
+    const cleanContent = role === "assistant" ? cleanAssistantReply(content) : content;
+    const msgObj = { role, content: cleanContent, timestamp: Date.now(), multiAgent, askUser };
     session.messages.push(msgObj);
 
     if (session.messages.length === 1 && role === "user") {
@@ -533,12 +599,99 @@ document.addEventListener("DOMContentLoaded", async () => {
     promptInput.style.height = "80px";
     shouldStopAgent = false;
 
+    // Reset Anti-Loop Tracker di background worker setiap kali user mengirim perintah baru
+    chrome.runtime.sendMessage({ action: "RESET_LOOP_TRACKER" }, () => {
+      if (chrome.runtime.lastError) {}
+    });
+
     addMessageToCurrentSession("user", userPrompt);
     setAgentRunning(true, "Memulai Agentic Loop...");
     showStatusIndicator("Memulai siklus otomatisasi...");
     appendLog(`User prompt: "${userPrompt}"`);
 
     const targetUrl = stored.apiUrl || "https://pesat-ai-chrome-agent.senna-947.workers.dev/";
+
+    // Deteksi jika prompt adalah instruksi perangkuman halaman (Bypass AXTree DOM & kirim Readable Text murni)
+    const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
+
+    if (isSummarize) {
+      try {
+        setAgentRunning(true, "Merangkum artikel...");
+        showStatusIndicator("Mengekstrak teks utama artikel...");
+        appendLog("Mengambil konten teks utama (Readable Content) tanpa elemen UI/navigasi...");
+
+        const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
+        let cleanText = textRes?.text || "";
+        let pageTitle = textRes?.title || "Halaman Web";
+        let pageUrl = textRes?.url || "";
+
+        // Fallback jika GET_READABLE_TEXT belum siap: coba scan DOM dan ambil pageContent
+        if (!cleanText || cleanText.length < 20) {
+          const scanFallback = await sendToContentScript({ type: "SCAN_DOM", showOverlay: false });
+          cleanText = scanFallback?.data?.pageContent || "";
+          pageTitle = scanFallback?.data?.title || pageTitle;
+          pageUrl = scanFallback?.data?.url || pageUrl;
+        }
+
+        if (!cleanText || cleanText.length < 20) {
+          addMessageToCurrentSession("assistant", "⚠️ Tidak ditemukan artikel atau teks utama yang memadai untuk dirangkum pada halaman ini. Pastikan halaman sudah termuat sempurna.");
+          return;
+        }
+
+        const promptPayload = `[TEKS UTAMA ARTIKEL / HALAMAN WEB]
+Judul: ${pageTitle}
+URL: ${pageUrl}
+
+${cleanText}
+
+[INSTRUKSI PERANGKUMAN]
+${userPrompt}`;
+
+        showStatusIndicator("AI sedang menyusun ringkasan poin penting...");
+        appendLog("Mengirimkan teks artikel ke AI Engine...");
+
+        activeAbortController = new AbortController();
+        const res = await fetch(targetUrl, {
+          method: "POST",
+          signal: activeAbortController.signal,
+          headers: {
+            "Content-Type": "application/json",
+            ...(stored.apiKey ? { Authorization: `Bearer ${stored.apiKey}` } : {})
+          },
+          body: JSON.stringify({
+            prompt: promptPayload,
+            userQuery: userPrompt,
+            isSummarize: true
+          })
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errText}`);
+        }
+
+        const data = await res.json();
+        if (data.success === false && data.error) {
+          throw new Error(data.error);
+        }
+
+        const aiReply = data.reply || "Gagal menghasilkan rangkuman.";
+        addMessageToCurrentSession("assistant", aiReply);
+        appendLog("✅ Rangkuman berhasil dibuat.");
+        return;
+      } catch (err) {
+        if (err.name === "AbortError" || shouldStopAgent) {
+          appendLog("🛑 Perangkuman dibatalkan.");
+        } else {
+          appendLog(`Error perangkuman: ${err.message}`);
+          addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat merangkum: ${err.message}`);
+        }
+        return;
+      } finally {
+        setAgentRunning(false);
+        hideStatusIndicator();
+      }
+    }
 
     const MAX_STEPS = 8;
     let stepCount = 0;
@@ -559,7 +712,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         let pageContext = "";
         if (scanRes && scanRes.success && scanRes.data) {
           const d = scanRes.data;
-          pageContext = `
+          if (stepCount === 1) {
+            pageContext = `
 [INFORMASI WEB AKTIF]
 Judul: ${d.title}
 URL: ${d.url}
@@ -570,7 +724,17 @@ ${d.pageContent || "(Tidak ada konten teks utama)"}
 
 [DAFTAR ELEMEN SEMANTIK AKSI TERTANDA [@eN]]
 ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
-          `.trim();
+            `.trim();
+          } else {
+            // Adaptive Token Diffing: Pada step 2+, skip full page text, fokus ke reduced semantic DOM
+            pageContext = `
+[INFORMASI WEB AKTIF (Step ${stepCount})]
+Judul: ${d.title} | URL: ${d.url} | Elemen: ${d.elementsCount}
+
+[DAFTAR ELEMEN SEMANTIK TERKINI [@eN]]
+${d.reducedDOM || "(Tidak ada elemen interaktif)"}
+            `.trim();
+          }
           appendLog(`DOM terpindai: ${d.elementsCount} elemen.`);
         }
 
@@ -604,6 +768,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           },
           body: JSON.stringify({
             prompt: promptPayload,
+            userQuery: userPrompt,
             messages: history
           })
         });
@@ -667,24 +832,157 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     }
   }
 
+  // Natural Language Action Recovery Parser (Fallback jika LLM menjawab teks instruktif bukan JSON)
+  function tryParseNaturalLanguageActions(text, userPrompt = "") {
+    if (!text && !userPrompt) return null;
+    const combined = `${text}\n${userPrompt}`;
+
+    // 1. Deteksi Perintah Navigasi & Search
+    const navRegex = /(?:buka|kunjungi|pergi ke|navigate to|open|go to)\s+(?:website|halaman|situs)?\s*[`"']?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s`"']*)?|https?:\/\/[^\s`"']+|cnn|youtube|google|wikipedia|github|twitter|facebook|instagram)[`"']?/i;
+    const searchRegex = /(?:cari|search|googling|temukan)\s+(?:di google|di internet)?\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i;
+
+    const navMatch = combined.match(navRegex);
+    if (navMatch) {
+      let dest = navMatch[1].trim();
+      if (!dest.includes(".") && !dest.startsWith("http")) {
+        dest = dest + ".com";
+      }
+      if (!/^https?:\/\//i.test(dest)) dest = "https://" + dest;
+
+      return {
+        planner: { steps: [`1. Membuka alamat website ${dest}`, "2. Menunggu halaman termuat sempurna"] },
+        action: "navigate",
+        value: dest,
+        url: dest,
+        message: `Membuka website ${dest}...`
+      };
+    }
+
+    const searchMatch = combined.match(searchRegex);
+    if (searchMatch) {
+      const query = searchMatch[1].trim();
+      const dest = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      return {
+        planner: { steps: [`1. Mencari "${query}" di Google`, "2. Menunggu hasil pencarian"] },
+        action: "navigate",
+        value: dest,
+        url: dest,
+        message: `Mencari "${query}" di Google...`
+      };
+    }
+
+    const lines = text.split('\n');
+    const actions = [];
+
+    // e.g.: Ketik `admin@jetdigitalpro.com` pada [@e1].
+    // e.g.: Ketik jdp123 pada [@e2].
+    // e.g.: Klik tombol Sign In [@e3].
+    const typeRegex = /(?:ketik|isi|tulis|masukkan|type|fill)\s+[`"']?([^`"'\n]+?)[`"']?\s+(?:pada|di|ke|into|in)\s+\[?(@e\d+|#\d+|\d+)\]?/i;
+    const clickRegex = /(?:klik|tekan|pilih|click|press)\s+(?:tombol|button|link|menu)?\s*[`"']?([^`"'\n]+?)?[`"']?\s*(?:pada|di|ke)?\s*\[?(@e\d+|#\d+|\d+)\]?/i;
+
+    for (const line of lines) {
+      const tMatch = line.match(typeRegex);
+      if (tMatch) {
+        const rawId = tMatch[2];
+        const normId = rawId.startsWith("@e") ? rawId : `@e${rawId.replace(/[^0-9]/g, '')}`;
+        actions.push({
+          action: "type",
+          value: tMatch[1].trim(),
+          elementId: normId
+        });
+        continue;
+      }
+      const cMatch = line.match(clickRegex);
+      if (cMatch) {
+        const rawId = cMatch[2];
+        const normId = rawId.startsWith("@e") ? rawId : `@e${rawId.replace(/[^0-9]/g, '')}`;
+        actions.push({
+          action: "click",
+          elementId: normId,
+          message: cMatch[1] ? `Klik ${cMatch[1].trim()}` : undefined
+        });
+      }
+    }
+
+    if (actions.length > 0) {
+      return {
+        planner: { steps: actions.map((a, i) => `${i + 1}. ${a.action === 'type' ? `Isi "${a.value}"` : 'Klik'} pada [${a.elementId}]`) },
+        actions: actions,
+        message: `Mengeksekusi ${actions.length} aksi otomatis yang teridentifikasi.`
+      };
+    }
+    return null;
+  }
+
   // Menjalankan satu langkah Multi-Agent response
   async function executeStepResponse(rawReply, stepNum, userPrompt = "") {
+    let resObj = null;
     const jsonMatch = rawReply.match(/```json\s*([\s\S]*?)\s*```/) || rawReply.match(/\{[\s\S]*"action"[\s\S]*\}/) || rawReply.match(/\{[\s\S]*"actions"[\s\S]*\}/) || rawReply.match(/\{[\s\S]*"planner"[\s\S]*\}/);
 
     if (jsonMatch) {
       try {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
-        const resObj = JSON.parse(jsonStr);
+        resObj = JSON.parse(jsonStr);
+      } catch (e) {
+        console.error("[Pesat] JSON parse error:", e);
+      }
+    }
 
+    // Jika JSON tidak ditemukan atau aksi tidak terdefinisi, coba pulihkan dari teks instruksi alami
+    if (!resObj || (!resObj.action && !resObj.actions && !resObj.message)) {
+      resObj = tryParseNaturalLanguageActions(rawReply, userPrompt);
+    }
+
+    if (resObj) {
+      try {
         const isBatch = Array.isArray(resObj.actions) && resObj.actions.length > 0;
-        const actionType = isBatch ? "batch" : (resObj.action || resObj.navigator?.action);
+        let actionType = isBatch ? "batch" : (resObj.action || resObj.navigator?.action);
         const targetId = resObj.elementId || resObj.navigator?.elementId || (isBatch ? resObj.actions.map(a => a.elementId || a.target).join(", ") : "");
-        const actionValue = resObj.value || resObj.navigator?.value;
+        let actionValue = resObj.value || resObj.url || resObj.target || resObj.navigator?.value || resObj.navigator?.url;
 
-        // Jika AI memutuskan tugas selesai
-        if (actionType === "finish" || (!actionType && !isBatch && resObj.message)) {
+        // Human-in-the-Loop: Handler jika AI memanggil tool 'ask_user'
+        if (actionType === "ask_user" || resObj.question) {
+          const askQuestion = resObj.question || resObj.message || "Terdapat beberapa kemungkinan tindakan. Silakan pilih salah satu:";
+          const askOptions = Array.isArray(resObj.options) && resObj.options.length > 0
+            ? resObj.options
+            : ["Buka Website", "Cari di Halaman Ini", "Rangkum Informasi"];
+
+          addMessageToCurrentSession("assistant", askQuestion, null, {
+            question: askQuestion,
+            options: askOptions
+          });
+          appendLog(`🤔 AI meminta klarifikasi pengguna: "${askQuestion}"`);
+          return { isFinished: true, hasAction: false };
+        }
+
+        // Normalisasi nama aksi navigasi
+        if (actionType === "navigate_to") {
+          actionType = "navigate";
+        }
+
+        // Normalisasi aksi search menjadi navigate Google
+        if (actionType === "search" || actionType === "google") {
+          actionType = "navigate";
+          actionValue = `https://www.google.com/search?q=${encodeURIComponent(actionValue || userPrompt)}`;
+        }
+
+        // Recovery jika actionType navigate tapi actionValue kosong / undefined
+        if (actionType === "navigate" && (!actionValue || typeof actionValue !== "string" || !actionValue.trim() || actionValue === "undefined")) {
+          const navInText = (resObj.message || userPrompt || "").match(/(?:https?:\/\/[^\s`"']+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s`"']*)?|cnn|youtube|google|wikipedia|github)/i);
+          if (navInText) {
+            let dest = navInText[0].trim();
+            if (!dest.includes(".") && !dest.startsWith("http")) dest = dest + ".com";
+            actionValue = /^https?:\/\//i.test(dest) ? dest : `https://${dest}`;
+          } else {
+            actionValue = `https://www.google.com/search?q=${encodeURIComponent(userPrompt)}`;
+          }
+        }
+
+        // Jika AI memanggil finish_task atau finish
+        if (actionType === "finish_task" || actionType === "finish" || (!actionType && !isBatch && resObj.message)) {
           const finalMsg = resObj.message || resObj.answer || "Tugas telah selesai dikerjakan!";
           addMessageToCurrentSession("assistant", finalMsg);
+          appendLog(`✅ AI memanggil finish_task: ${finalMsg}`);
           return { isFinished: true, hasAction: false };
         }
 
@@ -693,14 +991,14 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           navigator: {
             action: isBatch ? `Batch (${resObj.actions.length} aksi)` : actionType,
             elementId: targetId,
-            description: resObj.message || (isBatch ? `Mengeksekusi ${resObj.actions.length} langkah berurutan` : `Mengeksekusi ${actionType} pada elemen [${targetId || ''}]`),
+            description: resObj.message || (isBatch ? `Mengeksekusi ${resObj.actions.length} langkah berurutan` : `Mengeksekusi ${actionType} ${actionType === 'navigate' ? actionValue : `pada [${targetId || ''}]`}`),
             status: "Sedang berjalan..."
           },
           validator: null,
           finalAnswer: resObj.answer || ""
         };
 
-        const statusLabel = isBatch ? `Mengeksekusi: Batch (${resObj.actions.length} aksi)...` : `Mengeksekusi: ${actionType} [${targetId || '—'}]...`;
+        const statusLabel = isBatch ? `Mengeksekusi: Batch (${resObj.actions.length} aksi)...` : `Mengeksekusi: ${actionType} ${actionType === 'navigate' ? actionValue : `[${targetId || '—'}]`}...`;
         showStatusIndicator(statusLabel);
         setAgentRunning(true, `Aksi: ${isBatch ? `Batch (${resObj.actions.length})` : `${actionType} [${targetId || '—'}]`}`);
         appendLog(`▶ Menjalankan [Step ${stepNum}]: ${isBatch ? `Batch (${resObj.actions.length} aksi)` : `${actionType} ${actionType === 'navigate' ? actionValue : `[${targetId || '—'}]`}`}`);
@@ -714,7 +1012,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
                 if (chrome.runtime.lastError) {
                   resolve({ success: false, error: chrome.runtime.lastError.message });
                 } else {
-                  resolve(response || { success: true });
+                  resolve(response || { success: true, url: actionValue });
                 }
               }
             );
@@ -768,18 +1066,31 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           multiAgentData.navigator.status = `Selesai (${elapsed})`;
           multiAgentData.validator = {
             success: true,
-            message: execResult.message || `Aksi ${actionType} berhasil.`
+            message: execResult.message || `Aksi ${actionType} ${actionType === 'navigate' ? `ke ${actionValue}` : `pada [${targetId || '—'}]`} berhasil.`
           };
 
           addMessageToCurrentSession("assistant", "", multiAgentData);
 
           // Cek apakah perintah hanya membuka website
-          const isOnlyNavigate = actionType === "navigate" && /^(buka|open|go to|pergi ke|kunjungi)\s+[a-zA-Z0-9.-]+/i.test(userPrompt.trim());
+          const isOnlyNavigate = actionType === "navigate" && /^(buka|open|go to|pergi ke|kunjungi|cari|search)\s+[a-zA-Z0-9.-]+/i.test(userPrompt.trim());
 
           if (isOnlyNavigate) {
             appendLog(`✅ Navigasi ke ${actionValue} selesai. Tugas utama tuntas.`);
             return {
-              isFinished: true, // Berhenti langsung, tidak looping
+              isFinished: true,
+              hasAction: true,
+              actionSuccess: true,
+              actionType,
+              targetId
+            };
+          }
+
+          // Cek apakah perintah pengetikan pencarian dengan pressEnter sudah tuntas
+          const isSearchTypeSubmitted = (actionType === "type" || actionType === "type_text") && resObj.pressEnter;
+          if (isSearchTypeSubmitted) {
+            appendLog(`✅ Pengetikan dan pengiriman formulir pencarian selesai.`);
+            return {
+              isFinished: true,
               hasAction: true,
               actionSuccess: true,
               actionType,
@@ -795,8 +1106,25 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
             targetId
           };
         } else {
-          // Aksi gagal
+          // Aksi gagal atau Circuit Breaker Loop Terdeteksi
           multiAgentData.navigator.status = "Gagal";
+
+          if (execResult?.isLoopDetected) {
+            multiAgentData.validator = {
+              success: false,
+              message: `🛑 ${execResult.error}`
+            };
+            appendLog(`🛑 Circuit Breaker: ${execResult.error}`);
+            addMessageToCurrentSession("assistant", "", multiAgentData);
+            return {
+              isFinished: true,
+              hasAction: false,
+              actionSuccess: false,
+              actionType,
+              targetId
+            };
+          }
+
           const suggestion = execResult?.suggestion === "scroll"
             ? "💡 Coba gulir halaman ke bawah terlebih dahulu."
             : "💡 Coba muat ulang halaman, lalu ulangi perintah.";
@@ -819,7 +1147,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         }
 
       } catch (e) {
-        console.error("[Pesat] JSON parse error:", e);
+        console.error("[Pesat] Step execution error:", e);
       }
     }
 
@@ -905,16 +1233,31 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     appendLog("🛑 Otomatisasi dihentikan oleh pengguna.");
   });
 
-  function appendLog(logText) {
-    if (logContent.querySelector(".log-empty")) {
-      logContent.innerHTML = "";
+  function appendLog(logText, level = "INFO", details = null, type = "EVENT") {
+    // 1. Kirim telemetri silent ke Cloudflare Pages / Workers
+    if (typeof PesatLogger !== "undefined" && typeof PesatLogger.sendRemoteLog === "function") {
+      PesatLogger.sendRemoteLog({
+        level,
+        source: "SIDEPANEL",
+        type,
+        message: logText,
+        details,
+        sessionId: currentSessionId
+      });
     }
-    const logItem = document.createElement("div");
-    logItem.className = "log-item";
-    const time = new Date().toLocaleTimeString();
-    logItem.textContent = `[${time}] ${logText}`;
-    logContent.appendChild(logItem);
-    logContent.scrollTop = logContent.scrollHeight;
+
+    // 2. Jika elemen logContent ada (opsional), append secara aman
+    if (logContent) {
+      if (logContent.querySelector(".log-empty")) {
+        logContent.innerHTML = "";
+      }
+      const logItem = document.createElement("div");
+      logItem.className = "log-item";
+      const time = new Date().toLocaleTimeString();
+      logItem.textContent = `[${time}] ${logText}`;
+      logContent.appendChild(logItem);
+      logContent.scrollTop = logContent.scrollHeight;
+    }
   }
 
   function escapeHtml(text) {
@@ -954,10 +1297,12 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     settingsPanel.classList.add("hidden");
   });
 
-  logToggle.addEventListener("click", () => {
-    const isHidden = logContent.classList.toggle("hidden");
-    logIcon.textContent = isHidden ? "▼" : "▲";
-  });
+  if (logToggle && logContent) {
+    logToggle.addEventListener("click", () => {
+      const isHidden = logContent.classList.toggle("hidden");
+      if (logIcon) logIcon.textContent = isHidden ? "▼" : "▲";
+    });
+  }
 
   const btnExportHistory = document.getElementById("btnExportHistory");
   if (btnExportHistory) {

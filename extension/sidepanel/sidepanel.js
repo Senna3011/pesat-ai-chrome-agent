@@ -1233,16 +1233,31 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     appendLog("🛑 Otomatisasi dihentikan oleh pengguna.");
   });
 
-  function appendLog(logText) {
-    if (logContent.querySelector(".log-empty")) {
-      logContent.innerHTML = "";
+  function appendLog(logText, level = "INFO", details = null, type = "EVENT") {
+    // 1. Kirim telemetri silent ke Cloudflare Pages / Workers
+    if (typeof PesatLogger !== "undefined" && typeof PesatLogger.sendRemoteLog === "function") {
+      PesatLogger.sendRemoteLog({
+        level,
+        source: "SIDEPANEL",
+        type,
+        message: logText,
+        details,
+        sessionId: currentSessionId
+      });
     }
-    const logItem = document.createElement("div");
-    logItem.className = "log-item";
-    const time = new Date().toLocaleTimeString();
-    logItem.textContent = `[${time}] ${logText}`;
-    logContent.appendChild(logItem);
-    logContent.scrollTop = logContent.scrollHeight;
+
+    // 2. Jika elemen logContent ada (opsional), append secara aman
+    if (logContent) {
+      if (logContent.querySelector(".log-empty")) {
+        logContent.innerHTML = "";
+      }
+      const logItem = document.createElement("div");
+      logItem.className = "log-item";
+      const time = new Date().toLocaleTimeString();
+      logItem.textContent = `[${time}] ${logText}`;
+      logContent.appendChild(logItem);
+      logContent.scrollTop = logContent.scrollHeight;
+    }
   }
 
   function escapeHtml(text) {
@@ -1282,10 +1297,12 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     settingsPanel.classList.add("hidden");
   });
 
-  logToggle.addEventListener("click", () => {
-    const isHidden = logContent.classList.toggle("hidden");
-    logIcon.textContent = isHidden ? "▼" : "▲";
-  });
+  if (logToggle && logContent) {
+    logToggle.addEventListener("click", () => {
+      const isHidden = logContent.classList.toggle("hidden");
+      if (logIcon) logIcon.textContent = isHidden ? "▼" : "▲";
+    });
+  }
 
   const btnExportHistory = document.getElementById("btnExportHistory");
   if (btnExportHistory) {

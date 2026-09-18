@@ -81,7 +81,7 @@
       </div>
       <div class="form-group">
         <label for="apiUrlInput">Cloudflare Worker / Endpoint URL:</label>
-        <input type="text" id="apiUrlInput" placeholder="https://pesat-ai-chrome-agent.senna-947.workers.dev/" />
+        <input type="text" id="apiUrlInput" placeholder="https://worker-anda.subdomain.workers.dev" />
       </div>
       <div class="form-group">
         <label for="apiKeyInput">Custom API Key (Opsional - Kuota Unlimited):</label>
@@ -152,17 +152,6 @@
       <button class="btn-stop" id="btnStopAgent">⏹️ Hentikan</button>
     </div>
 
-    <!-- Activity Log Accordion -->
-    <div class="agent-log-container" id="logContainer">
-      <div class="log-header" id="logToggle">
-        <span class="log-title-text">📋 Aktivitas & Detail Langkah</span>
-        <span id="logIcon">▼</span>
-      </div>
-      <div class="log-content hidden" id="logContent">
-        <div class="log-empty">Belum ada aktivitas tercatat.</div>
-      </div>
-    </div>
-
     <!-- Input Footer -->
     <footer class="footer">
       <div class="input-wrapper">
@@ -177,6 +166,7 @@
     </footer>
   </div>
 
+  <script src="../logger.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

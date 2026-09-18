@@ -1,5 +1,31 @@
 // functions/api/chat.js - Cloudflare Pages Function (Strict AXTree Action Engine)
 
+const MAX_LOGS = 500;
+globalThis.__PESAT_LOGS__ = globalThis.__PESAT_LOGS__ || [];
+
+function pushPesatLog(entry) {
+  if (!entry) return;
+  const now = Date.now();
+  const item = {
+    id: entry.id || `log_${now}_${Math.random().toString(36).substr(2, 6)}`,
+    timestamp: entry.timestamp || now,
+    timeStr: new Date(entry.timestamp || now).toISOString(),
+    level: (entry.level || "INFO").toUpperCase(),
+    source: entry.source || "CF_PAGES",
+    type: entry.type || "GENERIC",
+    message: String(entry.message || ""),
+    details: entry.details || null,
+    tabId: entry.tabId || null,
+    sessionId: entry.sessionId || null,
+    url: entry.url || null
+  };
+  globalThis.__PESAT_LOGS__.push(item);
+  if (globalThis.__PESAT_LOGS__.length > MAX_LOGS) {
+    globalThis.__PESAT_LOGS__ = globalThis.__PESAT_LOGS__.slice(-MAX_LOGS);
+  }
+  return item;
+}
+
 function getCorsSecurityHeaders(request, env) {
   const origin = request.headers.get("Origin") || "";
   const allowedExtId = env?.ALLOWED_EXTENSION_ID || "";
@@ -344,6 +370,13 @@ PANDUAN ANTI-LOOPING & GUARDRAILS:
 
     if (!aiResponse.ok) {
       const errMsg = data?.error?.message || data?.message || rawText || `HTTP ${aiResponse.status}`;
+      pushPesatLog({
+        level: "ERROR",
+        source: "CF_PAGES",
+        type: "AI_ERROR",
+        message: `AI Router Error (${aiResponse.status}): ${errMsg}`,
+        details: { status: aiResponse.status, error: errMsg }
+      });
       return new Response(
         JSON.stringify({ success: false, error: `AI Router Error (${aiResponse.status}): ${errMsg}` }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -351,6 +384,13 @@ PANDUAN ANTI-LOOPING & GUARDRAILS:
     }
 
     const reply = data?.choices?.[0]?.message?.content || data?.reply || rawText;
+    pushPesatLog({
+      level: "AI",
+      source: "CF_PAGES",
+      type: "AI_RESPONSE",
+      message: `Respon AI diterima (${reply.length} chars)`,
+      details: { reply, model: AI_MODEL_NAME }
+    });
 
     return new Response(
       JSON.stringify({ success: true, reply }),

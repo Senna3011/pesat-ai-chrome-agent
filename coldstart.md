@@ -95,3 +95,12 @@
 	  - *Current-URL awareness*: Mencegah AI mengeksekusi navigasi ulang jika URL sudah terbuka di tab aktif.
 	- [x] **Pengujian & Verifikasi Pengguna**: Uji coba instalasi dan automasi browser di lingkungan eksternal berhasil berjalan lancar dan aman.
 
+	### 🗓️ Day 3 (Phase 5: High-Accuracy AXTree, Anti-Loop Guardrails, & Human-in-the-Loop)
+	- [x] **Akurasi Form React/Vue/SPA**: Menggunakan `Object.getOwnPropertyDescriptor` prototype setter agar nilai form terisi sempurna tanpa memicu validasi kosong.
+	- [x] **Mekanisme Human-in-the-Loop (`ask_user`)**: Jika instruksi pengguna ambigu (contoh: mengetik satu kata nama brand), AI berhenti menebak dan menyajikan tombol opsi klarifikasi interaktif.
+	- [x] **Anti-Loop Circuit Breaker**: Mendeteksi jika aksi identik terpanggil 2–3x berturut-turut di background worker dan memutus siklus secara aman.
+	- [x] **Dukungan Aksi Keyboard (`press_key`)**: Menambahkan event simulasi penekanan tombol keyboard (Enter/Tab/Escape) dan form submission fallback.
+	- [x] **Penyempurnaan Perangkuman Halaman (Readable Content)**: Ekstraksi teks semantik murni (judul, artikel, paragraf) tanpa gangguan elemen navigasi/footer, dan sanitasi respons JSON agar tampil sebagai Markdown bersih.
+	- [x] **Hardening Keamanan & CORS Lockdown**: Pembatasan akses origin backend hanya untuk Chrome Extension resmi serta sensor otomatis password pada log.
+
+

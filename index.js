@@ -1,5 +1,577 @@
 // index.js - Pesat AI Browser Agent Engine & Modern Cloudflare Landing Dashboard
 
+const MAX_LOGS = 500;
+globalThis.__PESAT_LOGS__ = globalThis.__PESAT_LOGS__ || [];
+
+function pushPesatLog(entry) {
+  if (!entry) return;
+  const now = Date.now();
+  const item = {
+    id: entry.id || `log_${now}_${Math.random().toString(36).substr(2, 6)}`,
+    timestamp: entry.timestamp || now,
+    timeStr: new Date(entry.timestamp || now).toISOString(),
+    level: (entry.level || "INFO").toUpperCase(),
+    source: entry.source || "CF_WORKER",
+    type: entry.type || "GENERIC",
+    message: String(entry.message || ""),
+    details: entry.details || null,
+    tabId: entry.tabId || null,
+    sessionId: entry.sessionId || null,
+    url: entry.url || null
+  };
+  globalThis.__PESAT_LOGS__.push(item);
+  if (globalThis.__PESAT_LOGS__.length > MAX_LOGS) {
+    globalThis.__PESAT_LOGS__ = globalThis.__PESAT_LOGS__.slice(-MAX_LOGS);
+  }
+  return item;
+}
+
+function renderLogsPage(env) {
+  return `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pesat AI Agent — Realtime Activity & Error Logs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(22, 30, 49, 0.75);
+      --card-border: rgba(56, 189, 248, 0.15);
+      --card-hover: rgba(30, 41, 69, 0.85);
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.3);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    body {
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(circle at 10% 15%, rgba(56, 189, 248, 0.07) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(168, 85, 247, 0.07) 0%, transparent 40%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 16px;
+    }
+    .container {
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: 24px;
+    }
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-badge {
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      color: white;
+      font-weight: 800;
+      font-size: 14px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      letter-spacing: 0.5px;
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      background: linear-gradient(to right, #ffffff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--success);
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 20px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--success);
+      box-shadow: 0 0 8px var(--success);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+    .btn:hover {
+      background: rgba(51, 65, 85, 0.9);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+    }
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.3);
+      border-color: var(--danger);
+      color: white;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 16px;
+      backdrop-filter: blur(8px);
+    }
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--text);
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 12px 16px;
+    }
+    .filter-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .filter-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .filter-btn.active {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: rgba(56, 189, 248, 0.4);
+      color: var(--accent);
+    }
+    .search-input {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      min-width: 260px;
+      outline: none;
+    }
+    .search-input:focus {
+      border-color: var(--accent);
+    }
+    .log-stream {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .log-item {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .log-item:hover {
+      background: var(--card-hover);
+      border-color: rgba(56, 189, 248, 0.3);
+    }
+    .log-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .log-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .badge-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .badge-INFO { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+    .badge-AI { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+    .badge-ACTION { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-WARN { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-ERROR { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .source-tag {
+      font-size: 11px;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .log-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #64748b;
+    }
+    .log-message {
+      margin-top: 8px;
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: #e2e8f0;
+      word-break: break-word;
+    }
+    .log-details {
+      margin-top: 12px;
+      background: #060911;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 12px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #38bdf8;
+      display: none;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .log-item.expanded .log-details {
+      display: block;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      background: var(--card-bg);
+      border: 1px dashed var(--card-border);
+      border-radius: 12px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="header-title">
+        <span class="logo-badge">PESAT.AI</span>
+        <h1>Developer Realtime Activity Logs</h1>
+        <div class="status-badge" id="liveBadge">
+          <div class="status-dot"></div>
+          <span id="liveStatusText">LIVE MONITORING (2s)</span>
+        </div>
+      </div>
+      <div class="controls">
+        <a href="/" class="btn">🏠 Home</a>
+        <button class="btn" id="btnToggleAuto">⏸️ Pause</button>
+        <button class="btn" id="btnRefresh">🔄 Refresh</button>
+        <button class="btn" id="btnExport">💾 Export JSON</button>
+        <button class="btn btn-danger" id="btnClear">🗑️ Clear</button>
+      </div>
+    </header>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Log Events</div>
+        <div class="stat-value" id="statTotal">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">AI Processing</div>
+        <div class="stat-value" id="statAI" style="color: #c084fc;">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Actions Executed</div>
+        <div class="stat-value" id="statAction" style="color: #34d399;">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Warnings & Loops</div>
+        <div class="stat-value" id="statWarn" style="color: #fbbf24;">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Errors & Bugs</div>
+        <div class="stat-value" id="statError" style="color: #f87171;">0</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="filter-group" id="filterGroup">
+        <button class="filter-btn active" data-level="ALL">ALL (0)</button>
+        <button class="filter-btn" data-level="AI">AI (0)</button>
+        <button class="filter-btn" data-level="ACTION">ACTIONS (0)</button>
+        <button class="filter-btn" data-level="INFO">INFO (0)</button>
+        <button class="filter-btn" data-level="WARN">WARN (0)</button>
+        <button class="filter-btn" data-level="ERROR">ERROR (0)</button>
+      </div>
+      <input type="text" class="search-input" id="searchInput" placeholder="🔍 Cari pesan, ID elemen, URL, error...">
+    </div>
+
+    <div class="log-stream" id="logStream">
+      <div class="empty-state">
+        <div style="font-size:32px;margin-bottom:12px;">📡</div>
+        <h3>Menunggu aktivitas dari Chrome Extension...</h3>
+        <p style="margin-top: 6px; font-size: 13px;">Kirim perintah ke Agent untuk memantau alur pemrosesan.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let allLogs = [];
+    let activeFilter = "ALL";
+    let searchQuery = "";
+    let isAutoRefreshing = true;
+    let refreshInterval = null;
+    const API_LOGS_URL = window.location.origin + "/api/logs";
+
+    const logStream = document.getElementById("logStream");
+    const searchInput = document.getElementById("searchInput");
+    const filterGroup = document.getElementById("filterGroup");
+    const btnToggleAuto = document.getElementById("btnToggleAuto");
+    const btnRefresh = document.getElementById("btnRefresh");
+    const btnExport = document.getElementById("btnExport");
+    const btnClear = document.getElementById("btnClear");
+    const liveBadge = document.getElementById("liveBadge");
+
+    const statTotal = document.getElementById("statTotal");
+    const statAI = document.getElementById("statAI");
+    const statAction = document.getElementById("statAction");
+    const statWarn = document.getElementById("statWarn");
+    const statError = document.getElementById("statError");
+
+    async function fetchLogs() {
+      try {
+        const res = await fetch(API_LOGS_URL + "?limit=500&t=" + Date.now());
+        if (!res.ok) throw new Error("Status " + res.status);
+        const data = await res.json();
+        if (data && Array.isArray(data.logs)) {
+          allLogs = data.logs;
+          updateStats();
+          renderLogs();
+        }
+      } catch (err) {
+        console.error("Gagal mengambil log:", err);
+      }
+    }
+
+    function updateStats() {
+      const counts = { ALL: allLogs.length, AI: 0, ACTION: 0, INFO: 0, WARN: 0, ERROR: 0 };
+      allLogs.forEach(l => {
+        const lvl = (l.level || "INFO").toUpperCase();
+        if (counts[lvl] !== undefined) counts[lvl]++;
+      });
+      statTotal.textContent = counts.ALL;
+      statAI.textContent = counts.AI;
+      statAction.textContent = counts.ACTION;
+      statWarn.textContent = counts.WARN;
+      statError.textContent = counts.ERROR;
+
+      filterGroup.querySelectorAll(".filter-btn").forEach(btn => {
+        const lvl = btn.getAttribute("data-level");
+        if (lvl) btn.textContent = \`\${lvl} (\${counts[lvl] || 0})\`;
+      });
+    }
+
+    function renderLogs() {
+      let filtered = allLogs.slice().reverse();
+      if (activeFilter !== "ALL") {
+        filtered = filtered.filter(l => (l.level || "INFO").toUpperCase() === activeFilter);
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        filtered = filtered.filter(l => {
+          const matchMsg = (l.message || "").toLowerCase().includes(q);
+          const matchType = (l.type || "").toLowerCase().includes(q);
+          const matchSrc = (l.source || "").toLowerCase().includes(q);
+          const matchDet = l.details ? JSON.stringify(l.details).toLowerCase().includes(q) : false;
+          return matchMsg || matchType || matchSrc || matchDet;
+        });
+      }
+
+      if (filtered.length === 0) {
+        logStream.innerHTML = \`
+          <div class="empty-state">
+            <div style="font-size:32px;margin-bottom:12px;">🔍</div>
+            <h3>Tidak ada log yang sesuai filter</h3>
+          </div>
+        \`;
+        return;
+      }
+
+      logStream.innerHTML = filtered.map(log => {
+        const level = (log.level || "INFO").toUpperCase();
+        const time = log.timestamp ? new Date(log.timestamp).toLocaleTimeString() + '.' + String(new Date(log.timestamp).getMilliseconds()).padStart(3, '0') : '-';
+        const hasDetails = !!log.details;
+        const jsonStr = hasDetails ? escapeHtml(JSON.stringify(log.details, null, 2)) : '';
+        return \`
+          <div class="log-item" onclick="this.classList.toggle('expanded')">
+            <div class="log-header-row">
+              <div class="log-meta">
+                <span class="badge-tag badge-\${level}">\${level}</span>
+                <span class="source-tag">\${escapeHtml(log.source || 'SYS')}</span>
+                <span class="source-tag" style="color:#38bdf8;">\${escapeHtml(log.type || 'EVENT')}</span>
+              </div>
+              <div class="log-time">\${time}</div>
+            </div>
+            <div class="log-message">\${escapeHtml(log.message || '')}</div>
+            \${hasDetails ? \`<div class="log-details">\${jsonStr}</div>\` : ''}
+          </div>
+        \`;
+      }).join('');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    filterGroup.addEventListener("click", e => {
+      const btn = e.target.closest(".filter-btn");
+      if (!btn) return;
+      filterGroup.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      activeFilter = btn.getAttribute("data-level");
+      renderLogs();
+    });
+
+    searchInput.addEventListener("input", e => {
+      searchQuery = e.target.value;
+      renderLogs();
+    });
+
+    btnToggleAuto.addEventListener("click", () => {
+      isAutoRefreshing = !isAutoRefreshing;
+      if (isAutoRefreshing) {
+        btnToggleAuto.textContent = "⏸️ Pause";
+        liveBadge.style.display = "inline-flex";
+        startPolling();
+      } else {
+        btnToggleAuto.textContent = "▶️ Resume";
+        liveBadge.style.display = "none";
+        clearInterval(refreshInterval);
+      }
+    });
+
+    btnRefresh.addEventListener("click", fetchLogs);
+
+    btnExport.addEventListener("click", () => {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(allLogs, null, 2));
+      const a = document.createElement("a");
+      a.setAttribute("href", dataStr);
+      a.setAttribute("download", \`pesat-agent-logs-\${Date.now()}.json\`);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    });
+
+    btnClear.addEventListener("click", async () => {
+      if (confirm("Bersihkan semua log di Cloudflare?")) {
+        try {
+          await fetch(API_LOGS_URL, { method: "DELETE" });
+          allLogs = [];
+          updateStats();
+          renderLogs();
+        } catch (err) {
+          alert("Gagal: " + err.message);
+        }
+      }
+    });
+
+    function startPolling() {
+      clearInterval(refreshInterval);
+      refreshInterval = setInterval(fetchLogs, 2000);
+    }
+
+    fetchLogs();
+    startPolling();
+  </script>
+</body>
+</html>`;
+}
+
 function getCorsSecurityHeaders(request, env) {
   const origin = request.headers.get("Origin") || "";
   const allowedExtId = env?.ALLOWED_EXTENSION_ID || "";
@@ -18,7 +590,7 @@ function getCorsSecurityHeaders(request, env) {
     isAllowed,
     headers: {
       "Access-Control-Allow-Origin": isAllowed ? (origin || "*") : "null",
-      "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
+      "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
       "Access-Control-Max-Age": "86400",
       "X-Content-Type-Options": "nosniff",
@@ -233,14 +805,19 @@ function renderLandingPage(env) {
 </head>
 <body>
   <div class="container">
-    <div class="hero">
-      <div class="badge-status">
-        <span class="pulse-dot"></span>
-        <span>Backend Engine Online (v${version})</span>
-      </div>
-      <h1>Pesat AI Browser Agent</h1>
-      <p>Cloudflare Serverless Proxy & High-Precision Autonomous Web Automation Engine</p>
-    </div>
+	    <div class="hero">
+	      <div class="badge-status">
+	        <span class="pulse-dot"></span>
+	        <span>Backend Engine Online (v${version})</span>
+	      </div>
+	      <h1>Pesat AI Browser Agent</h1>
+	      <p>Cloudflare Serverless Proxy & High-Precision Autonomous Web Automation Engine</p>
+	      <div style="margin-top:16px;">
+	        <a href="/logs" style="display:inline-flex;align-items:center;gap:8px;background:rgba(56,189,248,0.15);border:1px solid rgba(56,189,248,0.4);color:#38bdf8;padding:8px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;transition:all 0.2s;">
+	          📊 Buka Realtime Developer Logs Dashboard →
+	        </a>
+	      </div>
+	    </div>
 
     <div class="grid">
       <div class="card">
@@ -528,45 +1105,135 @@ export default {
       );
     }
 
-    // Handle GET Request
-    if (request.method === "GET") {
-      const url = new URL(request.url);
-      const acceptHeader = request.headers.get("Accept") || "";
+	    const url = new URL(request.url);
 
-      if (acceptHeader.includes("text/html") && url.searchParams.get("format") !== "json") {
-        return new Response(renderLandingPage(env), {
-          status: 200,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-            "X-Content-Type-Options": "nosniff"
-          }
-        });
-      }
+	    // 1. DELETE /api/logs
+	    if (request.method === "DELETE" && url.pathname.startsWith("/api/logs")) {
+	      globalThis.__PESAT_LOGS__ = [];
+	      return new Response(JSON.stringify({ success: true, message: "Log aktivitas berhasil dibersihkan." }), {
+	        status: 200,
+	        headers: { ...corsHeaders, "Content-Type": "application/json" }
+	      });
+	    }
 
-      return new Response(
-        JSON.stringify({
-          status: "online",
-          version: "4.3.0",
-          message: "⚡ Pesat AI Browser Agent v4.3 — Strict AXTree Action Engine Active",
-          model: env?.AI_MODEL_NAME || "pesat-flash"
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+	    // 2. GET Requests
+	    if (request.method === "GET") {
+	      const acceptHeader = request.headers.get("Accept") || "";
 
-    // Handle POST Request (AI Processing dari Extension)
-    if (request.method === "POST") {
-      try {
-        const body = await request.json();
-        const userPrompt = body.prompt || "";
-        const conversationHistory = body.messages || [];
+	      // Route: /logs atau /logs.html -> Realtime Log Dashboard
+	      if (url.pathname === "/logs" || url.pathname === "/logs.html") {
+	        return new Response(renderLogsPage(env), {
+	          status: 200,
+	          headers: {
+	            "Content-Type": "text/html; charset=utf-8",
+	            "X-Content-Type-Options": "nosniff"
+	          }
+	        });
+	      }
 
-        const authHeader = request.headers.get("Authorization") || "";
-        const headerKey = authHeader.replace(/^Bearer\s+/i, "").trim();
-        const AI_API_KEY = headerKey || env?.AI_API_KEY || "";
+	      // Route: /api/logs -> API Data Log JSON
+	      if (url.pathname === "/api/logs") {
+	        const since = parseInt(url.searchParams.get("since") || "0", 10);
+	        const limit = Math.min(parseInt(url.searchParams.get("limit") || "200", 10), MAX_LOGS);
+	        const levelFilter = (url.searchParams.get("level") || "").toUpperCase();
+	        const searchFilter = (url.searchParams.get("q") || "").toLowerCase();
 
-        const AI_BASE_URL = env?.AI_BASE_URL || "https://api.pesatrouter.com/v1/chat/completions";
-        const AI_MODEL_NAME = env?.AI_MODEL_NAME || "pesat-flash";
+	        let logs = globalThis.__PESAT_LOGS__ || [];
+	        if (since > 0) logs = logs.filter(l => l.timestamp > since);
+	        if (levelFilter && levelFilter !== "ALL") logs = logs.filter(l => l.level === levelFilter);
+	        if (searchFilter) {
+	          logs = logs.filter(l => {
+	            const matchMsg = (l.message || "").toLowerCase().includes(searchFilter);
+	            const matchType = (l.type || "").toLowerCase().includes(searchFilter);
+	            const matchSrc = (l.source || "").toLowerCase().includes(searchFilter);
+	            const matchDet = l.details ? JSON.stringify(l.details).toLowerCase().includes(searchFilter) : false;
+	            return matchMsg || matchType || matchSrc || matchDet;
+	          });
+	        }
+
+	        const result = logs.slice(-limit);
+	        return new Response(JSON.stringify({
+	          success: true,
+	          total: (globalThis.__PESAT_LOGS__ || []).length,
+	          returned: result.length,
+	          serverTime: Date.now(),
+	          logs: result
+	        }), {
+	          status: 200,
+	          headers: { ...corsHeaders, "Content-Type": "application/json" }
+	        });
+	      }
+
+	      // Landing Page HTML
+	      if (acceptHeader.includes("text/html") && url.searchParams.get("format") !== "json") {
+	        return new Response(renderLandingPage(env), {
+	          status: 200,
+	          headers: {
+	            "Content-Type": "text/html; charset=utf-8",
+	            "X-Content-Type-Options": "nosniff"
+	          }
+	        });
+	      }
+
+	      return new Response(
+	        JSON.stringify({
+	          status: "online",
+	          version: "4.3.0",
+	          message: "⚡ Pesat AI Browser Agent v4.3 — Strict AXTree Action Engine Active",
+	          model: env?.AI_MODEL_NAME || "pesat-flash",
+	          logs_url: "/logs"
+	        }),
+	        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+	      );
+	    }
+
+	    // 3. POST Requests (Logs atau AI Chat)
+	    if (request.method === "POST") {
+	      // Route: POST /api/logs -> Terima log dari extension
+	      if (url.pathname === "/api/logs") {
+	        try {
+	          const body = await request.json();
+	          const items = Array.isArray(body) ? body : [body];
+	          for (const item of items) {
+	            pushPesatLog(item);
+	          }
+	          return new Response(JSON.stringify({ success: true, count: (globalThis.__PESAT_LOGS__ || []).length }), {
+	            status: 200,
+	            headers: { ...corsHeaders, "Content-Type": "application/json" }
+	          });
+	        } catch (logErr) {
+	          return new Response(JSON.stringify({ success: false, error: logErr.message }), {
+	            status: 400,
+	            headers: { ...corsHeaders, "Content-Type": "application/json" }
+	          });
+	        }
+	      }
+
+	      try {
+	        const body = await request.json();
+	        const userPrompt = body.prompt || "";
+	        const conversationHistory = body.messages || [];
+	        const rawUserQuery = body.userQuery || "";
+
+	        pushPesatLog({
+	          level: "AI",
+	          source: "CF_WORKER",
+	          type: "AI_REQUEST",
+	          message: `Menerima request AI: "${(rawUserQuery || userPrompt.split('\n')[0] || '').substring(0, 100)}"`,
+	          details: {
+	            promptLength: userPrompt.length,
+	            historyCount: conversationHistory.length,
+	            userQuery: rawUserQuery,
+	            model: env?.AI_MODEL_NAME || "pesat-flash"
+	          }
+	        });
+
+	        const authHeader = request.headers.get("Authorization") || "";
+	        const headerKey = authHeader.replace(/^Bearer\s+/i, "").trim();
+	        const AI_API_KEY = headerKey || env?.AI_API_KEY || "";
+
+	        const AI_BASE_URL = env?.AI_BASE_URL || "https://api.pesatrouter.com/v1/chat/completions";
+	        const AI_MODEL_NAME = env?.AI_MODEL_NAME || "pesat-flash";
 
         // Multi-Agent System Prompt v4.3 (Strict Action Execution Engine)
         const SYSTEM_PROMPT = `
@@ -696,12 +1363,25 @@ ATURAN AKURASI ELEMENT ID (@eN):
 
             if (aiResponse.ok) {
               const reply = data?.choices?.[0]?.message?.content || data?.reply || rawText;
+              pushPesatLog({
+                level: "AI",
+                source: "CF_WORKER",
+                type: "AI_RESPONSE",
+                message: `Respon Live AI diterima (${reply.length} chars)`,
+                details: { reply, model: AI_MODEL_NAME }
+              });
               return new Response(
                 JSON.stringify({ success: true, reply, source: "live_ai" }),
                 { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
               );
             }
           } catch (fetchErr) {
+            pushPesatLog({
+              level: "WARN",
+              source: "CF_WORKER",
+              type: "AI_FALLBACK",
+              message: `Live AI fetch gagal, beralih ke Heuristic Autonomous Engine: ${fetchErr.message}`
+            });
             console.warn("[Pesat Worker] Fetch to AI failed, falling back:", fetchErr.message);
           }
         }
@@ -709,8 +1389,14 @@ ATURAN AKURASI ELEMENT ID (@eN):
         // =========================================================================
         // AUTONOMOUS HEURISTIC ENGINE (Free Quota & Zero-Config Automation)
         // =========================================================================
-        const rawUserQuery = body.userQuery || "";
         const simulatedReply = generateAutonomousAction(userPrompt, body.messages || [], rawUserQuery);
+        pushPesatLog({
+          level: "AI",
+          source: "CF_WORKER",
+          type: "HEURISTIC_REPLY",
+          message: `Respon Heuristic Autonomous Engine dihasilkan`,
+          details: { reply: simulatedReply, isFreeTier: true }
+        });
         return new Response(
           JSON.stringify({
             success: true,
@@ -720,6 +1406,13 @@ ATURAN AKURASI ELEMENT ID (@eN):
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } catch (err) {
+        pushPesatLog({
+          level: "ERROR",
+          source: "CF_WORKER",
+          type: "SERVER_ERROR",
+          message: `Error pemrosesan backend: ${err.message}`,
+          details: { stack: err.stack }
+        });
         return new Response(
           JSON.stringify({ success: false, error: err.message }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
