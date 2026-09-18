@@ -95,10 +95,10 @@
       };
 
       logQueue.push(entry);
-      if (logQueue.length >= 5 || level === "ERROR" || level === "WARN") {
+      if (logQueue.length >= 3 || level === "ERROR" || level === "WARN") {
         flushLogs();
       } else {
-        setTimeout(flushLogs, 1500);
+        setTimeout(flushLogs, 100);
       }
     } catch (e) {
       // Silent

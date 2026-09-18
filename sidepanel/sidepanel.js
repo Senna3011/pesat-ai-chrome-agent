@@ -54,6 +54,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadSettings();
   await loadSessions();
   attachSuggestionListeners();
+  appendLog("Sesi ekstensi diaktifkan oleh pengguna.", "INFO", { timestamp: Date.now() }, "SESSION_OPEN");
 
   // ----------------------------------------------------
   // 4. Markdown & Responsive Table Parser (marked.js Integration)

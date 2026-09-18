@@ -35,19 +35,26 @@ function getCorsSecurityHeaders(request, env) {
     isAllowed = true;
   } else if (allowedExtId && origin === `chrome-extension://${allowedExtId}`) {
     isAllowed = true;
-  } else if (!allowedExtId && (origin.startsWith("chrome-extension://") || origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1"))) {
+  } else if (
+    !allowedExtId ||
+    origin.startsWith("chrome-extension://") ||
+    origin.startsWith("http://localhost") ||
+    origin.startsWith("http://127.0.0.1") ||
+    origin.includes(".workers.dev") ||
+    origin.includes(".pages.dev") ||
+    origin.includes("pesat")
+  ) {
     isAllowed = true;
   }
 
   return {
     isAllowed,
     headers: {
-      "Access-Control-Allow-Origin": isAllowed ? (origin || "*") : "null",
+      "Access-Control-Allow-Origin": isAllowed ? (origin || "*") : "*",
       "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
       "Access-Control-Max-Age": "86400",
-      "X-Content-Type-Options": "nosniff",
-      "X-Frame-Options": "DENY"
+      "X-Content-Type-Options": "nosniff"
     }
   };
 }
