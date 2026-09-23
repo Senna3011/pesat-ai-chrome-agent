@@ -2664,7 +2664,13 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
 
       appendLog(`🎯 Validator: ${verdict.verdict} — ${verdict.reason}`);
 
-      if (verdict.subtaskComplete || verdict.verdict === "DONE") {
+      // Subtask selesai jika aksi sukses dan tidak diminta RETRY/REPLAN
+      const isSubDone = verdict.subtaskComplete ||
+                        verdict.verdict === "DONE" ||
+                        verdict.verdict === "SUCCESS" ||
+                        (exec.success && verdict.verdict !== "RETRY" && verdict.verdict !== "REPLAN");
+
+      if (isSubDone) {
         markSubtask(sub.id, "done");
         refreshTaskCard();
         await persistTask();
