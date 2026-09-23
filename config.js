@@ -1,43 +1,18 @@
 // config.js - Global configuration & defaults for Pesat AI Chrome Extension
 (() => {
   const PESAT_CONFIG = {
-    DEFAULT_API_URL: "https://pesat-ai-chrome-agent.senna-947.workers.dev",
-    DEFAULT_PESATROUTER_URL: "https://api.pesatrouter.com/v1",
+    DEFAULT_API_BASE_URL: "https://api.pesatrouter.com/v1",
     DEFAULT_MODEL: "pesat-flash",
-    AVAILABLE_MODELS: [
-      { id: "pesat-flash", name: "Pesat Flash (Cepat & Cerdas)", contextLimit: 32000, default: true },
-      { id: "pesat-pro", name: "Pesat Pro (Penalaran Mendalam)", contextLimit: 128000 },
-      { id: "pesat-lite", name: "Pesat Lite (Ringan & Hemat)", contextLimit: 16000 }
+    DEFAULT_API_FORMAT: "openai-chat",
+    DEFAULT_MODELS: [
+      { id: "pesat-flash", name: "Pesat Flash (Cepat & Cerdas)", context: "32K", enabled: true },
+      { id: "pesat-pro", name: "Pesat Pro (Penalaran Mendalam)", context: "128K", enabled: true },
+      { id: "pesat-lite", name: "Pesat Lite (Ringan & Hemat)", context: "16K", enabled: true }
     ],
-    STORAGE_KEYS: {
-      API_URL: "apiUrl",
-      API_KEY: "apiKey",
-      API_FORMAT: "apiFormat",
-      ACTIVE_MODEL: "activeModel",
-      MODELS_LIST: "modelsList",
-      SESSION_ONLY: "sessionOnly",
-      GOOGLE_CLIENT_ID: "googleClientId",
-      GOOGLE_AUTH_TOKEN: "googleAuthToken",
-      GOOGLE_USER_EMAIL: "googleUserEmail",
-      TODAY_REQUESTS: "todayRequests",
-      TODAY_TOKENS: "todayTokens",
-      TODAY_DATE: "todayDate",
-      ONBOARDING_COMPLETED: "onboardingCompleted",
-      PROVIDER_ENABLED: "providerEnabled"
-    },
-    LIMITS: {
-      FREE_TIER_DAILY_REQUESTS: 40,
-      MAX_CONTEXT_FILES: 5,
-      MAX_FILE_SIZE_BYTES: 10 * 1024 * 1024 // 10MB
-    },
-    SYSTEM_SKILLS: [
-      "email_automation",
-      "code_fix_editor",
-      "article_writer",
-      "social_media_poster",
-      "form_autofill",
-      "data_extraction"
-    ]
+    MAX_STEPS: 30,
+    MAX_RETRIES_PER_SUBTASK: 3,
+    MAX_REPLANS: 2,
+    SCRATCHPAD_TAIL: 8
   };
 
   if (typeof globalThis !== "undefined") {

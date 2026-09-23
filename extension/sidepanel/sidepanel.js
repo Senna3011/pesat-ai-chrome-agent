@@ -958,17 +958,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function isConfigured() {
-    // Selalu true agar mendukung Zero-Config Free Tier via Cloudflare Worker & BYOK PesatRouter
-    return true;
+    return Boolean(getApiKey());
   }
 
   function checkOnboarding() {
-    // Hanya tampilkan jika pengguna belum pernah menutup atau belum menyetel key
-    chrome.storage.local.get(["onboardingDismissed", "apiKey"], (res) => {
-      if (!res.apiKey && !res.onboardingDismissed && onboardingModal) {
-        onboardingModal.classList.remove("hidden");
-      }
-    });
+    if (!isConfigured() && onboardingModal) {
+      onboardingModal.classList.remove("hidden");
+    }
   }
 
   function togglePasswordEye(inputEl, btnEl) {
@@ -3404,14 +3400,12 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   if (btnWizardClose && onboardingModal) {
     btnWizardClose.addEventListener("click", () => {
       onboardingModal.classList.add("hidden");
-      chrome.storage.local.set({ onboardingDismissed: true });
     });
   }
   if (onboardingModal) {
     onboardingModal.addEventListener("click", (e) => {
       if (e.target === onboardingModal) {
         onboardingModal.classList.add("hidden");
-        chrome.storage.local.set({ onboardingDismissed: true });
       }
     });
   }

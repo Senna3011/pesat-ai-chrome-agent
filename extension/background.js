@@ -195,6 +195,91 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  // 3. Tab Management & Vision Handlers
+  if (request.action === "SCREENSHOT") {
+    try {
+      chrome.tabs.captureVisibleTab(null, { format: "jpeg", quality: 60 }, (dataUrl) => {
+        if (chrome.runtime.lastError || !dataUrl) {
+          sendResponse({ success: false, error: chrome.runtime.lastError?.message || "Screenshot gagal" });
+        } else {
+          sendResponse({ success: true, dataUrl });
+        }
+      });
+    } catch (err) {
+      sendResponse({ success: false, error: err.message });
+    }
+    return true;
+  }
+
+  if (request.action === "LIST_TABS") {
+    chrome.tabs.query({ currentWindow: true }, (tabs) => {
+      const tabList = (tabs || []).map((t, idx) => ({
+        tabId: t.id,
+        title: t.title || "Tab",
+        url: t.url || "",
+        active: !!t.active,
+        label: `[@tab${idx + 1}]`
+      }));
+      sendResponse({ success: true, tabs: tabList });
+    });
+    return true;
+  }
+
+  if (request.action === "SWITCH_TAB") {
+    const targetId = request.tabId;
+    if (targetId) {
+      chrome.tabs.update(Number(targetId), { active: true }, (tab) => {
+        if (chrome.runtime.lastError) {
+          sendResponse({ success: false, error: chrome.runtime.lastError.message });
+        } else {
+          sendResponse({ success: true, tab });
+        }
+      });
+    } else {
+      sendResponse({ success: false, error: "Target tabId tidak ditemukan." });
+    }
+    return true;
+  }
+
+  if (request.action === "NEW_TAB") {
+    const raw = request.url || request.value || "https://www.google.com";
+    const dest = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    chrome.tabs.create({ url: dest }, (tab) => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse({ success: true, tabId: tab.id });
+      }
+    });
+    return true;
+  }
+
+  if (request.action === "CLOSE_TAB") {
+    const targetId = request.tabId;
+    if (targetId) {
+      chrome.tabs.remove(Number(targetId), () => {
+        sendResponse({ success: true });
+      });
+    } else {
+      sendResponse({ success: false, error: "tabId tidak valid." });
+    }
+    return true;
+  }
+
+  if (request.action === "GOOGLE_STATUS") {
+    chrome.storage.local.get(["googleAuthToken", "googleUserEmail"], (res) => {
+      sendResponse({ connected: Boolean(res.googleAuthToken), email: res.googleUserEmail || "" });
+    });
+    return true;
+  }
+
+  if (request.action === "GOOGLE_DISCONNECT") {
+    chrome.storage.local.remove(["googleAuthToken", "googleUserEmail"], () => {
+      sendResponse({ success: true });
+    });
+    return true;
+  }
+
   // Navigasi URL tab aktif secara langsung via Chrome Tabs API (aman untuk chrome://newtab, about:blank dll)
   if (request.action === "NAVIGATE_TAB" || request.action === "navigate_to") {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {

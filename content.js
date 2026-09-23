@@ -902,18 +902,8 @@
       } else {
         el.value = value;
       }
-    } else if (el.isContentEditable || el.getAttribute("contenteditable") === "true") {
-      el.focus();
-      let inserted = false;
-      try {
-        inserted = document.execCommand("insertText", false, value);
-      } catch (_) {}
-      if (!inserted) {
-        el.innerText = value;
-      }
-      try {
-        el.dispatchEvent(new InputEvent("input", { inputType: "insertText", data: value, bubbles: true }));
-      } catch (_) {}
+    } else if (el.isContentEditable) {
+      el.innerText = value;
     }
 
     el.dispatchEvent(new Event("input", { bubbles: true }));

@@ -9,12 +9,10 @@
       const type = file.type || "";
       const ext = name.split(".").pop().toLowerCase();
 
-      // Batas ukuran 10MB
       if (size > 10 * 1024 * 1024) {
         throw new Error(`File ${name} melebihi batas 10MB.`);
       }
 
-      // Teks biasa / Markdown / JSON / CSV
       if (
         ["txt", "md", "csv", "json", "js", "ts", "html", "css", "py", "sql"].includes(ext) ||
         type.startsWith("text/") ||
@@ -30,7 +28,6 @@
         };
       }
 
-      // Gambar (PNG, JPG, JPEG, WEBP, GIF)
       if (["png", "jpg", "jpeg", "webp", "gif"].includes(ext) || type.startsWith("image/")) {
         const dataUrl = await this.readAsDataURL(file);
         return {
@@ -43,7 +40,6 @@
         };
       }
 
-      // PDF / Dokumen Office fallback
       try {
         const text = await this.readAsText(file);
         return {
@@ -59,7 +55,7 @@
           size,
           ext,
           type: "binary",
-          content: `[File Lampiran Biner: ${name} (${Math.round(size / 1024)} KB)]`
+          content: `[File Lampiran: ${name} (${Math.round(size / 1024)} KB)]`
         };
       }
     },
