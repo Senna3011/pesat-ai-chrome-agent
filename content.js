@@ -1,12 +1,36 @@
-// content.js - Nanobrowser & Agent-Browser Grade Semantic AXTree Scanner & Robust Action Engine
+// content.js - Computer-Use Grade Semantic AXTree Scanner & Robust Action Engine (v5.0)
+// Fitur: AXTree snapshot, colored bounding box, occlusion detection, auto-wait,
+// fuzzy fallback, React/Vue setter, key_combo, hover, drag, upload_file,
+// paste_text (Google Docs/canvas friendly), click_coords (vision grounding).
 
 (() => {
   let markersOverlay = null;
   let activeElementsMap = new Map();
+  const capturedPageErrors = [];
 
-  console.log("[Pesat AI Agent] Semantic AXTree DOM Engine initialized (v4.0).");
+  // Tangkap runtime error & unhandled rejection untuk kemampuan troubleshooting/fixing
+  window.addEventListener("error", (e) => {
+    try {
+      const msg = e.message || (e.error && e.error.message) || String(e);
+      const src = e.filename ? ` (${e.filename}:${e.lineno})` : "";
+      capturedPageErrors.push(`[JS Error] ${msg}${src}`);
+      if (capturedPageErrors.length > 10) capturedPageErrors.shift();
+    } catch (_) {}
+  }, true);
 
-  // Helper: Cek apakah elemen ada di viewport dan terlihat
+  window.addEventListener("unhandledrejection", (e) => {
+    try {
+      const reason = e.reason?.message || String(e.reason || "Unhandled Promise Rejection");
+      capturedPageErrors.push(`[Promise Rejection] ${reason}`);
+      if (capturedPageErrors.length > 10) capturedPageErrors.shift();
+    } catch (_) {}
+  }, true);
+
+  console.log("[Pesat AI Agent] Semantic AXTree DOM Engine initialized (v5.0).");
+
+  // ─────────────────────────────────────────────────────
+  // VISIBILITY & OCCLUSION HELPERS
+  // ─────────────────────────────────────────────────────
   function isElementVisible(el) {
     if (!el || !(el instanceof HTMLElement)) return false;
     const style = window.getComputedStyle(el);
@@ -23,19 +47,15 @@
 
     const vh = window.innerHeight || document.documentElement.clientHeight;
     const vw = window.innerWidth || document.documentElement.clientWidth;
-
-    // Viewport checking dengan margin toleransi
     return rect.top <= vh + 100 && rect.bottom >= -100 && rect.left <= vw + 100 && rect.right >= -100;
   }
 
-  // Helper: Deteksi Occlusion (apakah elemen tertutup modal, popup, atau banner cookie)
   function checkOcclusion(el) {
     try {
       const rect = el.getBoundingClientRect();
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
 
-      // Cek titik tengah elemen
       const topEl = document.elementFromPoint(cx, cy);
       if (!topEl) return { covered: false };
 
@@ -43,7 +63,6 @@
         return { covered: false };
       }
 
-      // Format nama elemen yang menutupi
       const coverId = topEl.id ? `#${topEl.id}` : "";
       const coverClass = topEl.className && typeof topEl.className === "string" ? `.${topEl.className.trim().split(/\s+/)[0]}` : "";
       const coverTag = topEl.tagName.toLowerCase();
@@ -56,7 +75,9 @@
     }
   }
 
-  // Helper: Dapatkan Role Aksesibilitas Semantik (AXTree Role)
+  // ─────────────────────────────────────────────────────
+  // SEMANTIC HELPERS (ROLE / ACCESSIBLE NAME)
+  // ─────────────────────────────────────────────────────
   function getSemanticRole(el) {
     const role = el.getAttribute("role");
     if (role) return role.toLowerCase();
@@ -81,20 +102,16 @@
     return tag;
   }
 
-  // Helper: Dapatkan Accessible Name / Label Elemen
   function getAccessibleName(el) {
-    // 1. aria-label
     const ariaLabel = el.getAttribute("aria-label");
     if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
 
-    // 2. aria-labelledby
     const labelledby = el.getAttribute("aria-labelledby");
     if (labelledby) {
       const labelEl = document.getElementById(labelledby);
       if (labelEl && labelEl.textContent.trim()) return labelEl.textContent.trim();
     }
 
-    // 3. Label tag jika ada (untuk input)
     if (el.id) {
       const labelFor = document.querySelector(`label[for="${el.id}"]`);
       if (labelFor && labelFor.textContent.trim()) return labelFor.textContent.trim();
@@ -104,7 +121,6 @@
       return parentLabel.textContent.replace(el.textContent || "", "").trim();
     }
 
-    // 4. Placeholder / Title / Alt
     const placeholder = el.getAttribute("placeholder");
     if (placeholder && placeholder.trim()) return placeholder.trim();
 
@@ -114,14 +130,12 @@
     const alt = el.getAttribute("alt");
     if (alt && alt.trim()) return alt.trim();
 
-    // 5. Visible InnerText / TextContent
     const innerText = (el.innerText || el.textContent || "").trim();
     if (innerText) return innerText.replace(/\s+/g, " ").slice(0, 120);
 
     return "";
   }
 
-  // Tentukan warna tema bounding box
   function getRoleIcon(role) {
     if (role === "textbox" || role === "searchbox") return "📝";
     if (role === "button") return "🔘";
@@ -133,22 +147,156 @@
 
   function getElementTheme(role) {
     if (role === "textbox" || role === "searchbox") {
-      return { border: "#2563eb", bg: "#1d4ed8", name: "input" }; // Blue
+      return { border: "#2563eb", bg: "#1d4ed8", bgTint: "rgba(37, 99, 235, 0.08)", name: "input" };
     }
     if (role === "button") {
-      return { border: "#ef4444", bg: "#b91c1c", name: "button" }; // Red
+      return { border: "#ef4444", bg: "#b91c1c", bgTint: "rgba(239, 68, 68, 0.08)", name: "button" };
     }
     if (role === "link") {
-      return { border: "#10b981", bg: "#047857", name: "link" }; // Green
+      return { border: "#10b981", bg: "#047857", bgTint: "rgba(16, 185, 129, 0.08)", name: "link" };
     }
     if (role === "combobox" || role === "select" || role === "tab" || role === "menuitem") {
-      return { border: "#f59e0b", bg: "#b45309", name: "control" }; // Amber
+      return { border: "#f59e0b", bg: "#b45309", bgTint: "rgba(245, 158, 11, 0.08)", name: "control" };
     }
-    return { border: "#8b5cf6", bg: "#6d28d9", name: "interactive" }; // Purple
+    return { border: "#8b5cf6", bg: "#6d28d9", bgTint: "rgba(139, 92, 246, 0.08)", name: "interactive" };
   }
 
-  // Render Petunjuk / Legenda Marker Ramah Pengguna
+  // ─────────────────────────────────────────────────────
+  // SMOOTH VISUAL PERCEPTION STYLES & HUD (Realtime Observable Reading)
+  // ─────────────────────────────────────────────────────
+  function ensurePesatStyles() {
+    if (document.getElementById("pesat-reading-visual-styles")) return;
+    const style = document.createElement("style");
+    style.id = "pesat-reading-visual-styles";
+    style.textContent = `
+      @keyframes pesatSweepLaser {
+        0% { top: 0; opacity: 0; }
+        12% { opacity: 1; }
+        85% { opacity: 0.9; }
+        100% { top: 100vh; opacity: 0; }
+      }
+      @keyframes pesatRadarPulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.4); opacity: 0.5; }
+      }
+      @keyframes pesatBoxEntrance {
+        from {
+          opacity: 0;
+          transform: scale(0.96) translateY(2px);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+      }
+      @keyframes pesatBadgeEntrance {
+        from {
+          opacity: 0;
+          transform: scale(0.65) translateY(-3px);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+      }
+      @keyframes pesatLegendEntrance {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes pesatShieldPulse {
+        0% { transform: scale(1); }
+        100% { transform: scale(1.015); }
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function triggerScanningBeam() {
+    ensurePesatStyles();
+    const existing = document.getElementById("pesat-scanning-beam");
+    if (existing) existing.remove();
+
+    const beam = document.createElement("div");
+    beam.id = "pesat-scanning-beam";
+    beam.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 3px;
+      background: linear-gradient(90deg, transparent 0%, rgba(56, 189, 248, 0.85) 20%, rgba(168, 85, 247, 1) 50%, rgba(56, 189, 248, 0.85) 80%, transparent 100%);
+      box-shadow: 0 0 18px 4px rgba(56, 189, 248, 0.75), 0 0 36px 8px rgba(168, 85, 247, 0.45);
+      pointer-events: none;
+      z-index: 2147483647;
+      animation: pesatSweepLaser 0.9s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    `;
+    document.documentElement.appendChild(beam);
+    setTimeout(() => { if (beam.parentNode) beam.remove(); }, 1000);
+  }
+
+  let pesatHudTimer = null;
+  function showReadingHUD(text, isComplete = false) {
+    ensurePesatStyles();
+    let hud = document.getElementById("pesat-reading-hud");
+    if (!hud) {
+      hud = document.createElement("div");
+      hud.id = "pesat-reading-hud";
+      document.documentElement.appendChild(hud);
+    }
+    if (pesatHudTimer) clearTimeout(pesatHudTimer);
+
+    hud.style.cssText = `
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(10, 14, 26, 0.92);
+      border: 1px solid ${isComplete ? "rgba(16, 185, 129, 0.5)" : "rgba(56, 189, 248, 0.4)"};
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.65), 0 0 16px ${isComplete ? "rgba(16, 185, 129, 0.3)" : "rgba(56, 189, 248, 0.25)"};
+      backdrop-filter: blur(12px);
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 7px 18px;
+      border-radius: 9999px;
+      z-index: 2147483647;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      opacity: 1;
+    `;
+
+    const dotColor = isComplete ? "#10b981" : "#38bdf8";
+    hud.innerHTML = `
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: ${dotColor}; box-shadow: 0 0 8px ${dotColor}; animation: pesatRadarPulse 1.2s infinite; flex-shrink: 0;"></span>
+      <span>${text}</span>
+    `;
+
+    if (isComplete) {
+      pesatHudTimer = setTimeout(() => {
+        if (hud) {
+          hud.style.opacity = "0";
+          hud.style.transform = "translateX(-50%) translateY(-6px)";
+          setTimeout(() => { if (hud.parentNode) hud.remove(); }, 400);
+        }
+      }, 2200);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────
+  // VISUAL MARKERS (OVERLAY + LEGEND)
+  // ─────────────────────────────────────────────────────
   function renderFloatingLegend() {
+    ensurePesatStyles();
     const existing = document.getElementById("pesat-markers-legend");
     if (existing) existing.remove();
 
@@ -158,17 +306,19 @@
       position: fixed;
       bottom: 18px;
       right: 18px;
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 10px;
-      padding: 10px 14px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+      background: rgba(15, 23, 42, 0.94);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 12px;
+      padding: 11px 15px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.65), 0 0 15px rgba(56, 189, 248, 0.15);
+      backdrop-filter: blur(12px);
       z-index: 2147483647;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       max-width: 290px;
       color: #f8fafc;
       pointer-events: auto;
       user-select: none;
+      animation: pesatLegendEntrance 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     `;
 
     legend.innerHTML = `
@@ -196,26 +346,43 @@
           <span>📋 Dropdown</span>
         </div>
       </div>
-      <div style="font-size:10px; color:#94a3b8; margin-top:8px; border-top:1px solid #1e293b; padding-top:6px; line-height:1.3;">
-        💡 Nomor (#1, #2...) adalah ID tombol/input yang dapat diperintahkan ke AI.
+      <div style="font-size:10px; color:#94a3b8; margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:6px; line-height:1.3;">
+        💡 Nomor (#1, #2...) adalah ID tombol/input yang sedang dibaca dan dikontrol AI.
       </div>
     `;
 
     document.body.appendChild(legend);
 
     document.getElementById("pesat-btn-close-legend")?.addEventListener("click", () => {
-      legend.remove();
+      legend.style.transition = "opacity 0.2s ease, transform 0.2s ease";
+      legend.style.opacity = "0";
+      legend.style.transform = "translateY(8px)";
+      setTimeout(() => legend.remove(), 220);
     });
   }
 
-  // Bersihkan semua visual marker overlay & legend
   function clearVisualMarkers() {
     if (markersOverlay) {
-      markersOverlay.remove();
+      const mo = markersOverlay;
       markersOverlay = null;
+      mo.style.transition = "opacity 0.25s ease";
+      mo.style.opacity = "0";
+      setTimeout(() => { if (mo.parentNode) mo.remove(); }, 260);
     }
     const legend = document.getElementById("pesat-markers-legend");
-    if (legend) legend.remove();
+    if (legend) {
+      legend.style.transition = "opacity 0.25s ease, transform 0.25s ease";
+      legend.style.opacity = "0";
+      legend.style.transform = "translateY(8px)";
+      setTimeout(() => { if (legend.parentNode) legend.remove(); }, 260);
+    }
+    const hud = document.getElementById("pesat-reading-hud");
+    if (hud) {
+      hud.style.transition = "opacity 0.25s ease, transform 0.25s ease";
+      hud.style.opacity = "0";
+      hud.style.transform = "translateX(-50%) translateY(-6px)";
+      setTimeout(() => { if (hud.parentNode) hud.remove(); }, 260);
+    }
 
     document.querySelectorAll("[data-pesat-id]").forEach((el) => {
       el.removeAttribute("data-pesat-id");
@@ -223,20 +390,128 @@
     activeElementsMap.clear();
   }
 
-  // Pindai elemen interaktif & bangun Semantic AXTree Snapshot
+  // ─────────────────────────────────────────────────────
+  // TAB INTERACTION LOCK SHIELD (Agentic Focus Protection)
+  // ─────────────────────────────────────────────────────
+  let pageLockShield = null;
+
+  function blockUserInteractionEvent(e) {
+    if (e.target && (e.target.id === "pesat-shield-unlock-btn" || e.target.closest("#pesat-shield-unlock-btn"))) {
+      return;
+    }
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === "function") {
+      e.stopImmediatePropagation();
+    }
+    if (e.type !== "wheel") {
+      e.preventDefault();
+    }
+  }
+
+  const BLOCK_EVENT_TYPES = [
+    "click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup",
+    "contextmenu", "keydown", "keypress", "keyup", "touchstart", "touchend"
+  ];
+
+  function lockPageShield(message = "Tab ini sedang dikontrol oleh Pesat AI Agent... (Halaman dikunci agar AI fokus)") {
+    ensurePesatStyles();
+    const existing = document.getElementById("pesat-page-lock-shield");
+    if (existing) {
+      const msgEl = existing.querySelector("#pesat-shield-msg");
+      if (msgEl) msgEl.textContent = message;
+      return;
+    }
+
+    pageLockShield = document.createElement("div");
+    pageLockShield.id = "pesat-page-lock-shield";
+    pageLockShield.style.cssText = `
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      background: rgba(15, 23, 42, 0.22) !important;
+      backdrop-filter: blur(1px) !important;
+      -webkit-backdrop-filter: blur(1px) !important;
+      z-index: 2147483645 !important;
+      pointer-events: auto !important;
+      cursor: not-allowed !important;
+      user-select: none !important;
+      -webkit-user-select: none !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: flex-start !important;
+      padding-top: 14px !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+      transition: opacity 0.2s ease !important;
+      opacity: 1 !important;
+    `;
+
+    pageLockShield.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 10px; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(99, 102, 241, 0.45); box-shadow: 0 12px 32px rgba(0,0,0,0.65), 0 0 16px rgba(99, 102, 241, 0.2); padding: 8px 16px; border-radius: 9999px; color: #f8fafc; font-size: 12px; font-weight: 500; pointer-events: auto; cursor: default; animation: pesatShieldPulse 1.8s infinite alternate;">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 8px #6366f1; flex-shrink: 0;"></span>
+        <span id="pesat-shield-msg" style="color: #f1f5f9;">${message}</span>
+        <button id="pesat-shield-unlock-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; margin-left: 4px; transition: background 0.15s;" title="Buka kunci halaman manual">Buka Kunci</button>
+      </div>
+    `;
+
+    (document.body || document.documentElement).appendChild(pageLockShield);
+
+    BLOCK_EVENT_TYPES.forEach(type => {
+      window.addEventListener(type, blockUserInteractionEvent, { capture: true, passive: false });
+    });
+
+    const unlockBtn = pageLockShield.querySelector("#pesat-shield-unlock-btn");
+    if (unlockBtn) {
+      unlockBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        unlockPageShield();
+      });
+      unlockBtn.addEventListener("mouseenter", () => {
+        unlockBtn.style.background = "rgba(239, 68, 68, 0.3)";
+        unlockBtn.style.color = "#fff";
+      });
+      unlockBtn.addEventListener("mouseleave", () => {
+        unlockBtn.style.background = "rgba(255,255,255,0.1)";
+        unlockBtn.style.color = "#cbd5e1";
+      });
+    }
+  }
+
+  function unlockPageShield() {
+    BLOCK_EVENT_TYPES.forEach(type => {
+      window.removeEventListener(type, blockUserInteractionEvent, { capture: true, passive: false });
+    });
+
+    const shield = document.getElementById("pesat-page-lock-shield") || pageLockShield;
+    if (shield) {
+      shield.style.opacity = "0";
+      setTimeout(() => { if (shield.parentNode) shield.remove(); }, 200);
+    }
+    pageLockShield = null;
+  }
+
+  // ─────────────────────────────────────────────────────
+  // SEMANTIC AXTREE SNAPSHOT
+  // ─────────────────────────────────────────────────────
   function scanInteractiveDOM(showOverlay = true) {
     clearVisualMarkers();
 
     const currentUrl = window.location.href || "";
-    // Handling Newtab / Empty Page
     if (!currentUrl || currentUrl.startsWith("chrome://") || currentUrl.startsWith("edge://") || currentUrl.startsWith("about:") || currentUrl === "about:blank") {
       return {
         title: document.title || "Tab Baru",
         url: currentUrl || "chrome://newtab",
         elementsCount: 0,
-        reducedDOM: "[NEWTAB_EMPTY_PAGE] Halaman kosong. Gunakan tool navigate_to untuk membuka URL atau mencari sesuatu.",
+        reducedDOM: "[NEWTAB_EMPTY_PAGE] Halaman kosong. Gunakan aksi navigate untuk membuka URL atau mencari sesuatu.",
         pageContent: ""
       };
+    }
+
+    // Tampilkan laser sweep & floating HUD untuk memberitahukan proses pemindaian secara visual halus
+    if (showOverlay) {
+      triggerScanningBeam();
+      showReadingHUD("⚡ Pesat AI: Membaca struktur & elemen halaman...");
     }
 
     const selector = [
@@ -261,7 +536,9 @@
     const candidateElements = Array.from(document.querySelectorAll(selector));
     const visibleElements = candidateElements.filter(isElementVisible);
 
-    if (showOverlay && visibleElements.length > 0) {
+    if (!showOverlay) {
+      clearVisualMarkers();
+    } else if (visibleElements.length > 0) {
       markersOverlay = document.createElement("div");
       markersOverlay.id = "pesat-markers-overlay";
       markersOverlay.style.cssText = `
@@ -298,8 +575,10 @@
       const icon = getRoleIcon(role);
       const occlusion = checkOcclusion(el);
 
-      // Gambar Colored Bounding Box & User-Friendly Badge
+      // Gambar Colored Bounding Box dengan animasi entrance halus bertahap (staggered)
       if (showOverlay && markersOverlay) {
+        const delay = Math.min(idCounter * 10, 320);
+
         const box = document.createElement("div");
         box.style.cssText = `
           position: absolute;
@@ -307,11 +586,16 @@
           left: ${rect.left + scrollX}px;
           width: ${rect.width}px;
           height: ${rect.height}px;
-          border: 2px solid ${theme.border};
-          border-radius: 4px;
+          border: 1.5px solid ${theme.border};
+          border-radius: 5px;
+          background: ${theme.bgTint || "rgba(56, 189, 248, 0.05)"};
+          box-shadow: 0 0 8px ${theme.border}44;
           pointer-events: none;
           box-sizing: border-box;
           z-index: 2147483645;
+          opacity: 0;
+          animation: pesatBoxEntrance 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          animation-delay: ${delay}ms;
         `;
 
         const badge = document.createElement("span");
@@ -319,27 +603,29 @@
         badge.title = `Target #${elementId}: ${label || role}`;
         badge.style.cssText = `
           position: absolute;
-          top: -12px;
-          left: -4px;
+          top: -11px;
+          left: -3px;
           background: ${theme.bg};
           color: #ffffff;
-          font-size: 11px;
+          font-size: 10.5px;
           font-weight: 700;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
           padding: 1px 6px;
           border-radius: 4px;
-          border: 1px solid rgba(255,255,255,0.4);
-          box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+          border: 1px solid rgba(255,255,255,0.45);
+          box-shadow: 0 2px 5px rgba(0,0,0,0.4);
           line-height: 1.2;
           display: inline-flex;
           align-items: center;
           gap: 2px;
+          opacity: 0;
+          animation: pesatBadgeEntrance 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          animation-delay: ${delay + 60}ms;
         `;
         box.appendChild(badge);
         markersOverlay.appendChild(box);
       }
 
-      // States
       const stateFlags = [];
       if (el.disabled) stateFlags.push("disabled");
       if (el.readOnly) stateFlags.push("readonly");
@@ -360,7 +646,6 @@
       const placeholder = el.getAttribute("placeholder") ? ` placeholder="${el.getAttribute("placeholder")}"` : "";
       const statesStr = stateFlags.length > 0 ? ` [${stateFlags.join(", ")}]` : "";
 
-      // Format Semantic AXTree Node (mirip agent-browser / Playwright semantic tree)
       elementsList.push(`[@e${elementId}] <${role}${placeholder}${val}${statesStr}> "${label}"`);
     }
 
@@ -371,45 +656,92 @@
       url: window.location.href,
       elementsCount: visibleElements.length,
       reducedDOM: elementsList.join("\n"),
-      pageContent: pageReadableText
+      pageContent: pageReadableText,
+      pageErrors: [...capturedPageErrors]
     };
   }
 
   // ─────────────────────────────────────────────────────
-  // EKSTRAKSI KONTEN UTAMA (READABLE CONTENT) UNTUK PERANGKUMAN
+  // EKSTRAKSI KONTEN UTAMA (READABLE CONTENT)
   // ─────────────────────────────────────────────────────
-  function getReadableContent() {
+  function getReadableContent(showVisual = true) {
     try {
-      // 1. Selector container artikel/konten
-      const target =
-        document.querySelector("article") ||
-        document.querySelector("main") ||
-        document.querySelector("#content") ||
-        document.querySelector("[role='main']") ||
-        document.querySelector("#main-content") ||
-        document.querySelector(".content") ||
-        document.querySelector(".post") ||
-        document.querySelector(".article") ||
-        document.body;
+      if (showVisual) {
+        showReadingHUD("📖 Pesat AI: Membaca teks artikel...");
+        triggerScanningBeam();
+      }
 
+      // 1. Cari kontainer artikel terbaik berdasarkan bobot teks terpanjang
+      const candidateSelectors = [
+        "[itemprop='articleBody']",
+        "[data-qa-id='story-content']",
+        ".read__content",
+        ".detail-text",
+        ".post-content",
+        ".entry-content",
+        ".article__content",
+        "article",
+        "main",
+        "[role='main']",
+        "#main-content",
+        "#content"
+      ];
+
+      let bestTarget = null;
+      let maxLen = 0;
+
+      for (const sel of candidateSelectors) {
+        const elements = document.querySelectorAll(sel);
+        for (const el of elements) {
+          const len = (el.innerText || el.textContent || "").trim().length;
+          if (len > maxLen) {
+            maxLen = len;
+            bestTarget = el;
+          }
+        }
+      }
+
+      const target = bestTarget || document.body;
       if (!target) return "";
 
-      // 2. Kumpulkan semua blok teks bermakna (Heading, Paragraf, List item, Blockquote)
+      // Visual highlight pada kontainer artikel yang dibaca
+      if (showVisual && target && target !== document.body) {
+        const originalOutline = target.style.outline;
+        const originalShadow = target.style.boxShadow;
+        const originalTransition = target.style.transition;
+
+        target.style.transition = "box-shadow 0.4s ease, outline 0.4s ease";
+        target.style.outline = "2px solid rgba(56, 189, 248, 0.6)";
+        target.style.boxShadow = "0 0 25px rgba(56, 189, 248, 0.22)";
+        target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+        setTimeout(() => {
+          target.style.outline = originalOutline;
+          target.style.boxShadow = originalShadow;
+          target.style.transition = originalTransition;
+        }, 2200);
+      }
+
       const textElements = Array.from(
-        target.querySelectorAll("h1, h2, h3, h4, h5, h6, p, li, blockquote, figcaption, [class*='desc'], [class*='text'], [class*='title']")
+        target.querySelectorAll(
+          "h1, h2, h3, h4, h5, h6, p, li, blockquote, figcaption, [class*='desc'], [class*='text'], [class*='title'], [class*='paragraph'], [class*='content']"
+        )
       );
 
       const cleanedBlocks = [];
       const seenText = new Set();
 
       for (const el of textElements) {
-        // Skip elemen dalam nav/header/footer/script/style/sidebar
-        if (el.closest("nav, header, footer, aside, [role='navigation'], [role='banner'], [role='contentinfo'], #pesat-markers-overlay, #pesat-markers-legend")) {
+        if (
+          el.closest(
+            "nav, header, footer, aside, [role='navigation'], [role='banner'], [role='contentinfo'], #pesat-markers-overlay, #pesat-markers-legend, .ad, [class*='advertisement']"
+          )
+        ) {
           continue;
         }
 
         const str = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
-        if (str.length >= 8 && !seenText.has(str)) {
+        if (str.length >= 10 && !seenText.has(str)) {
           seenText.add(str);
           cleanedBlocks.push(str);
         }
@@ -417,31 +749,42 @@
 
       let resultText = cleanedBlocks.join("\n\n");
 
-      // 3. Fallback jika querySelector semantik gagal: gunakan clone & sanitize body
+      // 2. Fallback tangguh berbasis document.body.innerText langsung (selalu ter-render pada peramban)
       if (!resultText || resultText.length < 50) {
-        const clone = target.cloneNode(true);
-        const unwanted = clone.querySelectorAll(
-          'nav, header, footer, aside, script, style, button, [role="navigation"], [role="banner"], [role="contentinfo"], noscript, svg, iframe, #pesat-markers-overlay, #pesat-markers-legend, [aria-hidden="true"]'
-        );
-        unwanted.forEach((el) => el.remove());
-        resultText = (clone.innerText || clone.textContent || "")
-          .split("\n")
-          .map((l) => l.trim())
-          .filter((l) => l.length > 0)
-          .join("\n");
+        const bodyText = document.body ? (document.body.innerText || "") : "";
+        if (bodyText) {
+          const lines = bodyText
+            .split(/\r?\n/)
+            .map((l) => l.trim().replace(/\s+/g, " "))
+            .filter((l) => l.length >= 18 && !seenText.has(l));
+
+          // Filter baris yang mirip elemen menu/navigasi/footer
+          const meaningfulLines = lines.filter(
+            (l) =>
+              !/^(beranda|home|masuk|daftar|login|register|search|cari|menu|share|bagikan|iklan|advertisement|copyright|hak cipta|kebijakan privasi|privacy policy)/i.test(
+                l
+              )
+          );
+
+          if (meaningfulLines.length > 0) {
+            resultText = meaningfulLines.join("\n\n");
+          }
+        }
       }
 
-      // 4. Batasi teks maksimal ~6.000 karakter agar tidak melebihi kuota token
-      return resultText.substring(0, 6000).trim();
+      if (showVisual && resultText && resultText.length > 30) {
+        showReadingHUD(`✓ Selesai membaca artikel (${resultText.length} karakter)`, true);
+      }
+
+      return resultText.substring(0, 7000).trim();
     } catch (err) {
       console.warn("[Pesat] Gagal mengambil readable content:", err);
-      return "";
+      return document.body ? (document.body.innerText || "").substring(0, 5000) : "";
     }
   }
 
-  // Ekstraksi teks konten halaman untuk snapshot AXTree
   function extractReadablePageText() {
-    return getReadableContent().substring(0, 4500);
+    return getReadableContent(false).substring(0, 4500);
   }
 
   // ─────────────────────────────────────────────────────
@@ -485,7 +828,6 @@
     });
   }
 
-  // Targeted Wait: Tunggu selector tertentu muncul
   function waitForSelector(selector, timeoutMs = 5000) {
     return new Promise((resolve) => {
       if (document.querySelector(selector)) {
@@ -506,7 +848,7 @@
   }
 
   // ─────────────────────────────────────────────────────
-  // FUZZY FALLBACK: Cari elemen jika ID meleset
+  // FUZZY FALLBACK
   // ─────────────────────────────────────────────────────
   function findElementByFuzzy(hintText, action) {
     if (!hintText) return null;
@@ -569,37 +911,489 @@
   }
 
   // ─────────────────────────────────────────────────────
+  // KEY COMBO PARSER & DISPATCHER (untuk aplikasi canvas: Docs/Sheets)
+  // ─────────────────────────────────────────────────────
+  const KEY_CODES = {
+    enter: 13, tab: 9, escape: 27, esc: 27, backspace: 8, delete: 46, del: 46,
+    space: 32, arrowup: 38, arrowdown: 40, arrowleft: 37, arrowright: 39,
+    up: 38, down: 40, left: 37, right: 39,
+    home: 36, end: 35, pageup: 33, pagedown: 34, insert: 45,
+    f1: 112, f2: 113, f3: 114, f4: 115, f5: 116, f6: 117, f7: 118, f8: 119, f9: 120,
+    f10: 121, f11: 122, f12: 123
+  };
+
+  function parseKeyCombo(comboStr) {
+    const parts = String(comboStr || "").split("+").map((p) => p.trim()).filter(Boolean);
+    const modifiers = { ctrlKey: false, altKey: false, shiftKey: false, metaKey: false };
+    let keyPart = "";
+
+    for (const p of parts) {
+      const lower = p.toLowerCase();
+      if (lower === "ctrl" || lower === "control") modifiers.ctrlKey = true;
+      else if (lower === "alt") modifiers.altKey = true;
+      else if (lower === "shift") modifiers.shiftKey = true;
+      else if (lower === "meta" || lower === "cmd" || lower === "win") modifiers.metaKey = true;
+      else keyPart = p;
+    }
+
+    if (!keyPart) return null;
+
+    const lowerKey = keyPart.toLowerCase();
+    const isSpecial = KEY_CODES[lowerKey] !== undefined || /^f\d{1,2}$/.test(lowerKey);
+    const keyCode = KEY_CODES[lowerKey] !== undefined
+      ? KEY_CODES[lowerKey]
+      : (/^f\d{1,2}$/.test(lowerKey) ? 111 + parseInt(lowerKey.slice(1), 10) : keyPart.toUpperCase().charCodeAt(0));
+
+    let keyName;
+    if (isSpecial) {
+      const prettyMap = { esc: "Escape", del: "Delete", up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight", space: " " };
+      keyName = prettyMap[lowerKey] || (keyPart.charAt(0).toUpperCase() + keyPart.slice(1));
+    } else {
+      keyName = modifiers.shiftKey ? keyPart.toUpperCase() : keyPart.toLowerCase();
+    }
+
+    return {
+      key: keyName,
+      code: isSpecial ? keyName : (keyPart.length === 1 ? `Key${keyPart.toUpperCase()}` : keyName),
+      keyCode,
+      which: keyCode,
+      ...modifiers
+    };
+  }
+
+  function dispatchKeyCombo(target, parsed) {
+    const baseInit = {
+      key: parsed.key,
+      code: parsed.code,
+      keyCode: parsed.keyCode,
+      which: parsed.which,
+      ctrlKey: parsed.ctrlKey,
+      altKey: parsed.altKey,
+      shiftKey: parsed.shiftKey,
+      metaKey: parsed.metaKey,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      view: window
+    };
+
+    target.dispatchEvent(new KeyboardEvent("keydown", baseInit));
+    // keypress hanya relevan untuk karakter printable tanpa modifier fungsi
+    if (!parsed.ctrlKey && !parsed.metaKey && !parsed.altKey && parsed.key.length === 1) {
+      target.dispatchEvent(new KeyboardEvent("keypress", { ...baseInit, charCode: parsed.keyCode }));
+    }
+    target.dispatchEvent(new KeyboardEvent("keyup", baseInit));
+  }
+
+  // ─────────────────────────────────────────────────────
+  // HELPER: RESOLVE TARGET ELEMENT DARI BERBAGAI FORMAT
+  // ─────────────────────────────────────────────────────
+  function resolveTargetElement({ elementId, selector, fallbackText, value }, action) {
+    let cleanId = String(elementId || "").replace(/[@#\[\]eE\s]/g, "").trim();
+    let targetEl = activeElementsMap.get(Number(cleanId)) || document.querySelector(`[data-pesat-id="${cleanId}"]`);
+
+    if (targetEl && !isElementVisible(targetEl)) {
+      // Elemen ada di map tapi tak terlihat (halaman berubah) — coba re-scan ringan
+      targetEl = document.querySelector(`[data-pesat-id="${cleanId}"]`);
+    }
+
+    if (!targetEl && selector) {
+      try {
+        const found = document.querySelector(selector);
+        if (found && isElementVisible(found)) targetEl = found;
+      } catch (e) {}
+    }
+
+    if (!targetEl && (fallbackText || value)) {
+      targetEl = findElementByFuzzy(fallbackText || value, action);
+      if (targetEl) return { el: targetEl, usedFuzzy: true };
+    }
+
+    return { el: targetEl, usedFuzzy: false };
+  }
+
+  // ─────────────────────────────────────────────────────
+  // STANDARDIZED ACTION RESULT ENVELOPE (§ 34, 35, 71 PRD)
+  // ─────────────────────────────────────────────────────
+  function getQuickDOMFingerprint() {
+    try {
+      const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
+      const activeVal = document.activeElement instanceof HTMLInputElement ? document.activeElement.value.slice(0, 30) : "";
+      const childCount = document.body ? document.body.childElementCount : 0;
+      return `${window.location.href}|${document.title}|${childCount}|${activeTag}|${activeVal}`;
+    } catch (e) {
+      return `${window.location.href}|${Date.now()}`;
+    }
+  }
+
+  function makeActionResult({
+    success,
+    action = "",
+    observation = "",
+    stateChanged = false,
+    error = null,
+    errorType = null,
+    metadata = null,
+    durationMs = 0,
+    suggestion = null
+  }) {
+    const isOk = Boolean(success);
+    const obs = String(observation || error || (isOk ? "Aksi berhasil" : "Aksi gagal"));
+    return {
+      success: isOk,
+      action: action,
+      observation: obs,
+      message: obs, // backward compatibility
+      stateChanged: Boolean(stateChanged),
+      error: error ? String(error) : null,
+      errorType: isOk ? null : (errorType || "UNKNOWN_ERROR"),
+      metadata: metadata || null,
+      durationMs: Math.max(0, Math.round(durationMs)),
+      suggestion: suggestion || null
+    };
+  }
+
+  // ─────────────────────────────────────────────────────
   // SINGLE ACTION EXECUTOR
   // ─────────────────────────────────────────────────────
   async function executeSingleAction(actionData) {
+    const startTime = performance.now();
+    const beforeFp = getQuickDOMFingerprint();
+
+    try {
+      const rawRes = await executeSingleActionInternal(actionData);
+      const afterFp = getQuickDOMFingerprint();
+      const elapsed = performance.now() - startTime;
+      const changed = rawRes.stateChanged !== undefined ? rawRes.stateChanged : (beforeFp !== afterFp);
+
+      return makeActionResult({
+        success: rawRes.success,
+        action: actionData.action,
+        observation: rawRes.message || rawRes.observation,
+        stateChanged: changed,
+        error: rawRes.error,
+        errorType: rawRes.errorType,
+        metadata: rawRes.metadata,
+        durationMs: elapsed,
+        suggestion: rawRes.suggestion
+      });
+    } catch (unexpected) {
+      const elapsed = performance.now() - startTime;
+      return makeActionResult({
+        success: false,
+        action: actionData.action,
+        error: unexpected.message || "Unexpected execution error",
+        errorType: "UNKNOWN_ERROR",
+        durationMs: elapsed
+      });
+    }
+  }
+
+  async function executeSingleActionInternal(actionData) {
     const { action, value, pressEnter, scrollDirection } = actionData;
-    let cleanId = String(actionData.elementId || "").replace(/[@#\[\]eE\s]/g, "").trim();
 
     if (action === "scroll") {
       const distance = scrollDirection === "up" ? -500 : 500;
       window.scrollBy({ top: distance, behavior: "smooth" });
       await new Promise((r) => setTimeout(r, 500));
-      return { success: true, message: `Berhasil scroll ${scrollDirection || "down"}` };
+      return { success: true, message: `Berhasil scroll ${scrollDirection || "down"}`, stateChanged: true };
     }
 
     if (action === "navigate") {
       if (value && value.startsWith("http")) {
         window.location.href = value;
-        return { success: true, message: `Membuka URL: ${value}` };
+        return { success: true, message: `Membuka URL: ${value}`, stateChanged: true };
       }
-      return { success: false, error: "URL tidak valid. Format wajib: https://" };
+      return { success: false, error: "URL tidak valid. Format wajib: https://", errorType: "NAVIGATION_FAILED" };
     }
 
     if (action === "wait") {
       const waitMs = parseInt(value, 10) || 1000;
       await new Promise((r) => setTimeout(r, Math.min(waitMs, 5000)));
-      return { success: true, message: `Menunggu ${waitMs}ms` };
+      return { success: true, message: `Menunggu ${waitMs}ms`, stateChanged: false };
     }
 
-    // 1. Cari elemen langsung via ID aktif
+    // ── click_coords: klik koordinat piksel viewport (vision grounding) ──
+    if (action === "click_coords") {
+      const x = Number(actionData.x ?? (typeof actionData.coords === "object" ? actionData.coords?.x : NaN));
+      const y = Number(actionData.y ?? (typeof actionData.coords === "object" ? actionData.coords?.y : NaN));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return { success: false, error: "Koordinat x/y tidak valid untuk click_coords.", errorType: "TOOL_INVALID_ARGUMENT" };
+      }
+      const elAtPoint = document.elementFromPoint(x, y);
+      if (!elAtPoint) {
+        return { success: false, error: `Tidak ada elemen pada koordinat (${x}, ${y}).`, errorType: "ELEMENT_NOT_FOUND" };
+      }
+      const eventInit = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y };
+      elAtPoint.dispatchEvent(new PointerEvent("pointerdown", eventInit));
+      elAtPoint.dispatchEvent(new MouseEvent("mousedown", eventInit));
+      elAtPoint.dispatchEvent(new PointerEvent("pointerup", eventInit));
+      elAtPoint.dispatchEvent(new MouseEvent("mouseup", eventInit));
+      elAtPoint.dispatchEvent(new MouseEvent("click", eventInit));
+      if (elAtPoint instanceof HTMLElement) elAtPoint.click?.();
+      await new Promise((r) => setTimeout(r, 200));
+      return { success: true, message: `Klik koordinat (${x}, ${y}) pada <${elAtPoint.tagName.toLowerCase()}> berhasil.`, stateChanged: true };
+    }
+
+    // ── key_combo: kombinasi keyboard (aplikasi canvas & shortcut) ──
+    if (action === "key_combo") {
+      const parsed = parseKeyCombo(actionData.keys || actionData.key || value || "");
+      if (!parsed) {
+        return { success: false, error: `Format key_combo tidak valid: "${actionData.keys || value}"`, errorType: "TOOL_INVALID_ARGUMENT" };
+      }
+      let target = null;
+      if (actionData.elementId) {
+        const resolved = resolveTargetElement(actionData, "click");
+        target = resolved.el;
+      }
+      if (!target || !isElementVisible(target)) {
+        target = document.activeElement instanceof HTMLElement ? document.activeElement : document.body;
+      } else {
+        target.focus?.();
+      }
+
+      dispatchKeyCombo(target, parsed);
+
+      // Enter pada input berform → submit form (perilaku native)
+      if (parsed.key === "Enter" && !parsed.ctrlKey && !parsed.shiftKey && !parsed.altKey && !parsed.metaKey) {
+        const formEl = target.closest?.("form");
+        if (formEl) {
+          try {
+            if (typeof formEl.requestSubmit === "function") formEl.requestSubmit();
+          } catch (e) {
+            formEl.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+          }
+        }
+      }
+
+      await new Promise((r) => setTimeout(r, 150));
+      const comboStr = actionData.keys || actionData.key || value;
+      return { success: true, message: `Menekan kombinasi keyboard "${comboStr}" berhasil.`, stateChanged: true };
+    }
+
+    // ── paste_text: insert teks pada posisi kursor (Google Docs, Canvas, & Rich Editor friendly) ──
+    if (action === "paste_text") {
+      const text = String(value ?? actionData.text ?? "");
+      if (!text) return { success: false, error: "Teks kosong untuk paste_text.", errorType: "TOOL_INVALID_ARGUMENT" };
+
+      // 1. Penanganan Khusus Google Docs / Google Drive Editor
+      const isGoogleDocs = window.location.hostname.includes("docs.google.com");
+      if (isGoogleDocs) {
+        let docsInserted = false;
+        try {
+          // Cari iframe text event target Google Docs
+          const docIframe = document.querySelector(".docs-texteventtarget-iframe") ||
+            document.querySelector("iframe[class*='texteventtarget']");
+          if (docIframe) {
+            const iDoc = docIframe.contentDocument || docIframe.contentWindow?.document;
+            if (iDoc) {
+              const inputTarget = iDoc.querySelector("textarea, [contenteditable='true']") || iDoc.body;
+              if (inputTarget) {
+                inputTarget.focus?.();
+                const dt = new DataTransfer();
+                dt.setData("text/plain", text);
+                const pasteEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+                inputTarget.dispatchEvent(pasteEv);
+
+                try {
+                  const beforeInput = new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: text });
+                  inputTarget.dispatchEvent(beforeInput);
+                } catch (e) {}
+
+                try {
+                  iDoc.execCommand("insertText", false, text);
+                } catch (e) {}
+                docsInserted = true;
+              }
+            }
+          }
+
+          // Juga coba tempel pada editor canvas / appview
+          const appView = document.querySelector(".kix-appview-editor") || document.querySelector(".docs-editor") || document.body;
+          if (appView) {
+            appView.focus?.();
+            const dt2 = new DataTransfer();
+            dt2.setData("text/plain", text);
+            const pasteEv2 = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt2 });
+            appView.dispatchEvent(pasteEv2);
+            document.dispatchEvent(pasteEv2);
+          }
+        } catch (e) {
+          console.warn("[Pesat] Google Docs injection warning:", e);
+        }
+
+        // Salin ke clipboard sistem agar pengguna dapat menggunakan Ctrl+V bila diperlukan
+        try {
+          navigator.clipboard?.writeText?.(text);
+        } catch (e) {}
+
+        showReadingHUD(`✓ Teks disisipkan ke Google Dokumen (${text.length} karakter)`, true);
+        await new Promise((r) => setTimeout(r, 300));
+        return {
+          success: true,
+          message: `Berhasil menempelkan copywriting (${text.length} karakter) ke Google Dokumen.`,
+          stateChanged: true
+        };
+      }
+
+      // 2. Penanganan Standar Form & ContentEditable
+      let target = null;
+      if (actionData.elementId) {
+        const resolved = resolveTargetElement(actionData, "type");
+        target = resolved.el;
+      }
+      if (!target) {
+        target = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+          ? document.activeElement
+          : null;
+      }
+
+      let inserted = false;
+      if (target) {
+        target.focus?.();
+        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+          const start = target.selectionStart ?? target.value.length;
+          const end = target.selectionEnd ?? target.value.length;
+          const newVal = target.value.slice(0, start) + text + target.value.slice(end);
+          setNativeInputValue(target, newVal);
+          inserted = true;
+        } else if (target.isContentEditable) {
+          try {
+            document.execCommand("insertText", false, text);
+            inserted = target.innerText.includes(text.slice(0, 20));
+          } catch (e) {}
+          if (!inserted) {
+            target.innerText = (target.innerText || "") + text;
+            target.dispatchEvent(new Event("input", { bubbles: true }));
+            inserted = true;
+          }
+        } else {
+          const editable = target.querySelector?.("textarea, [contenteditable='true']");
+          if (editable) {
+            editable.focus?.();
+            try {
+              document.execCommand("insertText", false, text);
+              inserted = true;
+            } catch (e) {}
+          }
+        }
+
+        // Coba synthetic ClipboardEvent / beforeinput pada target
+        if (!inserted) {
+          try {
+            const dt = new DataTransfer();
+            dt.setData("text/plain", text);
+            const pasteEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+            target.dispatchEvent(pasteEv);
+            inserted = true;
+          } catch (e) {}
+        }
+      }
+
+      // 3. Fallback Universal Clipboard Injection
+      try {
+        navigator.clipboard?.writeText?.(text);
+        inserted = true;
+      } catch (e) {}
+
+      showReadingHUD(`✓ Teks berhasil disisipkan (${text.length} karakter)`, true);
+      await new Promise((r) => setTimeout(r, 200));
+      return { success: true, message: `Berhasil menyisipkan teks (${text.length} karakter).`, stateChanged: true };
+    }
+
+    // ── hover ──
+    if (action === "hover") {
+      const { el: targetEl, usedFuzzy } = resolveTargetElement(actionData, "click");
+      if (!targetEl) return { success: false, error: `Elemen hover [${actionData.elementId || "?"}] tidak ditemukan.`, errorType: "ELEMENT_NOT_FOUND", suggestion: "scroll" };
+      const rect = targetEl.getBoundingClientRect();
+      const init = {
+        bubbles: true, cancelable: true, view: window,
+        clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2
+      };
+      targetEl.dispatchEvent(new MouseEvent("mouseover", init));
+      targetEl.dispatchEvent(new PointerEvent("pointermove", init));
+      targetEl.dispatchEvent(new MouseEvent("mousemove", init));
+      await new Promise((r) => setTimeout(r, parseInt(actionData.settleMs, 10) || 400));
+      return { success: true, message: `Hover pada [${actionData.elementId}] berhasil${usedFuzzy ? " (fuzzy match)" : ""}.`, stateChanged: true };
+    }
+
+    // ── drag & drop ──
+    if (action === "drag" || action === "drag_to") {
+      const srcResolved = resolveTargetElement({ elementId: actionData.fromElementId || actionData.elementId, ...actionData }, "click");
+      const dstResolved = resolveTargetElement({ elementId: actionData.toElementId || actionData.target, ...actionData }, "click");
+      const src = srcResolved.el;
+      const dst = dstResolved.el;
+      if (!src || !dst) {
+        return { success: false, error: `Sumber/target drag tidak ditemukan (src: ${actionData.fromElementId || actionData.elementId}, dst: ${actionData.toElementId || actionData.target}).`, errorType: "ELEMENT_NOT_FOUND" };
+      }
+
+      try {
+        const dt = new DataTransfer();
+        const dragStart = new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: dt });
+        src.dispatchEvent(dragStart);
+        dst.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
+        dst.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
+        src.dispatchEvent(new DragEvent("dragend", { bubbles: true, cancelable: true, dataTransfer: dt }));
+        await new Promise((r) => setTimeout(r, 300));
+        return { success: true, message: `Drag dari [${actionData.fromElementId || actionData.elementId}] ke [${actionData.toElementId || actionData.target}] berhasil (HTML5).`, stateChanged: true };
+      } catch (e) {}
+
+      const sr = src.getBoundingClientRect();
+      const dr = dst.getBoundingClientRect();
+      const seq = (type, x, y, el) =>
+        el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }));
+      seq("mousedown", sr.left + sr.width / 2, sr.top + sr.height / 2, src);
+      for (let p = 0; p <= 5; p++) {
+        const x = sr.left + (dr.left - sr.left) * (p / 5) + dr.width / 2 * (p / 5);
+        const y = sr.top + (dr.top - sr.top) * (p / 5) + dr.height / 2 * (p / 5);
+        document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }));
+        await new Promise((r) => setTimeout(r, 40));
+      }
+      seq("mouseup", dr.left + dr.width / 2, dr.top + dr.height / 2, dst);
+      return { success: true, message: `Drag dari [${actionData.fromElementId || actionData.elementId}] ke [${actionData.toElementId || actionData.target}] berhasil (mouse sim).`, stateChanged: true };
+    }
+
+    // ── upload_file ──
+    if (action === "upload_file") {
+      let inputEl = null;
+      if (actionData.elementId) {
+        const resolved = resolveTargetElement(actionData, "click");
+        if (resolved.el && (resolved.el instanceof HTMLInputElement && resolved.el.type === "file")) inputEl = resolved.el;
+      }
+      if (!inputEl) {
+        inputEl = document.querySelector("input[type='file']");
+      }
+      if (!inputEl) {
+        return { success: false, error: "Tidak ditemukan input[type=file] di halaman untuk upload.", errorType: "ELEMENT_NOT_FOUND" };
+      }
+
+      const fileName = actionData.fileName || "upload.txt";
+      const mime = actionData.mimeType || "text/plain";
+      let file;
+      if (actionData.contentBase64) {
+        const bin = atob(actionData.contentBase64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        file = new File([bytes], fileName, { type: mime });
+      } else {
+        file = new File([String(actionData.contentText ?? "")], fileName, { type: mime });
+      }
+
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      inputEl.files = dt.files;
+      inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+      inputEl.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 300));
+      return { success: true, message: `File "${fileName}" berhasil di-attach ke form upload.`, stateChanged: true };
+    }
+
+    // ═══ Aksi yang butuh target elemen (click/type/select/press_key) ═══
+    let cleanId = String(actionData.elementId || "").replace(/[@#\[\]eE\s]/g, "").trim();
+
     let targetEl = activeElementsMap.get(Number(cleanId)) || document.querySelector(`[data-pesat-id="${cleanId}"]`);
 
-    // 2. Auto-Waiting: Jika elemen belum muncul (misal sedang loading render SPA), tunggu hingga 3 detik
+    // Auto-Waiting: tunggu hingga 3 detik jika elemen belum muncul (SPA render)
     if (!targetEl) {
       const waitStart = Date.now();
       while (Date.now() - waitStart < 3000) {
@@ -609,7 +1403,6 @@
       }
     }
 
-    // 3. Fallback Selector: Cari via selector jika diberikan
     if (!targetEl && actionData.selector) {
       try {
         const foundBySelector = document.querySelector(actionData.selector);
@@ -619,7 +1412,6 @@
       } catch (e) {}
     }
 
-    // 4. Fallback Fuzzy Text / Aria-label: Cari via kecocokan teks
     let usedFuzzy = false;
     if (!targetEl) {
       const hint = actionData.fallbackText || value || String(cleanId);
@@ -633,22 +1425,37 @@
       return {
         success: false,
         error: `Elemen [@e${cleanId || "?"}] tidak ditemukan di layar setelah menunggu.`,
+        errorType: "ELEMENT_NOT_FOUND",
         suggestion: "scroll"
       };
     }
 
-    // Periksa Occlusion (apakah elemen tertutup modal / banner)
     const occlusion = checkOcclusion(targetEl);
-    if (occlusion.covered) {
-      console.warn(`[Pesat] Target tertutup oleh ${occlusion.coveredBy}`);
+    if (occlusion.covered && !actionData.force) {
+      // Peringatan occlusion tapi tetap coba interaksi jika klik
     }
 
-    // Efek visual glow
     const oldOutline = targetEl.style.outline;
-    const glowColor = usedFuzzy ? "#f59e0b" : "#10b981";
-    targetEl.style.outline = `3px solid ${glowColor}`;
+    const oldShadow = targetEl.style.boxShadow;
+    const oldTransition = targetEl.style.transition;
+    const glowColor = usedFuzzy ? "#f59e0b" : "#38bdf8";
+
+    targetEl.style.transition = "outline 0.2s ease, box-shadow 0.2s ease";
+    targetEl.style.outline = `2.5px solid ${glowColor}`;
+    targetEl.style.boxShadow = `0 0 16px ${glowColor}66`;
     targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
-    await new Promise((r) => setTimeout(r, 250));
+
+    const elLabel = getAccessibleName(targetEl) || getSemanticRole(targetEl) || "";
+    showReadingHUD(`🎯 Target #${cleanId}: ${action} ${elLabel ? `("${elLabel.slice(0, 26)}")` : ""}`);
+    await new Promise((r) => setTimeout(r, 260));
+
+    const restoreOutline = () => {
+      setTimeout(() => {
+        targetEl.style.outline = oldOutline;
+        targetEl.style.boxShadow = oldShadow;
+        targetEl.style.transition = oldTransition;
+      }, 1000);
+    };
 
     const fuzzyNote = usedFuzzy ? " (fuzzy match)" : "";
     const coveredNote = occlusion.covered ? ` [Peringatan: tertutup ${occlusion.coveredBy}]` : "";
@@ -657,7 +1464,6 @@
       if (action === "click") {
         targetEl.focus();
 
-        // Rantai event lengkap pointer + mouse untuk framework modern
         const eventInit = { bubbles: true, cancelable: true, view: window };
         targetEl.dispatchEvent(new PointerEvent("pointerdown", eventInit));
         targetEl.dispatchEvent(new MouseEvent("mousedown", eventInit));
@@ -665,8 +1471,8 @@
         targetEl.dispatchEvent(new MouseEvent("mouseup", eventInit));
         targetEl.click();
 
-        setTimeout(() => { targetEl.style.outline = oldOutline; }, 1000);
-        return { success: true, message: `Klik [@e${cleanId}] berhasil${fuzzyNote}${coveredNote}.` };
+        restoreOutline();
+        return { success: true, message: `Klik [@e${cleanId}] berhasil${fuzzyNote}${coveredNote}.`, stateChanged: true };
       }
 
       if (action === "type" || action === "fill") {
@@ -682,12 +1488,13 @@
 
         const isPassword = targetEl instanceof HTMLInputElement && targetEl.type === "password";
         const displayVal = isPassword ? "••••••••" : value;
-        setTimeout(() => { targetEl.style.outline = oldOutline; }, 1000);
-        return { success: true, message: `Mengisi "${displayVal}" pada [@e${cleanId}] berhasil${fuzzyNote}.` };
+        restoreOutline();
+        return { success: true, message: `Mengisi "${displayVal}" pada [@e${cleanId}] berhasil${fuzzyNote}.`, stateChanged: true };
       }
 
       if (action === "select" || action === "select_option") {
         targetEl.focus();
+        restoreOutline();
         if (targetEl instanceof HTMLSelectElement) {
           let optionFound = false;
           const targetVal = String(value || "").toLowerCase().trim();
@@ -707,53 +1514,43 @@
             success: optionFound,
             message: optionFound
               ? `Select dropdown [@e${cleanId}] ke "${targetEl.options[targetEl.selectedIndex].text}".`
-              : `Pilihan "${value}" tidak ditemukan pada dropdown [@e${cleanId}].`
+              : `Pilihan "${value}" tidak ditemukan pada dropdown [@e${cleanId}].`,
+            errorType: optionFound ? null : "ELEMENT_NOT_FOUND",
+            stateChanged: optionFound
           };
         }
+        return { success: false, error: `Target [@e${cleanId}] bukan elemen <select>.`, errorType: "TOOL_INVALID_ARGUMENT" };
       }
 
       if (action === "press_key" || action === "press_keyboard" || action === "key_press") {
         targetEl.focus();
+        restoreOutline();
         const keyName = actionData.key || value || "Enter";
-        const isEnter = keyName.toLowerCase() === "enter";
-        const keyCodeVal = isEnter ? 13 : (keyName.toLowerCase() === "tab" ? 9 : (keyName.toLowerCase() === "escape" ? 27 : 0));
-
-        const keyEventInit = {
-          key: keyName,
-          code: isEnter ? "Enter" : keyName,
-          keyCode: keyCodeVal,
-          which: keyCodeVal,
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          view: window
-        };
-
-        targetEl.dispatchEvent(new KeyboardEvent("keydown", keyEventInit));
-        targetEl.dispatchEvent(new KeyboardEvent("keypress", keyEventInit));
-        targetEl.dispatchEvent(new KeyboardEvent("keyup", keyEventInit));
-
-        if (isEnter) {
-          if (targetEl.form) {
-            try {
-              if (typeof targetEl.form.requestSubmit === "function") {
-                targetEl.form.requestSubmit();
-              } else {
-                targetEl.form.submit();
+        const parsed = parseKeyCombo(keyName);
+        if (parsed) {
+          dispatchKeyCombo(targetEl, parsed);
+          if (parsed.key === "Enter") {
+            if (targetEl.form) {
+              try {
+                if (typeof targetEl.form.requestSubmit === "function") {
+                  targetEl.form.requestSubmit();
+                } else {
+                  targetEl.form.submit();
+                }
+              } catch (e) {
+                targetEl.form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
               }
-            } catch (e) {
-              targetEl.form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
             }
           }
+          setTimeout(() => { targetEl.style.outline = oldOutline; }, 1000);
+          return { success: true, message: `Menekan tombol '${keyName}' pada [@e${cleanId}] berhasil${fuzzyNote}.`, stateChanged: true };
         }
-
-        setTimeout(() => { targetEl.style.outline = oldOutline; }, 1000);
-        return { success: true, message: `Menekan tombol '${keyName}' pada [@e${cleanId}] berhasil${fuzzyNote}.` };
+        return { success: false, error: `Nama tombol tidak dikenali: '${keyName}'`, errorType: "TOOL_INVALID_ARGUMENT" };
       }
 
-      return { success: false, error: `Aksi "${action}" tidak didukung.` };
+      return { success: false, error: `Aksi "${action}" tidak didukung.`, errorType: "TOOL_INVALID_ARGUMENT" };
     } catch (err) {
-      return { success: false, error: `Error eksekusi: ${err.message}` };
+      return { success: false, error: `Error eksekusi: ${err.message}`, errorType: "ELEMENT_NOT_INTERACTABLE" };
     }
   }
 
@@ -763,7 +1560,6 @@
   async function executeAction(actionData) {
     if (!actionData) return { success: false, error: "Data aksi kosong" };
 
-    // Dukung batched actions array ala agent-browser
     if (Array.isArray(actionData.actions) && actionData.actions.length > 0) {
       const results = [];
       for (const act of actionData.actions) {
@@ -773,6 +1569,7 @@
           return {
             success: false,
             error: `Gagal pada batch step: ${res.error}`,
+            stateChanged: results.some((item) => item.stateChanged),
             batchResults: results
           };
         }
@@ -781,6 +1578,7 @@
       return {
         success: true,
         message: `Berhasil mengeksekusi ${results.length} aksi batch.`,
+        stateChanged: results.some((item) => item.stateChanged),
         batchResults: results
       };
     }
@@ -811,6 +1609,18 @@
 
     if (request.type === "CLEAR_MARKERS") {
       clearVisualMarkers();
+      sendResponse({ success: true });
+      return true;
+    }
+
+    if (request.type === "LOCK_PAGE") {
+      lockPageShield(request.message);
+      sendResponse({ success: true });
+      return true;
+    }
+
+    if (request.type === "UNLOCK_PAGE") {
+      unlockPageShield();
       sendResponse({ success: true });
       return true;
     }

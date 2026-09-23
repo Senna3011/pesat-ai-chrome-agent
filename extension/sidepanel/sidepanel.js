@@ -1,7 +1,12 @@
-// sidepanel.js - Pesat AI Browser Agent (Modern UI, Marked.js, Action Indicator, & Responsive Tables)
+// sidepanel.js - Pesat AI Browser Agent v5.0 (Computer-Use Grade)
+// Task State Machine: Planner → Navigator → Validator dengan scratchpad persisten,
+// confirmation gate, artifacts, vision grounding, tab management, dan Google Skills.
+// (PLAN-COMPUTER-USE.md Phase 1, 3, 6, 7)
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // DOM Elements
+  // ═══════════════════════════════════════════════════
+  // DOM ELEMENTS
+  // ═══════════════════════════════════════════════════
   const chatArea = document.getElementById("chatArea");
   const promptInput = document.getElementById("promptInput");
   const btnSend = document.getElementById("btnSend");
@@ -12,156 +17,268 @@ document.addEventListener("DOMContentLoaded", async () => {
   const stopBar = document.getElementById("stopBar");
   const btnStopAgent = document.getElementById("btnStopAgent");
 
-  // Status Indicator Element (Floating UX Loader)
   const agentStatusIndicator = document.getElementById("agentStatusIndicator");
   const statusIndicatorText = document.getElementById("statusIndicatorText");
 
-  // Header Action Buttons
   const btnNewChat = document.getElementById("btnNewChat");
   const btnHistory = document.getElementById("btnHistory");
   const btnSettings = document.getElementById("btnSettings");
 
-  // History Drawer Elements
   const historyDrawer = document.getElementById("historyDrawer");
   const btnCloseHistory = document.getElementById("btnCloseHistory");
   const btnDrawerNewChat = document.getElementById("btnDrawerNewChat");
   const sessionList = document.getElementById("sessionList");
   const btnClearHistory = document.getElementById("btnClearHistory");
 
-  // Settings Panel Elements
   const settingsPanel = document.getElementById("settingsPanel");
   const btnCloseSettings = document.getElementById("btnCloseSettings");
   const btnCancelSettings = document.getElementById("btnCancelSettings");
   const btnSaveSettings = document.getElementById("btnSaveSettings");
   const apiUrlInput = document.getElementById("apiUrlInput");
+  const apiFormatSelect = document.getElementById("apiFormatSelect");
   const apiKeyInput = document.getElementById("apiKeyInput");
+  const modelNameInput = document.getElementById("modelNameInput");
+  const settingsSessionOnly = document.getElementById("settingsSessionOnly");
+  const btnSettingsTest = document.getElementById("btnSettingsTest");
+  const settingsTestResult = document.getElementById("settingsTestResult");
+  const btnToggleSettingsKey = document.getElementById("btnToggleSettingsKey");
+  const statTodayRequests = document.getElementById("statTodayRequests");
+  const statTodayTokens = document.getElementById("statTodayTokens");
+  const googleClientIdInput = document.getElementById("googleClientIdInput");
+  const btnGoogleConnect = document.getElementById("btnGoogleConnect");
+  const googleStatusEl = document.getElementById("googleStatus");
+  const googleAlertBox = document.getElementById("googleAlertBox");
+  const btnToggleGoogleGuide = document.getElementById("btnToggleGoogleGuide");
+  const googleGuideBox = document.getElementById("googleGuideBox");
+  const displayRedirectUri = document.getElementById("displayRedirectUri");
+  const btnCopyRedirectUri = document.getElementById("btnCopyRedirectUri");
 
-  // Quick Action Chips
+  // Onboarding Wizard Elements (BYOK First-Run)
+  const onboardingModal = document.getElementById("onboardingModal");
+  const wizardBaseUrl = document.getElementById("wizardBaseUrl");
+  const wizardApiFormat = document.getElementById("wizardApiFormat");
+  const wizardApiKey = document.getElementById("wizardApiKey");
+  const wizardSessionOnly = document.getElementById("wizardSessionOnly");
+  const btnWizardTest = document.getElementById("btnWizardTest");
+  const wizardTestResult = document.getElementById("wizardTestResult");
+  const btnWizardSave = document.getElementById("btnWizardSave");
+  const btnToggleWizardKey = document.getElementById("btnToggleWizardKey");
+  const wizardModelItemsList = document.getElementById("wizardModelItemsList");
+  const settingsModelItemsList = document.getElementById("settingsModelItemsList");
+  const btnWizardAddModel = document.getElementById("btnWizardAddModel");
+  const btnSettingsAddModel = document.getElementById("btnSettingsAddModel");
+  const wizardProviderToggle = document.getElementById("wizardProviderToggle");
+  const settingsProviderToggle = document.getElementById("settingsProviderToggle");
+  const btnWizardMore = document.getElementById("btnWizardMore");
+  const btnWizardClose = document.getElementById("btnWizardClose");
+
+  // Composer Context & File Attachment Elements (§ 5, 6, 11, 79, 80 PRD)
+  const composerChipsTray = document.getElementById("composerChipsTray");
+  const mentionPicker = document.getElementById("mentionPicker");
+  const mentionPickerList = document.getElementById("mentionPickerList");
+  const btnAttachFile = document.getElementById("btnAttachFile");
+  const btnTriggerMention = document.getElementById("btnTriggerMention");
+  const fileInput = document.getElementById("fileInput");
+  const dropOverlay = document.getElementById("dropOverlay");
+
+  const quickChipsContainer = document.getElementById("quickChipsContainer");
+  const btnSlideChipsLeft = document.getElementById("btnSlideChipsLeft");
+  const btnSlideChipsRight = document.getElementById("btnSlideChipsRight");
   const chipSummarize = document.getElementById("chipSummarize");
   const chipExtract = document.getElementById("chipExtract");
   const chipAutoFill = document.getElementById("chipAutoFill");
+  const chipAuditSecurity = document.getElementById("chipAuditSecurity");
+  const chipSeoAnalysis = document.getElementById("chipSeoAnalysis");
+  const chipCopyText = document.getElementById("chipCopyText");
   const chipToggleMarkers = document.getElementById("chipToggleMarkers");
+  const btnComposerModel = document.getElementById("btnComposerModel");
+  const composerModelName = document.getElementById("composerModelName");
 
-  // State
+  // ═══════════════════════════════════════════════════
+  // KONFIGURASI TERPUSAT & BYOK STATE
+  // ═══════════════════════════════════════════════════
+  const CFG = globalThis.PESAT_CONFIG || {
+    DEFAULT_API_BASE_URL: "https://api.pesatrouter.com/v1",
+    DEFAULT_MODEL: "pesat-flash",
+    DEFAULT_API_FORMAT: "openai-chat",
+    MAX_STEPS: 30,
+    MAX_RETRIES_PER_SUBTASK: 3,
+    MAX_REPLANS: 2,
+    SCRATCHPAD_TAIL: 8
+  };
+
+  // ═══════════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════════
   let currentSessionId = null;
   let sessions = [];
   let isAgentRunning = false;
   let shouldStopAgent = false;
   let markersVisible = false;
   let activeAbortController = null;
+  let visionEnabled = true;
+  let googleConnected = false;
+  let storedSettings = {
+    apiBaseUrl: CFG.DEFAULT_API_BASE_URL,
+    apiFormat: CFG.DEFAULT_API_FORMAT,
+    apiKey: "",
+    modelName: CFG.DEFAULT_MODEL,
+    sessionOnly: false,
+    googleClientId: ""
+  };
 
-  // Initialize
-  await loadSettings();
-  await loadSessions();
-  attachSuggestionListeners();
-  appendLog("Sesi ekstensi diaktifkan oleh pengguna.", "INFO", { timestamp: Date.now() }, "SESSION_OPEN");
+  // Context & File Ingestion State (§ 6, 10, 11 PRD)
+  let attachedContextSources = []; // Array of ContextSource
+  let mentionQuery = "";
+  let mentionActiveIndex = 0;
+  let currentFilteredMentionSources = [];
 
-  // ----------------------------------------------------
-  // 4. Markdown & Responsive Table Parser (marked.js Integration)
-  // ----------------------------------------------------
-  function parseMarkdown(text) {
-    if (!text) return "";
+  // Task State Machine (Phase 1)
+  let activeTask = null;
+  let taskCardMsgIndex = -1;
+  const TASK_STORAGE_KEY = "pesat_active_task";
 
-    let rawHtml = "";
+  // Resolver interaktif (ask_user / confirmation)
+  let askUserResolver = null;
+  let confirmResolver = null;
 
-    // 1. Coba parse dengan marked.js
-    if (typeof marked !== "undefined" && typeof marked.parse === "function") {
-      try {
-        rawHtml = marked.parse(text, { breaks: true, gfm: true });
-      } catch (err) {
-        console.warn("[Pesat] marked.parse failed, falling back:", err);
-        rawHtml = fallbackMarkdown(text);
-      }
+  // Model List State matching Screenshot_17.jpg
+  let modelsList = [
+    { id: "pesat-lite", name: "pesat-lite", context: "1M", enabled: true },
+    { id: "pesat-pro", name: "pesat-pro", context: "1M", hasInfo: true, enabled: true },
+    { id: "pesat-flash", name: "pesat-flash", context: "1M", enabled: true }
+  ];
+  let activeModelId = "pesat-flash";
+
+  // Execution Mode State: "full" (auto-run) | "planning" (waits for user approval after planning)
+  let currentAgentMode = "full";
+  let planApprovalResolver = null;
+  const btnAgentMode = document.getElementById("btnAgentMode");
+  const agentModeIcon = document.getElementById("agentModeIcon");
+  const agentModeText = document.getElementById("agentModeText");
+
+  function updateAgentModeUI() {
+    if (!btnAgentMode) return;
+    if (currentAgentMode === "planning") {
+      btnAgentMode.className = "composer-mode-pill mode-planning";
+      if (agentModeIcon) agentModeIcon.textContent = "📋";
+      if (agentModeText) agentModeText.textContent = "Plan";
+      btnAgentMode.title = "Mode: Planning (Wajib persetujuan user setelah rencana dibuat). Klik untuk beralih ke Full Mode.";
     } else {
-      rawHtml = fallbackMarkdown(text);
+      btnAgentMode.className = "composer-mode-pill";
+      if (agentModeIcon) agentModeIcon.textContent = "⚡";
+      if (agentModeText) agentModeText.textContent = "Full";
+      btnAgentMode.title = "Mode: Full (Eksekusi otomatis sampai selesai). Klik untuk beralih ke Planning Mode.";
     }
-
-    // 2. Wrap semua <table> ke dalam <div class="table-container"> (Mencegah potong horizontal)
-    rawHtml = wrapTablesWithResponsiveContainer(rawHtml);
-
-    return rawHtml;
   }
 
-  // Helper Fallback Markdown jika marked.js tidak tersedia
-  function fallbackMarkdown(text) {
-    let html = escapeHtml(text);
-
-    // Code blocks
-    html = html.replace(/```([a-z]*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // Bold
-    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    // Italic
-    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    // Headers
-    html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-    html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-    html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-    // Bullet lists
-    html = html.replace(/^\s*[\*\-]\s+(.*$)/gim, '<li>$1</li>');
-    html = html.replace(/(<li>.*<\/li>)/gim, '<ul>$1</ul>');
-    html = html.replace(/<\/ul>\s*<ul>/g, '');
-
-    // Markdown Tables manual parser
-    if (html.includes('|')) {
-      const lines = html.split('\n');
-      let inTable = false;
-      let isFirstRow = true;
-      let tableHtml = '';
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (line.startsWith('|') && line.endsWith('|')) {
-          if (!inTable) {
-            inTable = true;
-            isFirstRow = true;
-            tableHtml += '<table>';
-          }
-          if (line.includes('---') || line.includes(':---') || line.includes('---:')) {
-            isFirstRow = false;
-            continue;
-          }
-
-          const cells = line.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-          const tag = isFirstRow ? 'th' : 'td';
-          tableHtml += '<tr>' + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('') + '</tr>';
-          if (isFirstRow) isFirstRow = false;
-        } else {
-          if (inTable) {
-            inTable = false;
-            tableHtml += '</table>';
-          }
-          tableHtml += (line ? line + '<br>' : '<br>');
-        }
-      }
-      if (inTable) tableHtml += '</table>';
-      html = tableHtml;
-    } else {
-      html = html.replace(/\n/g, '<br>');
-    }
-
-    return html;
-  }
-
-  // Helper: Pastikan setiap <table> dibungkus .table-container
-  function wrapTablesWithResponsiveContainer(html) {
-    if (!html.includes("<table")) return html;
-
-    // Jika sudah di dalam table-container, hindari double wrap
-    if (html.includes('class="table-container"')) return html;
-
-    return html.replace(/(<table[\s\S]*?<\/table>)/gi, (match) => {
-      return `<div class="table-container">${match}</div>`;
+  if (btnAgentMode) {
+    btnAgentMode.addEventListener("click", async () => {
+      currentAgentMode = currentAgentMode === "full" ? "planning" : "full";
+      updateAgentModeUI();
+      await chrome.storage.local.set({ pesat_agent_mode: currentAgentMode });
+      appendLog(`⚙️ Mode eksekusi dialihkan ke: ${currentAgentMode === 'planning' ? 'Planning Mode (Wajib Approval Rencana)' : 'Full Mode (Otomatis Selesai)'}`);
     });
   }
 
-  // ----------------------------------------------------
-  // 2. Status Indicator Helper
-  // ----------------------------------------------------
-  function showStatusIndicator(text) {
+  // ═══════════════════════════════════════════════════
+  // MARKDOWN & HTML RENDERER (Clean Semantic Parser + Responsive Tables)
+  // ═══════════════════════════════════════════════════
+  function parseMarkdown(text) {
+    if (!text) return "";
+
+    // 1. Preserve and protect fenced code blocks
+    const codeBlocks = [];
+    let s = String(text).replace(/```([a-z0-9_-]*)\n([\s\S]*?)```/gi, (_, lang, code) => {
+      const idx = codeBlocks.length;
+      codeBlocks.push(`<pre><code class="language-${lang}">${escapeHtml(code)}</code></pre>`);
+      return `__CODE_BLOCK_${idx}__`;
+    });
+
+    // 2. Protect inline code
+    const inlineCodes = [];
+    s = s.replace(/`([^`\n]+)`/g, (_, code) => {
+      const idx = inlineCodes.length;
+      inlineCodes.push(`<code>${escapeHtml(code)}</code>`);
+      return `__INLINE_CODE_${idx}__`;
+    });
+
+    // 3. Headers (h6 to h1, with optional leading whitespace)
+    s = s.replace(/^\s*######\s+(.*$)/gim, "<h6>$1</h6>");
+    s = s.replace(/^\s*#####\s+(.*$)/gim, "<h5>$1</h5>");
+    s = s.replace(/^\s*####\s+(.*$)/gim, "<h4>$1</h4>");
+    s = s.replace(/^\s*###\s+(.*$)/gim, "<h3>$1</h3>");
+    s = s.replace(/^\s*##\s+(.*$)/gim, "<h2>$1</h2>");
+    s = s.replace(/^\s*#\s+(.*$)/gim, "<h1>$1</h1>");
+
+    // 4. Unordered & Ordered lists
+    s = s.replace(/^\s*[\*\-]\s+(.*$)/gim, "<li>$1</li>");
+    s = s.replace(/(<li>.*<\/li>)/gim, "<ul>$1</ul>");
+    s = s.replace(/<\/ul>\s*<ul>/g, "");
+
+    s = s.replace(/^\s*\d+\.\s+(.*$)/gim, "<oli>$1</oli>");
+    s = s.replace(/(<oli>.*<\/oli>)/gim, "<ol>$1</ol>");
+    s = s.replace(/<\/ol>\s*<ol>/g, "");
+    s = s.replace(/<oli>/g, "<li>").replace(/<\/oli>/g, "</li>");
+
+    // 5. Bold & Italic
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+
+    // 6. Markdown Tables
+    if (s.includes("|")) {
+      const lines = s.split("\n");
+      let inTable = false;
+      let isFirstRow = true;
+      let res = "";
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith("|") && line.endsWith("|")) {
+          if (!inTable) { inTable = true; isFirstRow = true; res += "<table>"; }
+          if (line.includes("---")) { isFirstRow = false; continue; }
+          const cells = line.split("|").filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+          const tag = isFirstRow ? "th" : "td";
+          res += "<tr>" + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join("") + "</tr>";
+          if (isFirstRow) isFirstRow = false;
+        } else {
+          if (inTable) { inTable = false; res += "</table>\n"; }
+          res += line + "\n";
+        }
+      }
+      if (inTable) res += "</table>\n";
+      s = res;
+    }
+
+    // 7. Paragraphs / linebreaks (preserving block HTML)
+    const blockTags = /<\/?(h[1-6]|ul|ol|li|table|thead|tbody|tr|th|td|div|p|pre|blockquote|hr|button|span|img)/i;
+    s = s.split("\n").map(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return "<br>";
+      if (blockTags.test(trimmed)) return trimmed;
+      return trimmed + "<br>";
+    }).join("\n");
+
+    // 8. Restore code blocks & inline code
+    inlineCodes.forEach((c, idx) => { s = s.replace(`__INLINE_CODE_${idx}__`, c); });
+    codeBlocks.forEach((c, idx) => { s = s.replace(`__CODE_BLOCK_${idx}__`, c); });
+
+    // 9. Strip dangerous scripts & event attributes
+    s = s.replace(/<script[\s\S]*?<\/script>/gi, "");
+    s = s.replace(/<iframe[\s\S]*?<\/iframe>/gi, "");
+    s = s.replace(/\son\w+\s*=\s*(["\x27]).*?\1/gi, "");
+
+    // 10. Wrap tables in responsive containers
+    s = s.replace(/(<table[\s\S]*?<\/table>)/gi, `<div class="table-container">$1</div>`);
+
+    return s;
+  }
+
+  // ═══════════════════════════════════════════════════
+  // STATUS INDICATOR
+  // ═══════════════════════════════════════════════════
+  function showStatusIndicator() {
     if (agentStatusIndicator && statusIndicatorText) {
-      statusIndicatorText.textContent = text;
+      statusIndicatorText.textContent = "Sedang mengerjakan...";
       agentStatusIndicator.classList.remove("hidden");
     }
   }
@@ -172,16 +289,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // ----------------------------------------------------
-  // Session & History Management
-  // ----------------------------------------------------
+  // ═══════════════════════════════════════════════════
+  // SESSION & HISTORY MANAGEMENT
+  // ═══════════════════════════════════════════════════
   async function loadSessions() {
     const data = await chrome.storage.local.get(["agent_sessions", "current_session_id"]);
     sessions = data.agent_sessions || [];
     currentSessionId = data.current_session_id || null;
 
     if (!currentSessionId || !sessions.find(s => s.id === currentSessionId)) {
-      createNewSession();
+      createNewSession(true);
     } else {
       renderCurrentSession();
     }
@@ -189,7 +306,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function saveSessions() {
-    // Session Pruning: Batasi maksimum 30 sesi terbaru agar storage tidak overflow
     if (sessions.length > 30) {
       sessions = sessions.slice(0, 30);
     }
@@ -200,8 +316,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderSessionList();
   }
 
-  function createNewSession() {
-    // Pastikan state running selalu direset saat buka sesi baru
+  function createNewSession(silent = false) {
     if (activeAbortController) {
       try { activeAbortController.abort(); } catch (e) {}
       activeAbortController = null;
@@ -209,6 +324,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     setAgentRunning(false);
     hideStatusIndicator();
     shouldStopAgent = true;
+    cancelActiveTask("Pengguna memulai obrolan baru.");
 
     currentSessionId = "sess_" + Date.now();
     const newSession = {
@@ -221,7 +337,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     saveSessions();
     renderCurrentSession();
     historyDrawer.classList.add("hidden");
-    appendLog("Konteks obrolan baru dimulai.");
+    if (!silent) appendLog("Konteks obrolan baru dimulai.");
   }
 
   function getCurrentSession() {
@@ -237,7 +353,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     session.messages.forEach((msg, idx) => {
-      renderMessageBubble(msg, idx);
+      if (!msg.taskCard && !msg.multiAgent) renderMessageBubble(msg, idx);
     });
     chatArea.scrollTop = chatArea.scrollHeight;
   }
@@ -247,32 +363,35 @@ document.addEventListener("DOMContentLoaded", async () => {
       <div class="message assistant-message" id="welcomeMessage">
         <div class="message-bubble welcome-card">
           <div class="welcome-header">
-            <span class="welcome-badge">Pesat.AI</span>
-            <span class="welcome-title">Halo! Saya Pesat AI Agent ⚡</span>
+            <div class="welcome-logo-circle">⚡</div>
+            <div class="welcome-header-text">
+              <span class="welcome-title">Pesat Agent</span>
+              <span class="welcome-subtitle">Computer-Use AI Browser Assistant</span>
+            </div>
           </div>
           <p class="welcome-desc">
-            Asisten browser otonom cerdas dengan arsitektur Multi-Agent (Planner, Navigator, & Validator) untuk membantu otomasi web Anda secara presisi.
+            Beri tahu saya apa yang ingin Anda kerjakan di web ini. Gunakan <strong>@</strong> untuk merujuk tab peramban atau tombol <strong>📎</strong> untuk melampirkan dataset / dokumen.
           </p>
           <div class="welcome-suggestions">
-            <div class="suggestion-item" data-prompt="Tolong berikan ringkasan poin-poin utama dari isi konten halaman web ini dalam format Markdown yang rapi dengan bullet points.">
-              <span class="suggestion-icon">💡</span>
+            <div class="suggestion-item" data-prompt="Tolong buat ringkasan poin-poin penting dari isi konten halaman web ini.">
+              <span class="suggestion-icon">📄</span>
               <div class="suggestion-text">
-                <span class="suggestion-title">Rangkum web ini</span>
-                <span class="suggestion-sub">Ekstraksi poin-poin esensial konten</span>
+                <span class="suggestion-title">Rangkum Halaman</span>
+                <span class="suggestion-sub">Ekstraksi intisari artikel aktif</span>
               </div>
             </div>
-            <div class="suggestion-item" data-prompt="Tolong ekstrak data atau tabel penting yang ada pada halaman ini dan sajikan dalam format tabel Markdown.">
+            <div class="suggestion-item" data-prompt="Tolong ekstrak data atau tabel penting dari halaman ini dalam format tabel Markdown.">
               <span class="suggestion-icon">📊</span>
               <div class="suggestion-text">
-                <span class="suggestion-title">Ekstrak tabel</span>
-                <span class="suggestion-sub">Konversi data web ke tabel rapi</span>
+                <span class="suggestion-title">Ekstrak Tabel Data</span>
+                <span class="suggestion-sub">Konversi data ke tabel rapi</span>
               </div>
             </div>
-            <div class="suggestion-item" data-prompt="Tolong periksa kolom input atau formulir pada halaman ini, lalu pandu saya cara mengisinya.">
-              <span class="suggestion-icon">📝</span>
+            <div class="suggestion-item" data-prompt="Tuliskan skrip Python sederhana untuk memproses data dari web ini.">
+              <span class="suggestion-icon">💻</span>
               <div class="suggestion-text">
-                <span class="suggestion-title">Bantu isi formulir</span>
-                <span class="suggestion-sub">Otomasi pengisian field interaktif</span>
+                <span class="suggestion-title">Buat Skrip / Kode</span>
+                <span class="suggestion-sub">Hasilkan artefak kode yang siap diunduh</span>
               </div>
             </div>
           </div>
@@ -318,14 +437,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         <button class="session-delete" title="Hapus Sesi">🗑️</button>
       `;
 
-      item.querySelector(".session-info").addEventListener("click", () => {
+      item.querySelector(".session-info")?.addEventListener("click", () => {
         currentSessionId = sess.id;
         saveSessions();
         renderCurrentSession();
         historyDrawer.classList.add("hidden");
       });
 
-      item.querySelector(".session-delete").addEventListener("click", (e) => {
+      item.querySelector(".session-delete")?.addEventListener("click", (e) => {
         e.stopPropagation();
         deleteSession(sess.id);
       });
@@ -344,43 +463,87 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderCurrentSession();
   }
 
-  // ----------------------------------------------------
-  // Message Rendering & Multi-Agent UI Cards
-  // ----------------------------------------------------
-  function renderMessageBubble(msg, index) {
+  // ═══════════════════════════════════════════════════
+  // MESSAGE RENDERING (user / askUser / taskCard / confirmation / artifact / multiAgent / normal)
+  // ═══════════════════════════════════════════════════
+  function buildMessageNode(msg, index) {
     const isUser = msg.role === "user";
     const msgDiv = document.createElement("div");
     msgDiv.className = `message ${isUser ? "user-message" : "assistant-message"}`;
-    msgDiv.dataset.index = index;
+    msgDiv.setAttribute("data-index", index);
 
     let contentHtml = "";
 
     if (isUser) {
       contentHtml = `<div class="message-bubble">${escapeHtml(msg.content)}</div>`;
     } else if (msg.askUser) {
-      // Render Human-in-the-Loop Clarification Question & Interactive Option Chips
       const { question, options } = msg.askUser;
       let askHtml = `
         <div class="message-bubble">
           <div class="ask-user-container">
             <div class="ask-user-question">🤔 ${escapeHtml(question || msg.content)}</div>
       `;
-
-      if (Array.isArray(options) && options.length > 0) {
+      if (Array.isArray(options) && options.length > 0 && !msg.answered) {
         askHtml += `<div class="ask-user-options">`;
         options.forEach((opt) => {
           askHtml += `<button class="ask-user-option-btn" data-answer="${escapeHtml(opt)}">⚡ ${escapeHtml(opt)}</button>`;
         });
         askHtml += `</div>`;
+      } else if (msg.answered) {
+        askHtml += `<div style="font-size:12.5px;color:#34d399;margin-top:8px;">✔️ Dijawab: ${escapeHtml(msg.answered)}</div>`;
       }
-
       askHtml += `
           </div>
         </div>
       `;
       contentHtml = askHtml;
+    } else if (msg.confirmation) {
+      const c = msg.confirmation;
+      let confHtml = `
+        <div class="confirm-card">
+          <div class="confirm-title">🛡️ Konfirmasi Diperlukan — Aksi Berisiko</div>
+          <div style="font-size:13px;color:#cbd5e1;margin-bottom:8px;">${escapeHtml(c.description || "Aksi berikut akan dieksekusi:")}</div>
+          <div class="confirm-action-desc">${escapeHtml(c.detail || "")}</div>
+      `;
+      if (!c.resolved) {
+        confHtml += `
+          <div class="confirm-actions">
+            <button class="confirm-btn confirm-btn-allow" data-conf="once">✅ Izinkan Sekali</button>
+            <button class="confirm-btn confirm-btn-allow-all" data-conf="all">🔓 Izinkan semua di task ini</button>
+            <button class="confirm-btn confirm-btn-cancel" data-conf="cancel">⛔ Batalkan</button>
+          </div>
+        `;
+      } else {
+        confHtml += `<div style="font-size:12.5px;color:${c.approved ? "#34d399" : "#f87171"};">${c.approved ? "✔️ Disetujui pengguna" : "⛔ Ditolak pengguna"}</div>`;
+      }
+      confHtml += `</div>`;
+      contentHtml = confHtml;
+    } else if (msg.resumeTask) {
+      const rt = msg.resumeTask;
+      contentHtml = `
+        <div class="resume-banner">
+          <span>⏸️ Ada tugas yang belum selesai: <strong>${escapeHtml((rt.goal || "").substring(0, 80))}</strong></span>
+          <button class="confirm-btn confirm-btn-allow" data-resume-task="1">▶ Lanjutkan Task</button>
+        </div>
+      `;
+    } else if (msg.taskCard) {
+      contentHtml = renderTaskCardHtml(msg.taskCard);
+    } else if (msg.artifact) {
+      const a = msg.artifact;
+      contentHtml = `
+        <div class="artifact-card">
+          <div class="artifact-header">
+            <span class="artifact-name">${a.artifactType === "code" ? "💻" : a.artifactType === "table" ? "📊" : "📄"} ${escapeHtml(a.name || "artifact")}</span>
+            <div class="artifact-actions">
+              <button class="artifact-btn" data-artifact-act="copy">📋 Copy</button>
+              <button class="artifact-btn" data-artifact-act="download">⬇️ Unduh</button>
+              <button class="artifact-btn" data-artifact-act="paste" title="Tempel ke editor yang sedang fokus">⤴️ Tulis ke Editor</button>
+            </div>
+          </div>
+          <pre class="artifact-body">${escapeHtml(String(a.content || "").substring(0, 5000))}</pre>
+        </div>
+      `;
     } else if (msg.multiAgent) {
-      // Render Multi-Agent Pipeline Cards (Planner, Navigator, Validator)
       const { planner, navigator, validator, finalAnswer } = msg.multiAgent;
       let pipelineHtml = '<div class="agent-pipeline-container">';
 
@@ -389,7 +552,6 @@ document.addEventListener("DOMContentLoaded", async () => {
           <div class="agent-card planner">
             <div class="agent-card-header">🧠 Planner Agent</div>
             <div class="agent-card-body">
-              <div><strong>Rencana Aksi:</strong></div>
               <ol>${planner.steps.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
             </div>
           </div>
@@ -404,6 +566,7 @@ document.addEventListener("DOMContentLoaded", async () => {
               <div>${escapeHtml(navigator.description || navigator.action)}</div>
               ${navigator.elementId ? `<span class="target-badge">Target: [${escapeHtml(String(navigator.elementId))}]</span>` : ''}
               ${navigator.status ? `<div style="font-size:13.5px; color:#c7d2fe; margin-top:4px;">Status: ${escapeHtml(navigator.status)}</div>` : ''}
+              ${navigator.screenshot ? `<img class="screenshot-thumb" src="${navigator.screenshot}" alt="Bukti visual langkah" />` : ''}
             </div>
           </div>
         `;
@@ -428,7 +591,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       contentHtml = pipelineHtml;
     } else {
-      // Normal Assistant Markdown Message
       contentHtml = `<div class="message-bubble markdown-body">${parseMarkdown(msg.content)}</div>`;
     }
 
@@ -447,7 +609,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         btnEdit.addEventListener("click", () => editPromptAt(index));
       }
     } else if (msg.askUser) {
-      // Attach click listener ke tombol opsi Human-in-the-Loop
       const optionBtns = msgDiv.querySelectorAll(".ask-user-option-btn");
       optionBtns.forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -455,12 +616,88 @@ document.addEventListener("DOMContentLoaded", async () => {
           if (selectedAnswer && !isAgentRunning) {
             promptInput.value = selectedAnswer;
             handleSend();
+          } else if (selectedAnswer && askUserResolver) {
+            msg.answered = selectedAnswer;
+            updateMessageInSession(index, { answered: selectedAnswer });
+            askUserResolver(selectedAnswer);
+            askUserResolver = null;
+          }
+        });
+      });
+    } else if (msg.confirmation) {
+      const confBtns = msgDiv.querySelectorAll(".confirm-btn");
+      confBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const choice = btn.getAttribute("data-conf");
+          const approved = choice === "once" || choice === "all";
+          const patch = { resolved: true, approved, choice };
+          Object.assign(msg.confirmation, patch);
+          updateMessageInSession(index, { confirmation: msg.confirmation });
+          if (confirmResolver) {
+            confirmResolver({ approved, allowAll: choice === "all" });
+            confirmResolver = null;
+          }
+        });
+      });
+    } else if (msg.artifact) {
+      const actBtns = msgDiv.querySelectorAll(".artifact-btn");
+      actBtns.forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const act = btn.getAttribute("data-artifact-act");
+          const a = msg.artifact;
+          try {
+            if (act === "copy") {
+              await navigator.clipboard.writeText(a.content || "");
+              appendLog(`📋 Artefak "${a.name}" disalin ke clipboard.`);
+            } else if (act === "download") {
+              await sendToBackground({
+                action: "DOWNLOAD_FILE",
+                params: {
+                  filename: a.name || "artifact.txt",
+                  content: a.content || "",
+                  mimeType: a.artifactType === "code" ? "text/plain" : "text/plain"
+                }
+              });
+              appendLog(`⬇️ Artefak "${a.name}" diunduh.`);
+            } else if (act === "paste") {
+              await sendToContentScript({
+                type: "EXECUTE_ACTION",
+                actionData: { action: "paste_text", value: a.content || "" }
+              });
+              appendLog(`⤴️ Artefak "${a.name}" ditempel ke editor aktif.`);
+            }
+          } catch (err) {
+            appendLog(`Error aksi artefak: ${err.message}`, "WARN");
           }
         });
       });
     }
 
-    chatArea.appendChild(msgDiv);
+    return msgDiv;
+  }
+
+  function renderMessageBubble(msg, index) {
+    chatArea.appendChild(buildMessageNode(msg, index));
+  }
+
+  function renderTaskCardHtml(taskCard) {
+    const plan = taskCard.plan || [];
+    const statusIcon = { PLANNING: "🗓️", EXECUTING: "⚡", VALIDATING: "🔍", WAITING_USER: "⏸️", PAUSED: "⏸️", DONE: "✅", FAILED: "❌", CANCELLED: "⛔" };
+    let html = `
+      <div class="task-card">
+        <div class="task-card-header">${statusIcon[taskCard.status] || "⚡"} Progress Tugas — ${escapeHtml(taskCard.status || "")}</div>
+        <div class="task-card-goal">🎯 ${escapeHtml(taskCard.goal || "")}</div>
+    `;
+    for (const s of plan) {
+      const st = s.status || "pending";
+      // Simbol standar (§ 36 PRD): ✓ done, ● in_progress, ○ pending, ✕ failed
+      const check = st === "done" ? "✓" : (st === "in_progress" ? "●" : (st === "failed" ? "✕" : "○"));
+      html += `<div class="plan-item ${st}"><span class="plan-check">${escapeHtml(String(check))}</span><span>${escapeHtml(s.description)}</span></div>`;
+    }
+    html += `
+      </div>
+    `;
+    return html;
   }
 
   function editPromptAt(index) {
@@ -479,34 +716,31 @@ document.addEventListener("DOMContentLoaded", async () => {
   function cleanAssistantReply(text) {
     if (!text || typeof text !== "string") return text || "";
     const trimmed = text.trim();
-    // Jika formatnya JSON mentah {"action": "finish", "message": "..."}
     if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
       try {
         const parsed = JSON.parse(trimmed);
         if (parsed.message) return parsed.message;
         if (parsed.answer) return parsed.answer;
-        if (parsed.final_answer) return parsed.final_answer;
       } catch (e) {}
     }
-    // Jika di dalam code block ```json ... ```
     const jsonBlock = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
     if (jsonBlock) {
       try {
         const parsed = JSON.parse(jsonBlock[1]);
         if (parsed.message) return parsed.message;
         if (parsed.answer) return parsed.answer;
-        if (parsed.final_answer) return parsed.final_answer;
       } catch (e) {}
     }
     return text;
   }
 
-  function addMessageToCurrentSession(role, content, multiAgent = null, askUser = null) {
+  function addMessageToCurrentSession(role, content, extras = {}) {
     const session = getCurrentSession();
-    if (!session) return;
+    if (!session) return -1;
+    if (extras.taskCard || extras.multiAgent) return -1;
 
-    const cleanContent = role === "assistant" ? cleanAssistantReply(content) : content;
-    const msgObj = { role, content: cleanContent, timestamp: Date.now(), multiAgent, askUser };
+    const cleanContent = role === "assistant" && !extras.skipClean ? cleanAssistantReply(content) : content;
+    const msgObj = { role, content: cleanContent, timestamp: Date.now(), ...extras };
     session.messages.push(msgObj);
 
     if (session.messages.length === 1 && role === "user") {
@@ -517,27 +751,543 @@ document.addEventListener("DOMContentLoaded", async () => {
     saveSessions();
     renderMessageBubble(msgObj, session.messages.length - 1);
     chatArea.scrollTop = chatArea.scrollHeight;
+    return session.messages.length - 1;
   }
 
-  // ----------------------------------------------------
-  // Settings & Content Script Bridge
-  // ----------------------------------------------------
+  function updateMessageInSession(index, patch) {
+    const session = getCurrentSession();
+    if (!session || !session.messages[index]) return;
+    Object.assign(session.messages[index], patch);
+    saveSessions();
+
+    // Re-render bubble targeted secara in-place
+    const oldNode = chatArea.querySelector(`.message[data-index="${index}"]`);
+    if (oldNode) {
+      oldNode.replaceWith(buildMessageNode(session.messages[index], index));
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════
+  // SETTINGS & BYOK ONBOARDING (Direct pesatrouter.com)
+  // ═══════════════════════════════════════════════════
+  function renderModelItems(containerEl, isWizard = false) {
+    if (!containerEl) return;
+    containerEl.innerHTML = "";
+    modelsList.forEach((m) => {
+      const row = document.createElement("div");
+      row.className = `model-item-row ${m.id === activeModelId ? "selected" : ""}`;
+      row.setAttribute("data-model-id", m.id);
+
+      const infoHtml = m.hasInfo ? '<span class="model-info-icon" title="Recommended for complex reasoning">ℹ</span>' : '';
+      row.innerHTML = `
+        <div class="model-item-left">
+          <span class="model-item-name">${escapeHtml(m.name)}</span>
+          <span class="model-context-badge">${escapeHtml(m.context || "1M")}</span>
+          ${infoHtml}
+        </div>
+        <div class="model-item-actions">
+          <button type="button" class="btn-model-action btn-edit-model" title="Ubah Nama Model">✏️</button>
+          <button type="button" class="btn-model-action btn-del-model" title="Hapus Model">🗑️</button>
+          <label class="toggle-switch small" title="Status Model">
+            <input type="checkbox" class="model-item-toggle" ${m.enabled ? "checked" : ""} />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      `;
+
+      // Klik row untuk memilih model aktif
+      row.addEventListener("click", (e) => {
+        if (e.target.closest(".model-item-actions")) return;
+        activeModelId = m.id;
+        saveModelsConfig();
+        renderAllModelLists();
+      });
+
+      // Edit model
+      row.querySelector(".btn-edit-model")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const newName = prompt("Ubah nama model PesatRouter:", m.name);
+        if (newName && newName.trim()) {
+          m.name = newName.trim();
+          m.id = newName.trim();
+          saveModelsConfig();
+          renderAllModelLists();
+        }
+      });
+
+      // Hapus model
+      row.querySelector(".btn-del-model")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (modelsList.length <= 1) {
+          alert("Minimal harus ada 1 model di daftar.");
+          return;
+        }
+        modelsList = modelsList.filter(x => x.id !== m.id);
+        if (activeModelId === m.id) {
+          activeModelId = modelsList[0]?.id || "pesat-flash";
+        }
+        saveModelsConfig();
+        renderAllModelLists();
+      });
+
+      // Toggle status model
+      row.querySelector(".model-item-toggle")?.addEventListener("change", (e) => {
+        e.stopPropagation();
+        m.enabled = e.target.checked;
+        saveModelsConfig();
+      });
+
+      containerEl.appendChild(row);
+    });
+  }
+
+  function renderAllModelLists() {
+    renderModelItems(wizardModelItemsList, true);
+    renderModelItems(settingsModelItemsList, false);
+  }
+
+  function handleAddModel() {
+    const name = prompt("Tambahkan model PesatRouter (contoh: pesat-lite, pesat-pro, pesat-flash, pesat-vision):");
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim();
+    if (modelsList.some(m => m.id.toLowerCase() === trimmed.toLowerCase())) {
+      alert(`Model "${trimmed}" sudah ada di daftar.`);
+      return;
+    }
+    modelsList.push({
+      id: trimmed,
+      name: trimmed,
+      context: "1M",
+      enabled: true
+    });
+    activeModelId = trimmed;
+    saveModelsConfig();
+    renderAllModelLists();
+  }
+
+  async function saveModelsConfig() {
+    storedSettings.modelName = activeModelId;
+    if (composerModelName) composerModelName.textContent = activeModelId;
+    await chrome.storage.local.set({
+      pesat_models: modelsList,
+      modelName: activeModelId
+    });
+  }
+
+  if (btnWizardAddModel) {
+    btnWizardAddModel.addEventListener("click", handleAddModel);
+  }
+  if (btnSettingsAddModel) {
+    btnSettingsAddModel.addEventListener("click", handleAddModel);
+  }
+
   async function loadSettings() {
-    const config = await chrome.storage.local.get(["apiUrl", "apiKey"]);
-    if (config.apiUrl) apiUrlInput.value = config.apiUrl;
-    if (config.apiKey) apiKeyInput.value = config.apiKey;
+    let sessionKey = null;
+    try {
+      const sess = await chrome.storage.session.get(["apiKey"]);
+      if (sess && sess.apiKey) sessionKey = sess.apiKey;
+    } catch (e) {}
+
+    const local = await chrome.storage.local.get([
+      "apiBaseUrl",
+      "apiFormat",
+      "apiKey",
+      "modelName",
+      "sessionOnly",
+      "googleClientId",
+      "pesat_models"
+    ]);
+
+    if (Array.isArray(local.pesat_models) && local.pesat_models.length > 0) {
+      modelsList = local.pesat_models;
+    } else if (Array.isArray(CFG.DEFAULT_MODELS)) {
+      modelsList = [...CFG.DEFAULT_MODELS];
+    }
+
+    if (local.modelName && modelsList.some(m => m.id === local.modelName)) {
+      activeModelId = local.modelName;
+    } else {
+      activeModelId = modelsList[0]?.id || CFG.DEFAULT_MODEL;
+    }
+
+    storedSettings = {
+      apiBaseUrl: local.apiBaseUrl || CFG.DEFAULT_API_BASE_URL,
+      apiFormat: local.apiFormat || CFG.DEFAULT_API_FORMAT,
+      apiKey: sessionKey || local.apiKey || "",
+      modelName: activeModelId,
+      sessionOnly: !!(sessionKey || local.sessionOnly),
+      googleClientId: local.googleClientId || ""
+    };
+
+    // Sinkronisasi ke form Settings
+    if (apiUrlInput) apiUrlInput.value = storedSettings.apiBaseUrl;
+    if (apiFormatSelect) apiFormatSelect.value = storedSettings.apiFormat;
+    if (apiKeyInput) apiKeyInput.value = storedSettings.apiKey;
+    if (settingsSessionOnly) settingsSessionOnly.checked = storedSettings.sessionOnly;
+    if (googleClientIdInput) googleClientIdInput.value = storedSettings.googleClientId;
+
+    // Sinkronisasi ke form Wizard
+    if (wizardBaseUrl) wizardBaseUrl.value = storedSettings.apiBaseUrl;
+    if (wizardApiFormat) wizardApiFormat.value = storedSettings.apiFormat;
+    if (wizardApiKey) wizardApiKey.value = storedSettings.apiKey;
+    if (wizardSessionOnly) wizardSessionOnly.checked = storedSettings.sessionOnly;
+
+    // Sinkronisasi ke model indicator pill di composer
+    if (composerModelName) composerModelName.textContent = activeModelId;
+
+    try {
+      currentAgentMode = "full";
+      await chrome.storage.local.set({ pesat_agent_mode: "full" });
+      updateAgentModeUI();
+    } catch (e) {}
+
+    renderAllModelLists();
+  }
+
+  function getApiBaseUrl() {
+    return (storedSettings.apiBaseUrl && storedSettings.apiBaseUrl.trim()) || CFG.DEFAULT_API_BASE_URL;
+  }
+
+  function getApiKey() {
+    return (storedSettings.apiKey && storedSettings.apiKey.trim()) || "";
+  }
+
+  function getModelName() {
+    return (storedSettings.modelName && storedSettings.modelName.trim()) || activeModelId || CFG.DEFAULT_MODEL;
+  }
+
+  function isConfigured() {
+    return Boolean(getApiKey());
+  }
+
+  function checkOnboarding() {
+    if (!isConfigured() && onboardingModal) {
+      onboardingModal.classList.remove("hidden");
+    }
+  }
+
+  function togglePasswordEye(inputEl, btnEl) {
+    if (!inputEl) return;
+    const isPass = inputEl.type === "password";
+    inputEl.type = isPass ? "text" : "password";
+    if (btnEl) btnEl.textContent = isPass ? "🙈" : "👁️";
+  }
+
+  if (btnToggleWizardKey && wizardApiKey) {
+    btnToggleWizardKey.addEventListener("click", () => togglePasswordEye(wizardApiKey, btnToggleWizardKey));
+  }
+  if (btnToggleSettingsKey && apiKeyInput) {
+    btnToggleSettingsKey.addEventListener("click", () => togglePasswordEye(apiKeyInput, btnToggleSettingsKey));
+  }
+
+  // ── Usage Tracker (Informasional Pengganti Kuota) ──
+  async function refreshUsageDisplay() {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const data = await chrome.storage.local.get(["usageDate", "usageRequests", "usageTokens"]);
+      const reqs = data.usageDate === today ? (data.usageRequests || 0) : 0;
+      const toks = data.usageDate === today ? (data.usageTokens || 0) : 0;
+      if (statTodayRequests) statTodayRequests.textContent = `${reqs} req`;
+      if (statTodayTokens) statTodayTokens.textContent = `${toks.toLocaleString("id-ID")}`;
+    } catch (e) {}
+  }
+
+  async function recordUsage(usage) {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const data = await chrome.storage.local.get(["usageDate", "usageRequests", "usageTokens"]);
+      let reqs = data.usageDate === today ? (data.usageRequests || 0) : 0;
+      let toks = data.usageDate === today ? (data.usageTokens || 0) : 0;
+
+      reqs += 1;
+      const addToks = usage?.total_tokens || 0;
+      toks += addToks;
+
+      await chrome.storage.local.set({
+        usageDate: today,
+        usageRequests: reqs,
+        usageTokens: toks
+      });
+      refreshUsageDisplay();
+    } catch (e) {}
+  }
+
+  // ── Test Connection Helper ──
+  async function runTestConnectionUI(cfg, resultEl, btnEl) {
+    if (!resultEl) return;
+    resultEl.classList.remove("hidden", "success", "error");
+    resultEl.textContent = "⏳ Menguji koneksi ke pesatrouter.com...";
+    if (btnEl) btnEl.disabled = true;
+
+    try {
+      const res = await PesatAIEngine.testConnection(cfg);
+      if (res.success) {
+        resultEl.classList.add("success");
+        resultEl.textContent = `✅ ${res.message} (Model: ${res.model})`;
+        appendLog(`⚡ Test Connection sukses: model ${res.model}`);
+      } else {
+        resultEl.classList.add("error");
+        resultEl.textContent = `❌ ${res.error}`;
+        appendLog(`⚠️ Test Connection gagal: ${res.error}`, "WARN");
+      }
+    } catch (err) {
+      resultEl.classList.add("error");
+      resultEl.textContent = `❌ Error: ${err.message}`;
+    } finally {
+      if (btnEl) btnEl.disabled = false;
+    }
+  }
+
+  if (btnWizardTest) {
+    btnWizardTest.addEventListener("click", () => {
+      runTestConnectionUI(
+        {
+          apiBaseUrl: wizardBaseUrl?.value,
+          apiFormat: wizardApiFormat?.value,
+          apiKey: wizardApiKey?.value,
+          modelName: activeModelId
+        },
+        wizardTestResult,
+        btnWizardTest
+      );
+    });
+  }
+
+  if (btnWizardSave) {
+    btnWizardSave.addEventListener("click", async () => {
+      const rawKey = (wizardApiKey?.value || "").trim();
+      if (!rawKey) {
+        alert("API Key wajib diisi untuk menggunakan Pesat Agent. Dapatkan API Key di pesatrouter.com.");
+        wizardApiKey?.focus();
+        return;
+      }
+
+      const sessionOnly = !!wizardSessionOnly?.checked;
+      const base = (wizardBaseUrl?.value || "").trim() || CFG.DEFAULT_API_BASE_URL;
+      const fmt = wizardApiFormat?.value || CFG.DEFAULT_API_FORMAT;
+
+      storedSettings = {
+        apiBaseUrl: base,
+        apiFormat: fmt,
+        apiKey: rawKey,
+        modelName: activeModelId,
+        sessionOnly,
+        googleClientId: storedSettings.googleClientId || ""
+      };
+
+      if (sessionOnly) {
+        try { await chrome.storage.session.set({ apiKey: rawKey }); } catch (e) {}
+        await chrome.storage.local.set({
+          apiBaseUrl: base,
+          apiFormat: fmt,
+          modelName: activeModelId,
+          pesat_models: modelsList,
+          sessionOnly: true
+        });
+        await chrome.storage.local.remove(["apiKey"]);
+      } else {
+        await chrome.storage.local.set({
+          apiBaseUrl: base,
+          apiFormat: fmt,
+          apiKey: rawKey,
+          modelName: activeModelId,
+          pesat_models: modelsList,
+          sessionOnly: false
+        });
+        try { await chrome.storage.session.remove(["apiKey"]); } catch (e) {}
+      }
+
+      await loadSettings();
+      if (onboardingModal) onboardingModal.classList.add("hidden");
+      appendLog("🎉 API Key pesatrouter.com berhasil dikonfigurasi.");
+      addMessageToCurrentSession(
+        "assistant",
+        "✅ **Konfigurasi Berhasil!** Ekstensi terhubung langsung ke akun **pesatrouter.com** Anda. Silakan ketik perintah otomatisasi atau pilih tombol cepat di bawah.",
+        { skipClean: true }
+      );
+    });
+  }
+
+  if (btnSettingsTest) {
+    btnSettingsTest.addEventListener("click", () => {
+      runTestConnectionUI(
+        {
+          apiBaseUrl: apiUrlInput?.value,
+          apiFormat: apiFormatSelect?.value,
+          apiKey: apiKeyInput?.value,
+          modelName: activeModelId
+        },
+        settingsTestResult,
+        btnSettingsTest
+      );
+    });
   }
 
   btnSaveSettings.addEventListener("click", async () => {
-    await chrome.storage.local.set({
-      apiUrl: apiUrlInput.value.trim(),
-      apiKey: apiKeyInput.value.trim()
-    });
+    const rawKey = (apiKeyInput?.value || "").trim();
+    const sessionOnly = !!settingsSessionOnly?.checked;
+    const base = (apiUrlInput?.value || "").trim() || CFG.DEFAULT_API_BASE_URL;
+    const fmt = apiFormatSelect?.value || CFG.DEFAULT_API_FORMAT;
+    const googleId = (googleClientIdInput?.value || "").trim();
+
+    storedSettings = {
+      apiBaseUrl: base,
+      apiFormat: fmt,
+      apiKey: rawKey,
+      modelName: activeModelId,
+      sessionOnly,
+      googleClientId: googleId
+    };
+
+    if (sessionOnly) {
+      try { await chrome.storage.session.set({ apiKey: rawKey }); } catch (e) {}
+      await chrome.storage.local.set({
+        apiBaseUrl: base,
+        apiFormat: fmt,
+        modelName: activeModelId,
+        pesat_models: modelsList,
+        sessionOnly: true,
+        googleClientId: googleId
+      });
+      await chrome.storage.local.remove(["apiKey"]);
+    } else {
+      await chrome.storage.local.set({
+        apiBaseUrl: base,
+        apiFormat: fmt,
+        apiKey: rawKey,
+        modelName: activeModelId,
+        pesat_models: modelsList,
+        sessionOnly: false,
+        googleClientId: googleId
+      });
+      try { await chrome.storage.session.remove(["apiKey"]); } catch (e) {}
+    }
+
+    await loadSettings();
     settingsPanel.classList.add("hidden");
-    appendLog("✅ Pengaturan API disimpan.");
+    appendLog("✅ Pengaturan API pesatrouter disimpan.");
   });
 
-  function sendToContentScript(payload) {
+  // ── BYOK Gate Helper (pesan panduan jika mencoba chat tanpa key) ──
+  function showByokGateMessage() {
+    addMessageToCurrentSession(
+      "assistant",
+      "⚠️ **API Key pesatrouter.com Belum Dikonfigurasi**\n\nUntuk menjalankan instruksi otomatisasi, Anda wajib memiliki API Key dari [pesatrouter.com](https://pesatrouter.com).\n\nSilakan klik tombol **⚙️ Pengaturan** di pojok kanan atas untuk memasukkan Base URL dan API Key Anda.",
+      { skipClean: true }
+    );
+    if (onboardingModal) onboardingModal.classList.remove("hidden");
+  }
+
+  // ── Google Connection (Phase 5) ──
+  const googleConnectText = document.getElementById("googleConnectText");
+
+  function showGoogleAlert(type, message) {
+    if (!googleAlertBox) return;
+    googleAlertBox.className = `google-alert-box ${type}`;
+    googleAlertBox.innerHTML = message;
+    googleAlertBox.classList.remove("hidden");
+  }
+
+  function hideGoogleAlert() {
+    if (googleAlertBox) googleAlertBox.classList.add("hidden");
+  }
+
+  async function refreshGoogleStatus() {
+    hideGoogleAlert();
+    try {
+      const res = await sendToBackground({ action: "GOOGLE_STATUS" });
+      googleConnected = !!(res && res.connected);
+      if (googleConnected) {
+        if (googleStatusEl) {
+          googleStatusEl.textContent = "🟢 Terhubung";
+          googleStatusEl.className = "google-status connected";
+        }
+        if (googleConnectText) googleConnectText.textContent = "Putuskan Akun Google";
+        btnGoogleConnect?.classList.add("connected");
+      } else {
+        if (googleStatusEl) {
+          googleStatusEl.textContent = "⚪ Belum terhubung";
+          googleStatusEl.className = "google-status disconnected";
+        }
+        if (googleConnectText) googleConnectText.textContent = "Masuk dengan Google (API Latar Belakang)";
+        btnGoogleConnect?.classList.remove("connected");
+      }
+    } catch (e) {
+      if (googleStatusEl) googleStatusEl.textContent = "⚪ Belum terhubung";
+    }
+  }
+
+  btnGoogleConnect?.addEventListener("click", async () => {
+    btnGoogleConnect.disabled = true;
+    hideGoogleAlert();
+    try {
+      // Auto-save client ID dari input jika diisi oleh pengguna
+      const customId = (googleClientIdInput?.value || "").trim();
+      if (customId) {
+        await chrome.storage.local.set({ googleClientId: customId });
+      }
+
+      if (googleConnected) {
+        const res = await sendToBackground({ action: "GOOGLE_DISCONNECT" });
+        if (res && res.success) {
+          appendLog("Koneksi Google diputuskan.");
+          showGoogleAlert("info", "Koneksi Google diputuskan. Otomatisasi tab Google Sheets/Docs tetap berfungsi normal.");
+        }
+      } else {
+        const res = await sendToBackground({
+          action: "GOOGLE_CONNECT",
+          clientId: customId || undefined
+        });
+        if (res && res.success) {
+          appendLog(`✅ ${res.message || "Google berhasil dihubungkan."}`);
+          showGoogleAlert("success", `✅ ${res.message || "Akun Google berhasil dihubungkan!"}`);
+        } else {
+          appendLog(`⚠️ Google: ${res?.error || "gagal"}`, "WARN");
+          const errText = res?.error || "Operasi Google gagal.";
+          if (errText.includes("belum terpasang") || errText.includes("belum diisi")) {
+            showGoogleAlert("info", "💡 <strong>Otomatisasi Tab Sudah Aktif (Tanpa Login):</strong><br>Anda dapat langsung meminta AI Agent membuka dan mengedit Google Sheets atau Docs Anda di tab browser Chrome tanpa login akun di sini.<br><br><small style='color:#94a3b8;'>Jika Anda pengembang yang ingin API latar belakang, masukkan Client ID pada menu Pengaturan Client ID di bawah.</small>");
+          } else {
+            showGoogleAlert("error", `❌ ${errText}`);
+          }
+        }
+      }
+    } catch (err) {
+      appendLog(`Error koneksi Google: ${err.message}`, "ERROR");
+      showGoogleAlert("error", `❌ Gagal menghubungi layanan Google: ${err.message}`);
+    } finally {
+      btnGoogleConnect.disabled = false;
+      await refreshGoogleStatus();
+    }
+  });
+
+  // ── Google Guide Toggle & Redirect URI Helper ──
+  const currentRedirectUri = (typeof chrome !== "undefined" && chrome.identity?.getRedirectURL)
+    ? chrome.identity.getRedirectURL("goog")
+    : "https://<extension-id>.chromiumapp.org/goog";
+
+  if (displayRedirectUri) {
+    displayRedirectUri.textContent = currentRedirectUri;
+  }
+
+  if (btnCopyRedirectUri) {
+    btnCopyRedirectUri.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(currentRedirectUri);
+        btnCopyRedirectUri.textContent = "✓ Disalin!";
+        setTimeout(() => { btnCopyRedirectUri.textContent = "📋 Salin"; }, 2000);
+      } catch (e) {}
+    });
+  }
+
+  if (btnToggleGoogleGuide && googleGuideBox) {
+    btnToggleGoogleGuide.addEventListener("click", () => {
+      const isHidden = googleGuideBox.classList.toggle("hidden");
+      btnToggleGoogleGuide.textContent = isHidden ? "📖 Panduan Cara Buat" : "✕ Tutup Panduan";
+    });
+  }
+
+  function sendToContentScript(payload, timeoutMs = 12000) {
     return new Promise((resolve) => {
       let resolved = false;
       const timer = setTimeout(() => {
@@ -545,7 +1295,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           resolved = true;
           resolve({ success: false, error: "Content script timeout (halaman mungkin internal/terproteksi)" });
         }
-      }, 5000);
+      }, timeoutMs);
 
       chrome.runtime.sendMessage(
         { action: "EXECUTE_IN_CONTENT", payload },
@@ -564,294 +1314,242 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // ----------------------------------------------------
-  // Core: Autonomous Multi-Step Agentic Loop (Nanobrowser & Agent-Browser Grade)
-  // ----------------------------------------------------
-  async function handleSend() {
-    const userPrompt = promptInput.value.trim();
-    if (!userPrompt || isAgentRunning) return;
+  function sendToBackground(message, timeoutMs = 15000) {
+    return new Promise((resolve) => {
+      let resolved = false;
+      const timer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          resolve({ success: false, error: "Background timeout" });
+        }
+      }, timeoutMs);
 
-    // 0. Cek Kuota Harian Gratis (Batas 40 request/hari jika tanpa custom API key)
-    const stored = await chrome.storage.local.get(["apiUrl", "apiKey", "freeUsageDate", "freeUsageCount"]);
-    const hasCustomKey = !!(stored.apiKey && stored.apiKey.trim());
-
-    if (!hasCustomKey) {
-      const today = new Date().toISOString().slice(0, 10);
-      let currentUsage = (stored.freeUsageDate === today) ? (stored.freeUsageCount || 0) : 0;
-
-      if (currentUsage >= 40) {
-        addMessageToCurrentSession(
-          "assistant",
-          "⚠️ **Batas Kuota Gratis Tercapai (40/40 permintaan hari ini).**\n\nUntuk melanjutkan penggunaan tanpa batas, silakan masukkan API Key Anda di menu **⚙️ Pengaturan** di pojok kanan atas."
-        );
-        appendLog("Batas kuota harian gratis 40 permintaan telah tercapai.");
-        return;
-      }
-
-      // Update counter
-      await chrome.storage.local.set({
-        freeUsageDate: today,
-        freeUsageCount: currentUsage + 1
+      chrome.runtime.sendMessage(message, (response) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timer);
+          if (chrome.runtime.lastError) {
+            resolve({ success: false, error: chrome.runtime.lastError.message });
+          } else {
+            resolve(response || { success: false, error: "No response" });
+          }
+        }
       });
-      appendLog(`Penggunaan kuota gratis hari ini: ${currentUsage + 1}/40`);
-    }
-
-    promptInput.value = "";
-    promptInput.style.height = "80px";
-    shouldStopAgent = false;
-
-    // Reset Anti-Loop Tracker di background worker setiap kali user mengirim perintah baru
-    chrome.runtime.sendMessage({ action: "RESET_LOOP_TRACKER" }, () => {
-      if (chrome.runtime.lastError) {}
     });
+  }
 
-    addMessageToCurrentSession("user", userPrompt);
-    setAgentRunning(true, "Memulai Agentic Loop...");
-    showStatusIndicator("Memulai siklus otomatisasi...");
-    appendLog(`User prompt: "${userPrompt}"`);
+  // ═══════════════════════════════════════════════════
+  // TASK STATE MACHINE (Phase 1)
+  // ═══════════════════════════════════════════════════
+  function newTask(goal, contextSources = []) {
+    return {
+      id: "task_" + Date.now(),
+      goal,
+      status: "PLANNING",
+      plan: [],
+      currentSubtask: null,
+      scratchpad: [],
+      stepsUsed: 0,
+      stepBudget: CFG.MAX_STEPS,
+      replansUsed: 0,
+      retries: {},
+      clarifications: [],
+      artifacts: [],
+      contextSources: contextSources || [],
+      confirmAllGranted: false,
+      stuckCounter: 0,
+      lastPageHash: "",
+      createdAt: Date.now()
+    };
+  }
 
-    const targetUrl = stored.apiUrl || "https://pesat-ai-chrome-agent.senna-947.workers.dev/";
+  async function persistTask() {
+    if (!activeTask) return;
+    try {
+      // Jangan persist screenshot base64 (besar) — hanya runtime in-memory
+      const { _pendingScreenshot, ...persistable } = activeTask;
+      await chrome.storage.session.set({ [TASK_STORAGE_KEY]: persistable });
+    } catch (e) { /* storage.session tidak tersedia — abaikan */ }
+  }
 
-    // Deteksi jika prompt adalah instruksi perangkuman halaman (Bypass AXTree DOM & kirim Readable Text murni)
-    const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
+  async function clearPersistedTask() {
+    try {
+      await chrome.storage.session.remove(TASK_STORAGE_KEY);
+    } catch (e) {}
+  }
 
-    if (isSummarize) {
-      try {
-        setAgentRunning(true, "Merangkum artikel...");
-        showStatusIndicator("Mengekstrak teks utama artikel...");
-        appendLog("Mengambil konten teks utama (Readable Content) tanpa elemen UI/navigasi...");
-
-        const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
-        let cleanText = textRes?.text || "";
-        let pageTitle = textRes?.title || "Halaman Web";
-        let pageUrl = textRes?.url || "";
-
-        // Fallback jika GET_READABLE_TEXT belum siap: coba scan DOM dan ambil pageContent
-        if (!cleanText || cleanText.length < 20) {
-          const scanFallback = await sendToContentScript({ type: "SCAN_DOM", showOverlay: false });
-          cleanText = scanFallback?.data?.pageContent || "";
-          pageTitle = scanFallback?.data?.title || pageTitle;
-          pageUrl = scanFallback?.data?.url || pageUrl;
-        }
-
-        if (!cleanText || cleanText.length < 20) {
-          addMessageToCurrentSession("assistant", "⚠️ Tidak ditemukan artikel atau teks utama yang memadai untuk dirangkum pada halaman ini. Pastikan halaman sudah termuat sempurna.");
-          return;
-        }
-
-        const promptPayload = `[TEKS UTAMA ARTIKEL / HALAMAN WEB]
-Judul: ${pageTitle}
-URL: ${pageUrl}
-
-${cleanText}
-
-[INSTRUKSI PERANGKUMAN]
-${userPrompt}`;
-
-        showStatusIndicator("AI sedang menyusun ringkasan poin penting...");
-        appendLog("Mengirimkan teks artikel ke AI Engine...");
-
-        activeAbortController = new AbortController();
-        const res = await fetch(targetUrl, {
-          method: "POST",
-          signal: activeAbortController.signal,
-          headers: {
-            "Content-Type": "application/json",
-            ...(stored.apiKey ? { Authorization: `Bearer ${stored.apiKey}` } : {})
-          },
-          body: JSON.stringify({
-            prompt: promptPayload,
-            userQuery: userPrompt,
-            isSummarize: true
-          })
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`HTTP ${res.status}: ${errText}`);
-        }
-
-        const data = await res.json();
-        if (data.success === false && data.error) {
-          throw new Error(data.error);
-        }
-
-        const aiReply = data.reply || "Gagal menghasilkan rangkuman.";
-        addMessageToCurrentSession("assistant", aiReply);
-        appendLog("✅ Rangkuman berhasil dibuat.");
-        return;
-      } catch (err) {
-        if (err.name === "AbortError" || shouldStopAgent) {
-          appendLog("🛑 Perangkuman dibatalkan.");
-        } else {
-          appendLog(`Error perangkuman: ${err.message}`);
-          addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat merangkum: ${err.message}`);
-        }
-        return;
-      } finally {
-        setAgentRunning(false);
-        hideStatusIndicator();
+  async function loadResumableTask() {
+    try {
+      const data = await chrome.storage.session.get([TASK_STORAGE_KEY]);
+      const task = data?.[TASK_STORAGE_KEY];
+      if (task && ["PLANNING", "EXECUTING", "WAITING_USER", "PAUSED"].includes(task.status)) {
+        appendResumeBanner(task);
       }
+    } catch (e) {}
+  }
+
+  function appendResumeBanner(task) {
+    const session = getCurrentSession();
+    if (!session) return;
+    const msgObj = {
+      role: "assistant",
+      content: "",
+      timestamp: Date.now(),
+      resumeTask: { goal: task.goal, stepsUsed: task.stepsUsed, status: task.status }
+    };
+    session.messages.push(msgObj);
+    saveSessions();
+    renderMessageBubble(msgObj, session.messages.length - 1);
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+
+  function taskSummaryForLLM() {
+    if (!activeTask) return null;
+    return {
+      goal: activeTask.goal,
+      plan: activeTask.plan,
+      currentSubtask: activeTask.currentSubtask,
+      scratchpad: activeTask.scratchpad.slice(-CFG.SCRATCHPAD_TAIL),
+      clarifications: activeTask.clarifications,
+      contextSources: activeTask.contextSources || []
+    };
+  }
+
+  function currentSubtaskObj() {
+    if (!activeTask) return null;
+    return activeTask.plan.find(s => s.status !== "done" && s.status !== "skipped") || null;
+  }
+
+  function markSubtask(id, status) {
+    if (!activeTask) return;
+    const s = activeTask.plan.find(x => x.id === id);
+    if (s) s.status = status;
+  }
+
+  function refreshTaskCard() {
+    if (!activeTask || taskCardMsgIndex < 0) return;
+    updateMessageInSession(taskCardMsgIndex, {
+      taskCard: {
+        goal: activeTask.goal,
+        status: activeTask.status,
+        plan: activeTask.plan,
+        currentSubtask: activeTask.currentSubtask,
+        stepsUsed: activeTask.stepsUsed,
+        stepBudget: activeTask.stepBudget,
+        replansUsed: activeTask.replansUsed
+      }
+    });
+  }
+
+  function cancelActiveTask(reason) {
+    if (activeTask) {
+      activeTask.status = "CANCELLED";
+      refreshTaskCard();
+      appendLog(`⛔ Task dibatalkan: ${reason}`, "WARN");
+      activeTask = null;
+      taskCardMsgIndex = -1;
+      clearPersistedTask();
+    }
+    if (askUserResolver) { askUserResolver(null); askUserResolver = null; }
+    if (confirmResolver) { confirmResolver({ approved: false, cancelled: true }); confirmResolver = null; }
+  }
+
+  // ═══════════════════════════════════════════════════
+  // LLM BRIDGE (Direct pesatrouter.com BYOK via ai-engine.js)
+  // ═══════════════════════════════════════════════════
+  async function callLLM(phase, promptText, { image = null, isSummarize = false } = {}) {
+    if (!isConfigured()) {
+      showByokGateMessage();
+      throw new Error("API Key pesatrouter belum diatur.");
     }
 
-    const MAX_STEPS = 8;
-    let stepCount = 0;
-    let lastActionSuccess = true;
-    let lastActionSummary = "";
+    const session = getCurrentSession();
+    const history = (session?.messages || []).slice(-6).map(m => ({
+      role: m.role,
+      content: String(m.content || "").substring(0, 2000)
+    }));
+
+    activeAbortController = new AbortController();
 
     try {
-      while (stepCount < MAX_STEPS && !shouldStopAgent) {
-        stepCount++;
-        setAgentRunning(true, `Langkah ${stepCount}/${MAX_STEPS}...`);
-        appendLog(`─── Memulai Langkah ${stepCount} ───`);
+      const res = await PesatAIEngine.callLLMDirect({
+        phase,
+        prompt: promptText,
+        messages: history,
+        taskState: taskSummaryForLLM(),
+        image: image && visionEnabled && phase === "act" ? image : null,
+        capabilities: { google: googleConnected, vision: visionEnabled },
+        config: {
+          apiBaseUrl: getApiBaseUrl(),
+          apiKey: getApiKey(),
+          modelName: getModelName()
+        },
+        signal: activeAbortController.signal
+      });
 
-        // 1. Scan DOM dari Tab Aktif (Semantic AXTree + Colored Bounding Boxes)
-        showStatusIndicator(`Langkah ${stepCount}: Memindai elemen halaman...`);
-        appendLog("Memindai elemen interaktif halaman...");
-        const scanRes = await sendToContentScript({ type: "SCAN_DOM", showOverlay: true });
-
-        let pageContext = "";
-        if (scanRes && scanRes.success && scanRes.data) {
-          const d = scanRes.data;
-          if (stepCount === 1) {
-            pageContext = `
-[INFORMASI WEB AKTIF]
-Judul: ${d.title}
-URL: ${d.url}
-Jumlah Elemen Interaktif: ${d.elementsCount}
-
-[KONTEN TEKS LENGKAP HALAMAN (Untuk Rangkuman & Ekstraksi Data)]
-${d.pageContent || "(Tidak ada konten teks utama)"}
-
-[DAFTAR ELEMEN SEMANTIK AKSI TERTANDA [@eN]]
-${d.reducedDOM || "(Tidak ada elemen interaktif)"}
-            `.trim();
-          } else {
-            // Adaptive Token Diffing: Pada step 2+, skip full page text, fokus ke reduced semantic DOM
-            pageContext = `
-[INFORMASI WEB AKTIF (Step ${stepCount})]
-Judul: ${d.title} | URL: ${d.url} | Elemen: ${d.elementsCount}
-
-[DAFTAR ELEMEN SEMANTIK TERKINI [@eN]]
-${d.reducedDOM || "(Tidak ada elemen interaktif)"}
-            `.trim();
-          }
-          appendLog(`DOM terpindai: ${d.elementsCount} elemen.`);
-        }
-
-        if (shouldStopAgent) break;
-
-        // 2. Susun prompt untuk LLM
-        let promptPayload = `Konteks Halaman Web Terkini:\n${pageContext}\n\nTugas Utama Pengguna: "${userPrompt}"`;
-        if (stepCount > 1) {
-          promptPayload += `\n\nStatus Langkah Sebelumnya (${stepCount - 1}): ${lastActionSummary}`;
-          promptPayload += `\nLanjutkan mengeksekusi langkah berikutnya yang diperlukan, atau kembalikan action "finish" jika seluruh tugas pengguna sudah selesai.`;
-        }
-
-        // Ambil riwayat chat terbaru
-        const session = getCurrentSession();
-        const history = (session?.messages || []).slice(-6).map(m => ({
-          role: m.role,
-          content: m.content
-        }));
-
-        showStatusIndicator(`Langkah ${stepCount}: AI sedang merencanakan aksi...`);
-        appendLog(`Menghubungi AI Engine (Langkah ${stepCount})...`);
-        setAgentRunning(true, `Berpikir (Langkah ${stepCount})...`);
-
-        activeAbortController = new AbortController();
-        const res = await fetch(targetUrl, {
-          method: "POST",
-          signal: activeAbortController.signal,
-          headers: {
-            "Content-Type": "application/json",
-            ...(stored.apiKey ? { "Authorization": `Bearer ${stored.apiKey}` } : {})
-          },
-          body: JSON.stringify({
-            prompt: promptPayload,
-            userQuery: userPrompt,
-            messages: history
-          })
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`HTTP ${res.status}: ${errText}`);
-        }
-
-        const data = await res.json();
-        if (data.success === false && data.error) {
-          throw new Error(data.error);
-        }
-
-        const aiReply = data.reply || "";
-        appendLog(`Respon AI (Langkah ${stepCount}) diterima.`);
-
-        if (shouldStopAgent) break;
-
-        // 3. Proses respons langkah ini
-        const stepResult = await executeStepResponse(aiReply, stepCount, userPrompt);
-
-        if (stepResult.isFinished) {
-          appendLog("✅ Tugas selesai sepenuhnya (AI Finish).");
-          break;
-        }
-
-        if (!stepResult.hasAction) {
-          break;
-        }
-
-        if (!stepResult.actionSuccess) {
-          lastActionSuccess = false;
-          lastActionSummary = `Gagal mengeksekusi ${stepResult.actionType}: ${stepResult.errorMessage}`;
-          appendLog(`⚠️ Langkah ${stepCount} gagal. Menghentikan loop untuk evaluasi.`);
-          break;
-        }
-
-        lastActionSuccess = true;
-        lastActionSummary = `Berhasil mengeksekusi ${stepResult.actionType} pada target [${stepResult.targetId || '—'}].`;
-
-        // Jeda kecil sebelum langkah berikutnya agar halaman render state baru
-        await new Promise(r => setTimeout(r, 600));
+      if (res.visionFallback) {
+        visionEnabled = false;
+        appendLog("👁️ Payload image ditolak engine — mode vision dimatikan untuk sesi ini.", "WARN");
       }
 
-      if (stepCount >= MAX_STEPS && !shouldStopAgent) {
-        appendLog(`ℹ️ Batas maksimum ${MAX_STEPS} langkah tercapai.`);
+      if (res.usage) {
+        recordUsage(res.usage);
       }
 
+      return res.reply || "";
     } catch (err) {
-      if (err.name === "AbortError" || shouldStopAgent) {
-        appendLog("🛑 Permintaan dibatalkan.");
-      } else {
-        appendLog(`Error: ${err.message}`);
-        addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan: ${err.message}`);
-      }
-    } finally {
-      setAgentRunning(false);
-      hideStatusIndicator();
-      await sendToContentScript({ type: "CLEAR_MARKERS" });
+      if (err.name === "AbortError") throw err;
+      appendLog(`AI Error (${phase}): ${err.message}`, "ERROR");
+      throw err;
     }
   }
 
-  // Natural Language Action Recovery Parser (Fallback jika LLM menjawab teks instruktif bukan JSON)
+  // ═══════════════════════════════════════════════════
+  // ACTION PARSING
+  // ═══════════════════════════════════════════════════
+  function parseActionJSON(rawReply) {
+    if (!rawReply) return null;
+    const jsonMatch =
+      rawReply.match(/```json\s*([\s\S]*?)\s*```/) ||
+      rawReply.match(/\{[\s\S]*"action"[\s\S]*\}/) ||
+      rawReply.match(/\{[\s\S]*"actions"[\s\S]*\}/) ||
+      rawReply.match(/\{[\s\S]*"planner"[\s\S]*\}/) ||
+      rawReply.match(/\{[\s\S]*"plan"[\s\S]*\}/) ||
+      rawReply.match(/\{[\s\S]*"verdict"[\s\S]*\}/);
+
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[1] || jsonMatch[0]);
+      } catch (e) {
+        console.error("[Pesat] JSON parse error:", e);
+      }
+    }
+
+    // Coba parse seluruh teks sebagai JSON
+    const trimmed = rawReply.trim();
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      try {
+        return JSON.parse(trimmed);
+      } catch (e) {}
+    }
+
+    return null;
+  }
+
+  // Recovery parser natural language (fallback jika LLM jawab teks instruktif)
   function tryParseNaturalLanguageActions(text, userPrompt = "") {
     if (!text && !userPrompt) return null;
     const combined = `${text}\n${userPrompt}`;
 
-    // 1. Deteksi Perintah Navigasi & Search
-    const navRegex = /(?:buka|kunjungi|pergi ke|navigate to|open|go to)\s+(?:website|halaman|situs)?\s*[`"']?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s`"']*)?|https?:\/\/[^\s`"']+|cnn|youtube|google|wikipedia|github|twitter|facebook|instagram)[`"']?/i;
+    const navRegex = /(?:buka|kunjungi|pergi ke|navigate to|open|go to)\s+(?:website|halaman|situs)?\s*[`"']?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s`"']*)?|https?:\/\/[^\s`"']+)[`"']?/i;
     const searchRegex = /(?:cari|search|googling|temukan)\s+(?:di google|di internet)?\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i;
 
     const navMatch = combined.match(navRegex);
     if (navMatch) {
       let dest = navMatch[1].trim();
-      if (!dest.includes(".") && !dest.startsWith("http")) {
-        dest = dest + ".com";
-      }
       if (!/^https?:\/\//i.test(dest)) dest = "https://" + dest;
-
       return {
-        planner: { steps: [`1. Membuka alamat website ${dest}`, "2. Menunggu halaman termuat sempurna"] },
+        planner: { steps: [`1. Membuka alamat website ${dest}`] },
         action: "navigate",
         value: dest,
         url: dest,
@@ -864,7 +1562,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       const query = searchMatch[1].trim();
       const dest = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
       return {
-        planner: { steps: [`1. Mencari "${query}" di Google`, "2. Menunggu hasil pencarian"] },
+        planner: { steps: [`1. Mencari "${query}" di Google`] },
         action: "navigate",
         value: dest,
         url: dest,
@@ -875,9 +1573,6 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     const lines = text.split('\n');
     const actions = [];
 
-    // e.g.: Ketik `admin@jetdigitalpro.com` pada [@e1].
-    // e.g.: Ketik jdp123 pada [@e2].
-    // e.g.: Klik tombol Sign In [@e3].
     const typeRegex = /(?:ketik|isi|tulis|masukkan|type|fill)\s+[`"']?([^`"'\n]+?)[`"']?\s+(?:pada|di|ke|into|in)\s+\[?(@e\d+|#\d+|\d+)\]?/i;
     const clickRegex = /(?:klik|tekan|pilih|click|press)\s+(?:tombol|button|link|menu)?\s*[`"']?([^`"'\n]+?)?[`"']?\s*(?:pada|di|ke)?\s*\[?(@e\d+|#\d+|\d+)\]?/i;
 
@@ -886,338 +1581,1701 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       if (tMatch) {
         const rawId = tMatch[2];
         const normId = rawId.startsWith("@e") ? rawId : `@e${rawId.replace(/[^0-9]/g, '')}`;
-        actions.push({
-          action: "type",
-          value: tMatch[1].trim(),
-          elementId: normId
-        });
+        actions.push({ action: "type", value: tMatch[1].trim(), elementId: normId });
         continue;
       }
       const cMatch = line.match(clickRegex);
       if (cMatch) {
         const rawId = cMatch[2];
         const normId = rawId.startsWith("@e") ? rawId : `@e${rawId.replace(/[^0-9]/g, '')}`;
-        actions.push({
-          action: "click",
-          elementId: normId,
-          message: cMatch[1] ? `Klik ${cMatch[1].trim()}` : undefined
-        });
+        actions.push({ action: "click", elementId: normId });
       }
     }
 
     if (actions.length > 0) {
       return {
         planner: { steps: actions.map((a, i) => `${i + 1}. ${a.action === 'type' ? `Isi "${a.value}"` : 'Klik'} pada [${a.elementId}]`) },
-        actions: actions,
+        actions,
         message: `Mengeksekusi ${actions.length} aksi otomatis yang teridentifikasi.`
       };
     }
     return null;
   }
 
-  // Menjalankan satu langkah Multi-Agent response
-  async function executeStepResponse(rawReply, stepNum, userPrompt = "") {
-    let resObj = null;
-    const jsonMatch = rawReply.match(/```json\s*([\s\S]*?)\s*```/) || rawReply.match(/\{[\s\S]*"action"[\s\S]*\}/) || rawReply.match(/\{[\s\S]*"actions"[\s\S]*\}/) || rawReply.match(/\{[\s\S]*"planner"[\s\S]*\}/);
+  // ═══════════════════════════════════════════════════
+  // RISK CLASSIFIER & CONFIRMATION GATE (Phase 7.1)
+  // ═══════════════════════════════════════════════════
+  const WRITE_SKILLS = ["skill_sheets_update", "skill_sheets_append", "skill_docs_append"];
+  const RISKY_TEXT_RE = /(kirim|send|bayar|pay|pembayaran|hapus|delete|post|publish|checkout|order|beli\s|transfer|password|sandi|passwd)/i;
 
-    if (jsonMatch) {
-      try {
-        const jsonStr = jsonMatch[1] || jsonMatch[0];
-        resObj = JSON.parse(jsonStr);
-      } catch (e) {
-        console.error("[Pesat] JSON parse error:", e);
-      }
+  function isRiskyAction(resObj) {
+    const actionType = resObj.action || "";
+    if (WRITE_SKILLS.includes(actionType)) return true;
+
+    const checkOne = (a) => {
+      if (!a || typeof a !== "object") return false;
+      const act = a.action || "";
+      if (act === "click" && RISKY_TEXT_RE.test(`${a.message || ""} ${a.elementId || ""}`)) return true;
+      if (act === "type" && /(password|sandi|passwd)/i.test(a.message || "")) return true;
+      if (WRITE_SKILLS.includes(act)) return true;
+      return false;
+    };
+
+    if (Array.isArray(resObj.actions)) {
+      return resObj.actions.some(checkOne);
     }
-
-    // Jika JSON tidak ditemukan atau aksi tidak terdefinisi, coba pulihkan dari teks instruksi alami
-    if (!resObj || (!resObj.action && !resObj.actions && !resObj.message)) {
-      resObj = tryParseNaturalLanguageActions(rawReply, userPrompt);
-    }
-
-    if (resObj) {
-      try {
-        const isBatch = Array.isArray(resObj.actions) && resObj.actions.length > 0;
-        let actionType = isBatch ? "batch" : (resObj.action || resObj.navigator?.action);
-        const targetId = resObj.elementId || resObj.navigator?.elementId || (isBatch ? resObj.actions.map(a => a.elementId || a.target).join(", ") : "");
-        let actionValue = resObj.value || resObj.url || resObj.target || resObj.navigator?.value || resObj.navigator?.url;
-
-        // Human-in-the-Loop: Handler jika AI memanggil tool 'ask_user'
-        if (actionType === "ask_user" || resObj.question) {
-          const askQuestion = resObj.question || resObj.message || "Terdapat beberapa kemungkinan tindakan. Silakan pilih salah satu:";
-          const askOptions = Array.isArray(resObj.options) && resObj.options.length > 0
-            ? resObj.options
-            : ["Buka Website", "Cari di Halaman Ini", "Rangkum Informasi"];
-
-          addMessageToCurrentSession("assistant", askQuestion, null, {
-            question: askQuestion,
-            options: askOptions
-          });
-          appendLog(`🤔 AI meminta klarifikasi pengguna: "${askQuestion}"`);
-          return { isFinished: true, hasAction: false };
-        }
-
-        // Normalisasi nama aksi navigasi
-        if (actionType === "navigate_to") {
-          actionType = "navigate";
-        }
-
-        // Normalisasi aksi search menjadi navigate Google
-        if (actionType === "search" || actionType === "google") {
-          actionType = "navigate";
-          actionValue = `https://www.google.com/search?q=${encodeURIComponent(actionValue || userPrompt)}`;
-        }
-
-        // Recovery jika actionType navigate tapi actionValue kosong / undefined
-        if (actionType === "navigate" && (!actionValue || typeof actionValue !== "string" || !actionValue.trim() || actionValue === "undefined")) {
-          const navInText = (resObj.message || userPrompt || "").match(/(?:https?:\/\/[^\s`"']+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s`"']*)?|cnn|youtube|google|wikipedia|github)/i);
-          if (navInText) {
-            let dest = navInText[0].trim();
-            if (!dest.includes(".") && !dest.startsWith("http")) dest = dest + ".com";
-            actionValue = /^https?:\/\//i.test(dest) ? dest : `https://${dest}`;
-          } else {
-            actionValue = `https://www.google.com/search?q=${encodeURIComponent(userPrompt)}`;
-          }
-        }
-
-        // Jika AI memanggil finish_task atau finish
-        if (actionType === "finish_task" || actionType === "finish" || (!actionType && !isBatch && resObj.message)) {
-          const finalMsg = resObj.message || resObj.answer || "Tugas telah selesai dikerjakan!";
-          addMessageToCurrentSession("assistant", finalMsg);
-          appendLog(`✅ AI memanggil finish_task: ${finalMsg}`);
-          return { isFinished: true, hasAction: false };
-        }
-
-        const multiAgentData = {
-          planner: resObj.planner || (resObj.thought ? { steps: [resObj.thought] } : null),
-          navigator: {
-            action: isBatch ? `Batch (${resObj.actions.length} aksi)` : actionType,
-            elementId: targetId,
-            description: resObj.message || (isBatch ? `Mengeksekusi ${resObj.actions.length} langkah berurutan` : `Mengeksekusi ${actionType} ${actionType === 'navigate' ? actionValue : `pada [${targetId || ''}]`}`),
-            status: "Sedang berjalan..."
-          },
-          validator: null,
-          finalAnswer: resObj.answer || ""
-        };
-
-        const statusLabel = isBatch ? `Mengeksekusi: Batch (${resObj.actions.length} aksi)...` : `Mengeksekusi: ${actionType} ${actionType === 'navigate' ? actionValue : `[${targetId || '—'}]`}...`;
-        showStatusIndicator(statusLabel);
-        setAgentRunning(true, `Aksi: ${isBatch ? `Batch (${resObj.actions.length})` : `${actionType} [${targetId || '—'}]`}`);
-        appendLog(`▶ Menjalankan [Step ${stepNum}]: ${isBatch ? `Batch (${resObj.actions.length} aksi)` : `${actionType} ${actionType === 'navigate' ? actionValue : `[${targetId || '—'}]`}`}`);
-
-        let execResult;
-        if (actionType === "navigate") {
-          execResult = await new Promise((resolve) => {
-            chrome.runtime.sendMessage(
-              { action: "NAVIGATE_TAB", url: actionValue },
-              (response) => {
-                if (chrome.runtime.lastError) {
-                  resolve({ success: false, error: chrome.runtime.lastError.message });
-                } else {
-                  resolve(response || { success: true, url: actionValue });
-                }
-              }
-            );
-          });
-        } else if (isBatch) {
-          const normalizedActions = resObj.actions.map(act => ({
-            ...act,
-            elementId: act.elementId || act.target
-          }));
-          execResult = await sendToContentScript({
-            type: "EXECUTE_ACTION",
-            actionData: {
-              actions: normalizedActions
-            }
-          });
-        } else {
-          execResult = await sendToContentScript({
-            type: "EXECUTE_ACTION",
-            actionData: {
-              action: actionType,
-              elementId: targetId,
-              value: actionValue,
-              pressEnter: resObj.pressEnter
-            }
-          });
-        }
-
-        // Auto-wait setelah aksi
-        if (execResult && execResult.success) {
-          const needsWait = actionType === "navigate" || actionType === "click" || isBatch;
-          if (needsWait) {
-            const waitMs = actionType === "navigate" ? 3500 : 1200;
-            showStatusIndicator(`Menunggu halaman stabil (maks ${waitMs / 1000}s)...`);
-            appendLog(`⏳ Menunggu halaman dimuat (maks ${waitMs / 1000}s)...`);
-            setAgentRunning(true, "Menunggu halaman...");
-
-            await new Promise(r => setTimeout(r, actionType === "navigate" ? 1500 : 300));
-
-            const stableResult = await sendToContentScript({
-              type: "WAIT_FOR_DOM_STABLE",
-              maxWaitMs: waitMs,
-              stableWindowMs: actionType === "navigate" ? 700 : 500
-            });
-
-            if (stableResult?.stable || stableResult?.timedOut) {
-              appendLog(`✅ Halaman stabil${stableResult.timedOut ? " (lanjut paksa)" : ""}.`);
-            }
-          }
-
-          const elapsed = actionType === "navigate" ? "3.5s" : "1.2s";
-          multiAgentData.navigator.status = `Selesai (${elapsed})`;
-          multiAgentData.validator = {
-            success: true,
-            message: execResult.message || `Aksi ${actionType} ${actionType === 'navigate' ? `ke ${actionValue}` : `pada [${targetId || '—'}]`} berhasil.`
-          };
-
-          addMessageToCurrentSession("assistant", "", multiAgentData);
-
-          // Cek apakah perintah hanya membuka website
-          const isOnlyNavigate = actionType === "navigate" && /^(buka|open|go to|pergi ke|kunjungi|cari|search)\s+[a-zA-Z0-9.-]+/i.test(userPrompt.trim());
-
-          if (isOnlyNavigate) {
-            appendLog(`✅ Navigasi ke ${actionValue} selesai. Tugas utama tuntas.`);
-            return {
-              isFinished: true,
-              hasAction: true,
-              actionSuccess: true,
-              actionType,
-              targetId
-            };
-          }
-
-          // Cek apakah perintah pengetikan pencarian dengan pressEnter sudah tuntas
-          const isSearchTypeSubmitted = (actionType === "type" || actionType === "type_text") && resObj.pressEnter;
-          if (isSearchTypeSubmitted) {
-            appendLog(`✅ Pengetikan dan pengiriman formulir pencarian selesai.`);
-            return {
-              isFinished: true,
-              hasAction: true,
-              actionSuccess: true,
-              actionType,
-              targetId
-            };
-          }
-
-          return {
-            isFinished: false,
-            hasAction: true,
-            actionSuccess: true,
-            actionType,
-            targetId
-          };
-        } else {
-          // Aksi gagal atau Circuit Breaker Loop Terdeteksi
-          multiAgentData.navigator.status = "Gagal";
-
-          if (execResult?.isLoopDetected) {
-            multiAgentData.validator = {
-              success: false,
-              message: `🛑 ${execResult.error}`
-            };
-            appendLog(`🛑 Circuit Breaker: ${execResult.error}`);
-            addMessageToCurrentSession("assistant", "", multiAgentData);
-            return {
-              isFinished: true,
-              hasAction: false,
-              actionSuccess: false,
-              actionType,
-              targetId
-            };
-          }
-
-          const suggestion = execResult?.suggestion === "scroll"
-            ? "💡 Coba gulir halaman ke bawah terlebih dahulu."
-            : "💡 Coba muat ulang halaman, lalu ulangi perintah.";
-          multiAgentData.validator = {
-            success: false,
-            message: `${execResult?.error || "Terjadi kesalahan saat eksekusi."}\n\n${suggestion}`
-          };
-          appendLog(`❌ Aksi gagal: ${execResult?.error}`);
-
-          addMessageToCurrentSession("assistant", "", multiAgentData);
-
-          return {
-            isFinished: false,
-            hasAction: true,
-            actionSuccess: false,
-            actionType,
-            targetId,
-            errorMessage: execResult?.error
-          };
-        }
-
-      } catch (e) {
-        console.error("[Pesat] Step execution error:", e);
-      }
-    }
-
-    // Tampilkan balasan teks biasa
-    addMessageToCurrentSession("assistant", rawReply);
-    return { isFinished: true, hasAction: false };
+    return checkOne(resObj);
   }
 
-  // ----------------------------------------------------
-  // 3. Prompt Chip Button Interaction (Auto-fill & Focus)
-  // ----------------------------------------------------
+  function describeActionForConfirm(resObj) {
+    const parts = [];
+    const at = resObj.action || "batch";
+    parts.push(`Aksi: ${at}`);
+    if (resObj.message) parts.push(`Deskripsi: ${resObj.message}`);
+    if (resObj.url || resObj.value) parts.push(`Nilai/URL: ${String(resObj.url || resObj.value || "").substring(0, 200)}`);
+    if (Array.isArray(resObj.actions)) {
+      parts.push(`Batch (${resObj.actions.length} aksi):`);
+      resObj.actions.forEach((a, i) => parts.push(`  ${i + 1}. ${a.action} ${a.elementId || ""} ${a.value ? String(a.value).substring(0, 60) : ""}`));
+    }
+    return parts.join("\n");
+  }
+
+  function requestPlanApproval(planList, goalText) {
+    return new Promise((resolve) => {
+      planApprovalResolver = resolve;
+
+      const planItemsHtml = planList.map((s, i) => `
+        <div class="plan-approval-item">
+          <span class="plan-approval-num">#${s.id || (i + 1)}</span>
+          <span>${escapeHtml(s.description)}</span>
+        </div>
+      `).join("");
+
+      const cardHtml = `
+<div class="plan-approval-card" id="activePlanApprovalCard">
+  <div class="plan-approval-header">
+    <div style="display:flex; align-items:center; gap:6px;">
+      <span>📋</span>
+      <span>Persetujuan Rencana Tugas</span>
+    </div>
+    <span class="plan-approval-badge">Planning Mode</span>
+  </div>
+  <div class="plan-approval-sub">
+    AI telah menyusun <strong>${planList.length} subtask</strong> untuk mencapai tujuan:
+    <div style="color:#cbd5e1; font-weight:600; margin-top:3px;">"${escapeHtml(goalText)}"</div>
+  </div>
+  <div class="plan-approval-list">
+    ${planItemsHtml}
+  </div>
+  <div class="plan-approval-actions">
+    <button type="button" class="btn-approve-plan" id="btnApprovePlan">
+      <span>🚀</span>
+      <span>Setujui & Jalankan Rencana</span>
+    </button>
+    <button type="button" class="btn-reject-plan" id="btnRejectPlan">
+      <span>Batalkan</span>
+    </button>
+  </div>
+</div>
+      `;
+
+      addMessageToCurrentSession("assistant", cardHtml, { skipClean: true });
+
+      setTimeout(() => {
+        const approveBtn = document.getElementById("btnApprovePlan");
+        const rejectBtn = document.getElementById("btnRejectPlan");
+        const card = document.getElementById("activePlanApprovalCard");
+
+        if (approveBtn) {
+          approveBtn.addEventListener("click", () => {
+            if (card) {
+              const actionsRow = card.querySelector(".plan-approval-actions");
+              if (actionsRow) {
+                actionsRow.innerHTML = `<span style="color:#10b981; font-size:12px; font-weight:600; display:flex; align-items:center; gap:6px;">✅ Rencana Disetujui — Memulai Eksekusi...</span>`;
+              }
+            }
+            if (planApprovalResolver) {
+              planApprovalResolver(true);
+              planApprovalResolver = null;
+            }
+          });
+        }
+
+        if (rejectBtn) {
+          rejectBtn.addEventListener("click", () => {
+            if (card) {
+              const actionsRow = card.querySelector(".plan-approval-actions");
+              if (actionsRow) {
+                actionsRow.innerHTML = `<span style="color:#ef4444; font-size:12px; font-weight:600;">⛔ Rencana Dibatalkan</span>`;
+              }
+            }
+            if (planApprovalResolver) {
+              planApprovalResolver(false);
+              planApprovalResolver = null;
+            }
+          });
+        }
+      }, 50);
+    });
+  }
+
+  function requestConfirmation(resObj) {
+    return new Promise((resolve) => {
+      confirmResolver = resolve;
+      if (activeTask) {
+        activeTask.status = "WAITING_USER";
+        refreshTaskCard();
+        persistTask();
+      }
+      addMessageToCurrentSession("assistant", "", {
+        skipClean: true,
+        confirmation: {
+          description: resObj.message || "Aksi berikut berpotensi mengubah data atau mengirim sesuatu:",
+          detail: describeActionForConfirm(resObj),
+          resolved: false
+        }
+      });
+      appendLog(`🛡️ Menunggu konfirmasi user untuk aksi: ${resObj.action || "batch"}`, "WARN");
+    });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // ASK_USER (Human-in-the-Loop dengan pause task)
+  // ═══════════════════════════════════════════════════
+  function requestAskUser(question, options) {
+    return new Promise((resolve) => {
+      askUserResolver = resolve;
+      if (activeTask) {
+        activeTask.status = "WAITING_USER";
+        refreshTaskCard();
+        persistTask();
+      }
+      addMessageToCurrentSession("assistant", question, {
+        askUser: {
+          question,
+          options: Array.isArray(options) && options.length > 0 ? options : ["Ya, lanjutkan", "Batalkan"]
+        }
+      });
+      appendLog(`🤔 Task dijeda — menunggu jawaban user: "${question}"`);
+    });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // PAGE CONTEXT BUILDER
+  // ═══════════════════════════════════════════════════
+  async function scanPage(full = true) {
+    const scanRes = await sendToContentScript({ type: "SCAN_DOM", showOverlay: Boolean(markersVisible) });
+    if (!scanRes || !scanRes.success || !scanRes.data) {
+      return {
+        title: "?",
+        url: "?",
+        elementsCount: 0,
+        reducedDOM: "(Halaman tidak dapat dipindai — mungkin halaman internal browser)",
+        pageContent: ""
+      };
+    }
+    return scanRes.data;
+  }
+
+  function buildPageContext(d, full, stepNum) {
+    const errorBlock = Array.isArray(d.pageErrors) && d.pageErrors.length > 0
+      ? `\n[ERROR RUNTIME/CONSOLE TERDETEKSI DI HALAMAN]\n${d.pageErrors.map(e => `- ${e}`).join("\n")}\n`
+      : "";
+
+    if (full) {
+      return `
+[INFORMASI WEB AKTIF]
+Judul: ${d.title}
+URL: ${d.url}
+Jumlah Elemen Interaktif: ${d.elementsCount}
+${errorBlock}
+<untrusted_web_data source="${d.url}">
+[KONTEN TEKS HALAMAN]
+${(d.pageContent || "(Tidak ada konten teks utama)").substring(0, 3000)}
+
+[DAFTAR ELEMEN SEMANTIK [@eN]]
+${d.reducedDOM || "(Tidak ada elemen interaktif)"}
+</untrusted_web_data>
+      `.trim();
+    }
+    return `
+[INFORMASI WEB AKTIF (Step ${stepNum})]
+Judul: ${d.title} | URL: ${d.url} | Elemen: ${d.elementsCount}
+${errorBlock}
+<untrusted_web_data source="${d.url}">
+[DAFTAR ELEMEN SEMANTIK TERKINI [@eN]]
+${d.reducedDOM || "(Tidak ada elemen interaktif)"}
+</untrusted_web_data>
+    `.trim();
+  }
+
+  async function getTabsContext() {
+    const res = await sendToBackground({ action: "LIST_TABS" }, 5000);
+    if (res && res.success && Array.isArray(res.tabs)) {
+      return "\n[DAFTAR TAB BROWSER]\n" + res.tabs.map(t => `${t.label} (id:${t.tabId}${t.active ? ", AKTIF" : ""}): ${t.title} — ${t.url.substring(0, 90)}`).join("\n");
+    }
+    return "";
+  }
+
+  // ═══════════════════════════════════════════════════
+  // SCREENSHOT (Phase 3)
+  // ═══════════════════════════════════════════════════
+  async function captureScreenshot() {
+    if (!visionEnabled) return null;
+    const res = await sendToBackground({ action: "SCREENSHOT" }, 8000);
+    if (res && res.success && res.dataUrl) {
+      return res.dataUrl;
+    }
+    return null;
+  }
+
+  // ═══════════════════════════════════════════════════
+  // ACTION DISPATCHER (route: DOM / background / skills / clipboard / artifact)
+  // ═══════════════════════════════════════════════════
+  async function executeAgentAction(resObj) {
+    const isBatch = Array.isArray(resObj.actions) && resObj.actions.length > 0;
+    let actionType = isBatch ? "batch" : (resObj.action || resObj.navigator?.action || "");
+
+    // Normalisasi nama
+    if (actionType === "navigate_to") actionType = "navigate";
+    if (actionType === "search" || actionType === "google") {
+      actionType = "navigate";
+      resObj.url = `https://www.google.com/search?q=${encodeURIComponent(resObj.value || activeTask?.goal || "")}`;
+    }
+    if (actionType === "type_text" || actionType === "fill") actionType = "type";
+    if (actionType === "click_element") actionType = "click";
+    if (actionType === "finish_task") actionType = "finish";
+
+    // Recovery navigate tanpa value
+    if (actionType === "navigate") {
+      let navUrl = resObj.url || resObj.value;
+      if (!navUrl || typeof navUrl !== "string" || !navUrl.trim() || navUrl === "undefined") {
+        const navInText = (resObj.message || activeTask?.goal || "").match(/(?:https?:\/\/[^\s`"']+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+        if (navInText) {
+          let dest = navInText[0].trim();
+          if (!dest.includes(".")) dest = dest + ".com";
+          navUrl = /^https?:\/\//i.test(dest) ? dest : `https://${dest}`;
+        } else if (activeTask?.goal) {
+          navUrl = `https://www.google.com/search?q=${encodeURIComponent(activeTask.goal)}`;
+        }
+      }
+      resObj.url = navUrl;
+      resObj.value = navUrl;
+    }
+
+    const result = { actionType };
+
+    // ── Aksi tanpa eksekusi halaman ──
+    if (actionType === "finish") {
+      result.success = true;
+      result.isFinished = true;
+      result.message = resObj.message || "Tugas telah selesai dikerjakan!";
+      return result;
+    }
+
+    if (actionType === "ask_user" || resObj.question) {
+      result.success = true;
+      result.isAskUser = true;
+      result.question = resObj.question || "Silakan pilih tindakan:";
+      result.options = resObj.options;
+      return result;
+    }
+
+    if (actionType === "artifact") {
+      const artifact = {
+        artifactType: resObj.artifactType || "text",
+        name: resObj.name || `artifact-${Date.now()}`,
+        content: resObj.content || resObj.value || ""
+      };
+      addMessageToCurrentSession("assistant", `📦 Artefak **${artifact.name}** berhasil dibuat.`, { skipClean: false, artifact });
+      if (activeTask) {
+        activeTask.artifacts.push(artifact);
+        persistTask();
+      }
+      result.success = true;
+      result.message = `Artefak "${artifact.name}" dibuat.`;
+      return result;
+    }
+
+    if (actionType === "write_clipboard") {
+      try {
+        await navigator.clipboard.writeText(String(resObj.value ?? ""));
+        result.success = true;
+        result.message = `Teks (${String(resObj.value || "").length} karakter) disalin ke clipboard.`;
+      } catch (err) {
+        result.success = false;
+        result.error = `Clipboard gagal: ${err.message}`;
+      }
+      return result;
+    }
+
+    // ── Aksi via background ──
+    if (actionType === "navigate") {
+      const r = await sendToBackground({ action: "NAVIGATE_TAB", url: resObj.url });
+      result.success = !!r.success;
+      result.message = r.message || r.error;
+      result.raw = r;
+
+      // Auto-wait setelah navigasi: halaman baru harus termuat sebelum langkah berikutnya
+      if (result.success) {
+        showStatusIndicator();
+        await new Promise(r2 => setTimeout(r2, 1500));
+        await sendToContentScript(
+          { type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 3500, stableWindowMs: 700 },
+          6000
+        );
+      }
+      return result;
+    }
+
+    if (["new_tab", "switch_tab", "close_tab", "list_tabs", "screenshot", "download_file"].includes(actionType)) {
+      let r;
+      if (actionType === "new_tab") {
+        r = await sendToBackground({ action: "NEW_TAB", url: resObj.url || resObj.value });
+        if (r && r.success) {
+          await new Promise(res => setTimeout(res, 800));
+          await sendToContentScript({ type: "LOCK_PAGE", message: "Tab baru sedang dikontrol oleh Pesat AI Agent..." }).catch(() => {});
+        }
+      }
+      else if (actionType === "switch_tab") {
+        await sendToContentScript({ type: "UNLOCK_PAGE" }).catch(() => {});
+        r = await sendToBackground({ action: "SWITCH_TAB", matchTitle: resObj.matchTitle, matchUrl: resObj.matchUrl, tabId: resObj.tabId });
+        if (r && r.success) {
+          await new Promise(res => setTimeout(res, 600));
+          await sendToContentScript({
+            type: "LOCK_PAGE",
+            message: `Tab ${resObj.matchTitle || "ini"} sedang dikontrol oleh Pesat AI Agent...`
+          }).catch(() => {});
+        }
+      }
+      else if (actionType === "close_tab") r = await sendToBackground({ action: "CLOSE_TAB", tabId: resObj.tabId });
+      else if (actionType === "list_tabs") r = await sendToBackground({ action: "LIST_TABS" });
+      else if (actionType === "screenshot") {
+        const shot = await captureScreenshot();
+        result.success = !!shot;
+        result.screenshotDataUrl = shot;
+        result.message = shot ? "Screenshot halaman aktif berhasil diambil." : "Screenshot gagal diambil.";
+        if (shot) result.data = { note: "Screenshot dikirim pada panggilan AI berikutnya." };
+        return result;
+      }
+      else if (actionType === "download_file") {
+        r = await sendToBackground({
+          action: "DOWNLOAD_FILE",
+          params: {
+            filename: resObj.filename || resObj.name || `pesat-file-${Date.now()}.txt`,
+            content: resObj.content || resObj.value || "",
+            mimeType: resObj.mimeType || "text/plain"
+          }
+        });
+      }
+      result.success = !!(r && r.success);
+      result.message = (r && (r.message || r.error)) || "";
+      result.data = r?.tabs || r?.data || null;
+      return result;
+    }
+
+    if (actionType.startsWith("skill_")) {
+      const params = { ...resObj };
+      delete params.action;
+      delete params.message;
+      delete params.planner;
+      const r = await sendToBackground({ action: "EXECUTE_SKILL", skill: actionType, params });
+      result.success = !!(r && r.success);
+      result.message = (r && (r.message || r.error)) || "";
+      result.data = r?.data || null;
+      result.needsAuth = !!r?.needsAuth;
+      result.isLoopDetected = !!r?.isLoopDetected;
+      return result;
+    }
+
+    // ── Aksi DOM via content script ──
+    let actionData;
+    if (isBatch) {
+      actionData = { actions: resObj.actions.map(act => ({ ...act, elementId: act.elementId || act.target })) };
+    } else {
+      actionData = {
+        action: actionType,
+        elementId: resObj.elementId || resObj.navigator?.elementId,
+        value: resObj.value ?? resObj.text,
+        pressEnter: resObj.pressEnter,
+        keys: resObj.keys || resObj.key,
+        key: resObj.key,
+        selector: resObj.selector,
+        scrollDirection: resObj.scrollDirection || resObj.direction,
+        x: resObj.x,
+        y: resObj.y,
+        fromElementId: resObj.fromElementId,
+        toElementId: resObj.toElementId,
+        fileName: resObj.fileName,
+        contentText: resObj.contentText,
+        contentBase64: resObj.contentBase64,
+        mimeType: resObj.mimeType
+      };
+    }
+
+    const r = await sendToContentScript({ type: "EXECUTE_ACTION", actionData });
+    result.success = !!(r && r.success);
+    result.message = (r && (r.message || r.error)) || "";
+    result.stateChanged = !!r?.stateChanged || (Array.isArray(r?.batchResults) && r.batchResults.some(item => item.stateChanged));
+    result.isLoopDetected = !!r?.isLoopDetected;
+    result.suggestion = r?.suggestion;
+
+    // Auto-wait setelah aksi penting
+    if (result.success && (actionType === "navigate" || actionType === "click" || isBatch)) {
+      const waitMs = actionType === "navigate" ? 3500 : 1200;
+      showStatusIndicator();
+      await new Promise(r2 => setTimeout(r2, actionType === "navigate" ? 1500 : 300));
+      await sendToContentScript({
+        type: "WAIT_FOR_DOM_STABLE",
+        maxWaitMs: waitMs,
+        stableWindowMs: actionType === "navigate" ? 700 : 500
+      });
+    }
+
+    return result;
+  }
+
+  // ═══════════════════════════════════════════════════
+  // VALIDATOR (Phase 4)
+  // ═══════════════════════════════════════════════════
+  async function runValidator(lastAction, lastResult, pageAfter) {
+    const sub = currentSubtaskObj();
+    const prompt = `
+[AKSI TERAKHIR]
+Subtask aktif: ${sub ? `#${sub.id} — ${sub.description}` : "(tidik ada)"}
+Aksi: ${lastAction.actionType}
+Hasil: ${lastResult === "success" ? "BERHASIL" : "GAGAL"} — ${lastAction.message || ""}
+
+[KONDISI HALAMAN SEKARANG]
+Judul: ${pageAfter.title}
+URL: ${pageAfter.url}
+Elemen interaktif: ${pageAfter.elementsCount}
+Ringkasan elemen (8 baris pertama):
+${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
+`.trim();
+
+    try {
+      const reply = await callLLM("validate", prompt);
+      const parsed = parseActionJSON(reply);
+      if (parsed && parsed.verdict) {
+        return {
+          verdict: String(parsed.verdict).toUpperCase(),
+          subtaskComplete: !!parsed.subtaskComplete,
+          reason: parsed.reason || ""
+        };
+      }
+    } catch (err) {
+      appendLog(`Validator error: ${err.message}`, "WARN");
+    }
+    return { verdict: "CONTINUE", subtaskComplete: false, reason: "Validator tidak merespon — lanjut default." };
+  }
+
+  // ═══════════════════════════════════════════════════
+  // MAIN: TASK EXECUTION LOOP (BYOK Gate Checked)
+  // ═══════════════════════════════════════════════════
+  async function handleSend() {
+    const userPrompt = promptInput.value.trim();
+    if (!userPrompt || isAgentRunning) return;
+
+    // GERBANG BYOK (PLAN Phase A.3): Cek apakah API key sudah ada
+    if (!isConfigured()) {
+      showByokGateMessage();
+      return;
+    }
+
+    const contextSourcesToSend = [...attachedContextSources];
+    attachedContextSources = [];
+    renderComposerChips();
+
+    promptInput.value = "";
+    promptInput.style.height = "38px";
+    shouldStopAgent = false;
+
+    chrome.runtime.sendMessage({ action: "RESET_LOOP_TRACKER" }, () => {
+      if (chrome.runtime.lastError) {}
+    });
+
+    let displayPrompt = userPrompt;
+    if (contextSourcesToSend.length > 0) {
+      const extraChips = contextSourcesToSend
+        .filter(s => s.type === "File" || s.type === "Image" || !userPrompt.includes(`@${s.name}`))
+        .map(s => s.type === "BrowserTab" ? `@${s.name}` : (s.type === "Connector" ? `@${s.name}` : `📎 ${s.name}`));
+      if (extraChips.length > 0) {
+        displayPrompt = `${extraChips.join(" ")}\n${userPrompt}`;
+      }
+    }
+    addMessageToCurrentSession("user", displayPrompt);
+
+    // Jalur perangkuman (bypass agent loop)
+    const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
+    if (isSummarize) {
+      await runSummarizeFlow(userPrompt);
+      return;
+    }
+
+    await startTask(userPrompt, contextSourcesToSend);
+  }
+
+  async function runSummarizeFlow(userPrompt) {
+    try {
+      setAgentRunning(true);
+      showStatusIndicator();
+      appendLog("Mengambil konten teks utama (Readable Content)...");
+
+      const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
+      let cleanText = textRes?.text || "";
+      let pageTitle = textRes?.title || "Halaman Web";
+      let pageUrl = textRes?.url || "";
+
+      if (!cleanText || cleanText.length < 20) {
+        const scanFallback = await sendToContentScript({ type: "SCAN_DOM", showOverlay: false });
+        cleanText = scanFallback?.data?.pageContent || "";
+        pageTitle = scanFallback?.data?.title || pageTitle;
+        pageUrl = scanFallback?.data?.url || pageUrl;
+      }
+
+      if (!cleanText || cleanText.length < 20) {
+        addMessageToCurrentSession("assistant", "⚠️ Tidak ditemukan artikel atau teks utama yang memadai untuk dirangkum pada halaman ini. Pastikan halaman sudah termuat sempurna.");
+        return;
+      }
+
+      const promptPayload = `[TEKS UTAMA ARTIKEL / HALAMAN WEB]
+Judul: ${pageTitle}
+URL: ${pageUrl}
+
+${cleanText}
+
+[INSTRUKSI PERANGKUMAN]
+${userPrompt}`;
+
+      showStatusIndicator();
+
+      const aiReply = await callLLM("chat", promptPayload, { isSummarize: true });
+      addMessageToCurrentSession("assistant", aiReply);
+      appendLog("✅ Rangkuman berhasil dibuat.");
+    } catch (err) {
+      if (err.name === "AbortError" || shouldStopAgent) {
+        appendLog("🛑 Perangkuman dibatalkan.");
+      } else {
+        appendLog(`Error perangkuman: ${err.message}`, "ERROR");
+        addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat merangkum: ${err.message}`);
+      }
+    } finally {
+      setAgentRunning(false);
+      hideStatusIndicator();
+    }
+  }
+
+  async function startTask(goal, contextSources = []) {
+    setAgentRunning(true);
+    showStatusIndicator();
+    appendLog(`Memulai task: "${goal}" (${contextSources.length} konteks terlampir)`);
+
+    activeTask = newTask(goal, contextSources);
+    taskCardMsgIndex = -1;
+    await persistTask();
+
+    try {
+      // 1. Ambil konten teks dari seluruh tab referensi di latar belakang (tanpa gonta-ganti tab fisik)
+      for (const src of (contextSources || [])) {
+        if (src.type === "BrowserTab" && src.metadata?.tabId) {
+          try {
+            const tabRes = await new Promise((resolve) => {
+              chrome.tabs.sendMessage(src.metadata.tabId, { type: "GET_READABLE_TEXT" }, (response) => {
+                if (chrome.runtime.lastError) resolve(null);
+                else resolve(response);
+              });
+            });
+            if (tabRes && tabRes.text && tabRes.text.length > 20) {
+              src.metadata.extractedText = tabRes.text.slice(0, 4500);
+              appendLog(`📖 Referensi "${src.name}" berhasil diekstrak di latar belakang (${src.metadata.extractedText.length} karakter).`);
+            }
+          } catch (e) {}
+        }
+      }
+
+      // 2. Cek tab aktif saat ini & tentukan apakah perlu switch tab
+      const isCopywritingTask = /(copywriting|buatkan\s+(tulisan|artikel|konten|copy|penawaran)|tulis\s+(copywriting|artikel|surat|penawaran|email)|draft\s+|buat\s+(artikel|surat|email|copy))/i.test(goal);
+      let activeTabInfo = null;
+      try {
+        const at = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (at && at[0]) activeTabInfo = at[0];
+      } catch (e) {}
+
+      const isEditorTab = (t) => t && (
+        /docs\.google\.com/i.test(t.url || "") ||
+        /word\.office\.com/i.test(t.url || "") ||
+        /notion\.so/i.test(t.url || "") ||
+        /medium\.com\/new-story/i.test(t.url || "") ||
+        /editor|dokumen/i.test(t.title || "")
+      );
+
+      const targetEditorSource = (contextSources || []).find(s => s.type === "BrowserTab" && isEditorTab(s.metadata));
+      const targetOtherSource = (contextSources || []).find(s => s.type === "BrowserTab" && s.metadata?.tabId);
+
+      if (isCopywritingTask && isEditorTab(activeTabInfo)) {
+        appendLog(`📝 Tab editor dokumen (${activeTabInfo.title}) sudah aktif. Referensi konten dibaca langsung di latar belakang.`);
+      } else if (targetEditorSource && targetEditorSource.metadata?.tabId) {
+        showStatusIndicator();
+        appendLog(`🔄 Berpindah ke tab editor: ${targetEditorSource.name} (tabId: ${targetEditorSource.metadata.tabId})`);
+        await sendToBackground({ action: "SWITCH_TAB", tabId: targetEditorSource.metadata.tabId });
+        await new Promise(r => setTimeout(r, 600));
+      } else if (!isCopywritingTask && targetOtherSource && targetOtherSource.metadata?.tabId) {
+        showStatusIndicator();
+        appendLog(`🔄 Berpindah otomatis ke tab target: ${targetOtherSource.name} (tabId: ${targetOtherSource.metadata.tabId})`);
+        await sendToBackground({ action: "SWITCH_TAB", tabId: targetOtherSource.metadata.tabId });
+        await new Promise(r => setTimeout(r, 600));
+        sendToContentScript({
+          type: "LOCK_PAGE",
+          message: `Tab ${targetOtherSource.name} sedang dikontrol oleh Pesat AI Agent...`
+        }).catch(() => {});
+      }
+
+      // ══ FASE PLAN ══
+      const initialScan = await scanPage(true);
+      const contextPrompt = typeof PesatContextEngine !== "undefined" && activeTask?.contextSources?.length
+        ? "\n" + PesatContextEngine.formatStructuredContextPrompt(activeTask.contextSources)
+        : "";
+      const planPrompt = `
+[KONDISI AWAL HALAMAN]
+Judul: ${initialScan.title} | URL: ${initialScan.url} | Elemen: ${initialScan.elementsCount}
+${contextPrompt}
+${activeTask.confirmAllGranted ? "" : ""}
+[INSTRUKSI PENGGUNA]
+"${goal}"
+
+Susun rencana subtask (maksimal 7) untuk mencapai goal di atas.
+`.trim();
+
+      let plan = null;
+      try {
+        const planReply = await callLLM("plan", planPrompt);
+        const parsed = parseActionJSON(planReply);
+        if (parsed && Array.isArray(parsed.plan) && parsed.plan.length > 0) {
+          plan = parsed.plan
+            .map((s, i) => ({
+              id: s.id || (i + 1),
+              description: String(s.description || s).substring(0, 200),
+              status: "pending"
+            }))
+            .slice(0, 7);
+        }
+      } catch (err) {
+        appendLog(`Planner error: ${err.message}`, "WARN");
+      }
+
+      if (!plan) {
+        // Fallback: satu subtask = goal itu sendiri
+        plan = [{ id: 1, description: goal.substring(0, 200), status: "pending" }];
+      }
+
+      activeTask.plan = plan;
+      activeTask.status = "EXECUTING";
+      const firstSub = currentSubtaskObj();
+      activeTask.currentSubtask = firstSub ? firstSub.id : null;
+
+      await persistTask();
+      appendLog(`🗓️ Rencana disusun (${plan.length} subtask).`);
+      await executeTaskLoop();
+    } catch (err) {
+      if (err.name === "AbortError" || shouldStopAgent) {
+        appendLog("🛑 Task dibatalkan oleh pengguna.");
+        if (activeTask) {
+          activeTask.status = "CANCELLED";
+          refreshTaskCard();
+          await clearPersistedTask();
+          activeTask = null;
+        }
+      } else {
+        appendLog(`Error task: ${err.message}`, "ERROR");
+        addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan: ${err.message}`);
+        if (activeTask) {
+          activeTask.status = "FAILED";
+          refreshTaskCard();
+          await clearPersistedTask();
+          activeTask = null;
+        }
+      }
+    } finally {
+      setAgentRunning(false);
+      hideStatusIndicator();
+      await sendToContentScript({ type: "CLEAR_MARKERS" }, 4000);
+    }
+  }
+
+  async function executeTaskLoop() {
+    if (!activeTask) return;
+    let lastNavigationWasRecent = false;
+
+    while (activeTask && activeTask.stepsUsed < activeTask.stepBudget && !shouldStopAgent) {
+      activeTask.stepsUsed++;
+      const stepNum = activeTask.stepsUsed;
+      const sub = currentSubtaskObj();
+
+      // Semua subtask selesai → validasi akhir → selesai
+      if (!sub) {
+        await finalizeTask("done", "Tugas selesai.");
+        return;
+      }
+
+      activeTask.currentSubtask = sub.id;
+      if (sub.status !== "in_progress") markSubtask(sub.id, "in_progress");
+      refreshTaskCard();
+      setAgentRunning(true);
+      showStatusIndicator();
+
+      // 1. Scan halaman (adaptif)
+      const fullScan = stepNum === 1 || lastNavigationWasRecent;
+      lastNavigationWasRecent = false;
+      const pageData = await scanPage(fullScan);
+      const tabsCtx = await getTabsContext();
+
+      if (shouldStopAgent) break;
+
+      // 2. Prompt Navigator
+      const contextPrompt = typeof PesatContextEngine !== "undefined" && activeTask?.contextSources?.length
+        ? "\n" + PesatContextEngine.formatStructuredContextPrompt(activeTask.contextSources)
+        : "";
+      const actPrompt = `
+${buildPageContext(pageData, fullScan, stepNum)}${tabsCtx}${contextPrompt}
+
+[SUBTASK AKTIF #${sub.id}]
+${sub.description}
+
+[PERINTAH]
+Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif menuju goal. Jika seluruh goal sudah tercapai, kembalikan finish.
+`.trim();
+
+      showStatusIndicator();
+      appendLog(`─── Step ${stepNum} (subtask #${sub.id}) ───`);
+
+      let reply;
+      try {
+        reply = await callLLM("act", actPrompt, { image: activeTask._pendingScreenshot || null });
+      } catch (err) {
+        if (err.name === "AbortError" || shouldStopAgent) break;
+        appendLog(`Navigator error: ${err.message}`, "ERROR");
+        addMessageToCurrentSession("assistant", `❌ Gagal menghubungi AI Engine: ${err.message}`);
+        await finalizeTask("failed", `Gagal menghubungi AI Engine: ${err.message}`);
+        return;
+      }
+      activeTask._pendingScreenshot = null;
+
+      if (shouldStopAgent) break;
+
+      let resObj = parseActionJSON(reply);
+      if (!resObj || (!resObj.action && !resObj.actions && !resObj.message && !resObj.question)) {
+        resObj = tryParseNaturalLanguageActions(reply, activeTask.goal);
+      }
+
+      // Intent recovery: jika model merespon teks namun menyebut tab yang harus dibuka
+      if (!resObj) {
+        const tabSource = (activeTask.contextSources || []).find(
+          s => s.type === "BrowserTab" && s.metadata?.tabId && (
+            reply.toLowerCase().includes(s.name.toLowerCase()) ||
+            sub.description.toLowerCase().includes(s.name.toLowerCase()) ||
+            sub.description.includes(String(s.metadata.tabId))
+          )
+        );
+        if (tabSource && tabSource.metadata?.tabId) {
+          appendLog(`💡 Intent recovery: Mendeteksi aksi switch_tab ke ${tabSource.name} (tabId: ${tabSource.metadata.tabId})`);
+          resObj = { action: "switch_tab", tabId: tabSource.metadata.tabId, matchTitle: tabSource.name };
+        }
+      }
+
+      if (!resObj) {
+        const isContentTask = /(copywriting|tulis|buatkan|draft|artikel|surat|email|konten|penawaran)/i.test(activeTask.goal || sub.description);
+
+        // Jika teks model adalah draf tulisan/copywriting yang substansial
+        if (reply && (reply.length > 100 || isContentTask)) {
+          appendLog(`✍️ Model berhasil menghasilkan draf tulisan/copywriting (${reply.length} karakter).`);
+          const artTitle = `Draf-${(activeTask.goal || "Copywriting").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.md`;
+          const artifact = {
+            artifactType: "text",
+            name: artTitle,
+            content: reply
+          };
+          activeTask.artifacts.push(artifact);
+
+          addMessageToCurrentSession("assistant", `### 📝 Draf Copywriting Berhasil Dibuat\n\n${reply}`, {
+            skipClean: true,
+            artifact
+          });
+
+          // Cek jika halaman saat ini adalah Google Docs / editor, langsung tempelkan
+          const isDocs = pageData.url?.includes("docs.google.com") || pageData.url?.includes("word.office.com") || pageData.title?.includes("Google Dokumen");
+          if (isDocs) {
+            showStatusIndicator();
+            await executeAgentAction({ action: "paste_text", value: reply });
+          }
+
+          markSubtask(sub.id, "done");
+          refreshTaskCard();
+          await persistTask();
+
+          const remaining = (activeTask.plan || []).filter(s => s.status === "pending");
+          if (remaining.length === 0) {
+            await finalizeTask("done", "✅ Copywriting telah selesai dirumuskan dan disimpan di panel artefak.");
+            return;
+          }
+          continue;
+        }
+
+        const remainingPlan = (activeTask.plan || []).filter(s => s.status !== "done");
+        if (remainingPlan.length > 0 && stepNum <= 3) {
+          appendLog(`⚠️ Navigator memberikan respon tekstual di Step ${stepNum}. Mencatat observasi dan meminta aksi lanjutan...`, "WARN");
+          activeTask.scratchpad.push({
+            step: stepNum,
+            subtask: sub.id,
+            observation: `Respon AI: "${reply.slice(0, 180)}..."`,
+            action: "text_guidance",
+            result: "info"
+          });
+          persistTask();
+
+          // Cek apakah ada tab target yang belum dibuka
+          const matchTab = (activeTask.contextSources || []).find(s => s.type === "BrowserTab" && s.metadata?.tabId);
+          if (matchTab && matchTab.metadata?.tabId) {
+            resObj = { action: "switch_tab", tabId: matchTab.metadata.tabId, matchTitle: matchTab.name };
+          } else {
+            continue;
+          }
+        } else {
+          // Jawaban teks biasa di langkah akhir → tampilkan & akhiri
+          addMessageToCurrentSession("assistant", reply);
+          await finalizeTask("done", reply || "AI memberikan jawaban akhir.");
+          return;
+        }
+      }
+
+      // 3. Konfirmasi aksi berisiko (Phase 7.1)
+      if (isRiskyAction(resObj) && !activeTask.confirmAllGranted) {
+        const verdict = await requestConfirmation(resObj);
+        if (shouldStopAgent || !verdict || verdict.cancelled) {
+          await finalizeTask("cancelled", "⛔ Task dibatalkan: aksi berisiko tidak disetujui.");
+          return;
+        }
+        if (!verdict.approved) {
+          // Ditolak → catat & minta Navigator pilih aksi lain
+          activeTask.scratchpad.push({
+            step: stepNum, subtask: sub.id,
+            observation: `Pengguna MENOLAK aksi ${resObj.action || "batch"}: ${resObj.message || ""}`,
+            action: "user_denied", result: "failed"
+          });
+          persistTask();
+          continue;
+        }
+        if (verdict.allowAll) {
+          activeTask.confirmAllGranted = true;
+        }
+        if (activeTask.status === "WAITING_USER") {
+          activeTask.status = "EXECUTING";
+        }
+      }
+
+      // 4. Ask_user → pause
+      if (resObj.action === "ask_user" || resObj.question) {
+        const answer = await requestAskUser(
+          resObj.question || resObj.message || "Silakan pilih tindakan:",
+          resObj.options
+        );
+        if (shouldStopAgent || !answer) {
+          await finalizeTask("cancelled", "Task dibatalkan saat menunggu jawaban pengguna.");
+          return;
+        }
+        activeTask.clarifications.push(answer);
+        activeTask.status = "EXECUTING";
+        persistTask();
+        continue;
+      }
+
+      // 5. Eksekusi aksi
+      showStatusIndicator();
+      appendLog(`▶ [Step ${stepNum}] ${(Array.isArray(resObj.actions) ? `batch(${resObj.actions.length})` : resObj.action)} ${resObj.elementId ? `[${resObj.elementId}]` : ""} ${resObj.url ? resObj.url : ""}`);
+
+      let exec;
+      try {
+        exec = await executeAgentAction(resObj);
+      } catch (err) {
+        exec = { success: false, actionType: resObj.action, message: err.message };
+      }
+
+      // 6. Catat scratchpad
+      activeTask.scratchpad.push({
+        step: stepNum,
+        subtask: sub.id,
+        observation: `${exec.actionType}: ${exec.message || (exec.success ? "OK" : "gagal")}`.substring(0, 300),
+        action: exec.actionType,
+        result: exec.success ? "success" : "failed"
+      });
+      await persistTask();
+
+      // 7. Kartu Navigator + bukti visual
+      let thumbDataUrl = null;
+      if (exec.success && ["navigate", "click", "batch"].includes(exec.actionType) && visionEnabled) {
+        thumbDataUrl = await captureScreenshot();
+        if (thumbDataUrl) activeTask._pendingScreenshot = thumbDataUrl;
+      }
+      if (exec.actionType === "screenshot" && exec.screenshotDataUrl) {
+        thumbDataUrl = exec.screenshotDataUrl;
+        activeTask._pendingScreenshot = exec.screenshotDataUrl;
+      }
+
+      addMessageToCurrentSession("assistant", "", {
+        skipClean: true,
+        multiAgent: {
+          planner: resObj.planner ? resObj.planner : null,
+          navigator: {
+            action: exec.actionType,
+            elementId: resObj.elementId || (Array.isArray(resObj.actions) ? resObj.actions.map(a => a.elementId).join(",") : ""),
+            description: resObj.message || exec.message || `Mengeksekusi ${exec.actionType}`,
+            status: exec.success ? "Selesai" : "Gagal",
+            screenshot: thumbDataUrl
+          },
+          validator: null
+        }
+      });
+
+      if (exec.actionType === "navigate" && exec.success) {
+        lastNavigationWasRecent = true;
+      }
+
+      // 8. Finish langsung
+      if (exec.isFinished) {
+        // Cegah finish prematur jika masih banyak subtask yang belum dijalankan
+        const pendingSubs = (activeTask.plan || []).filter(s => s.id !== sub.id && s.status === "pending");
+        if (pendingSubs.length > 0 && stepNum <= 2) {
+          appendLog(`⚠️ Navigator memanggil 'finish' terlalu dini pada langkah ke-${stepNum} (masih ada ${pendingSubs.length} subtask pending). Melanjutkan subtask.`, "WARN");
+          activeTask.scratchpad.push({
+            step: stepNum,
+            subtask: sub.id,
+            observation: `Panggilan finish ditolak: masih ada ${pendingSubs.length} subtask yang belum diselesaikan di browser.`,
+            action: "reject_premature_finish",
+            result: "failed"
+          });
+          persistTask();
+          continue;
+        }
+        await finalizeTask("done", exec.message);
+        return;
+      }
+
+      // ── Stuck Detection (§ 33 PRD) ──
+      const currentPageHash = `${pageData.url}|${pageData.title}|${pageData.elementsCount}`;
+      if (!exec.stateChanged && activeTask.lastPageHash === currentPageHash) {
+        activeTask.stuckCounter = (activeTask.stuckCounter || 0) + 1;
+        if (activeTask.stuckCounter >= 3) {
+          appendLog("🛑 STUCK DETECTED (§ 33 PRD): Halaman tidak berubah setelah 3 aksi berturut-turut. Mencoba strategi baru.", "WARN");
+          activeTask.stuckCounter = 0;
+          await tryReplanOrFail(sub, "Stuck detected: kondisi halaman web tidak merespon aksi agen.");
+          continue;
+        }
+      } else {
+        activeTask.stuckCounter = 0;
+        activeTask.lastPageHash = currentPageHash;
+      }
+
+      // 9. Kegagalan → retry / replan
+      if (!exec.success) {
+        const retryKey = `${sub.id}`;
+        activeTask.retries[retryKey] = (activeTask.retries[retryKey] || 0) + 1;
+
+        if (exec.isLoopDetected) {
+          appendLog("🛑 Circuit breaker memutus loop.", "WARN");
+          await tryReplanOrFail(sub, "Aksi berulang terdeteksi (circuit breaker).");
+          continue;
+        }
+
+        if (activeTask.retries[retryKey] >= CFG.MAX_RETRIES_PER_SUBTASK) {
+          await tryReplanOrFail(sub, `Subtask #${sub.id} gagal ${activeTask.retries[retryKey]}x berturut-turut.`);
+          continue;
+        }
+        appendLog(`⚠️ Step ${stepNum} gagal (${activeTask.retries[retryKey]}/${CFG.MAX_RETRIES_PER_SUBTASK}): ${exec.message || ""}`, "WARN");
+        await new Promise(r => setTimeout(r, 600));
+        continue;
+      }
+
+      // 10. VALIDATE
+      showStatusIndicator();
+      setAgentRunning(true);
+      const after = await scanPage(false);
+      const verdict = await runValidator(exec, exec.success ? "success" : "failed", after);
+
+      // Update kartu validator pada pesan terakhir
+      const session = getCurrentSession();
+      if (session && session.messages.length > 0) {
+        const lastMsg = session.messages[session.messages.length - 1];
+        if (lastMsg.multiAgent) {
+          lastMsg.multiAgent.validator = {
+            success: verdict.verdict !== "REPLAN" && verdict.verdict !== "ASK_USER",
+            message: `${verdict.verdict}: ${verdict.reason}`
+          };
+          updateMessageInSession(session.messages.length - 1, { multiAgent: lastMsg.multiAgent });
+        }
+      }
+
+      appendLog(`🎯 Validator: ${verdict.verdict} — ${verdict.reason}`);
+
+      if (verdict.subtaskComplete || verdict.verdict === "DONE") {
+        markSubtask(sub.id, "done");
+        refreshTaskCard();
+        await persistTask();
+      }
+
+      if (verdict.verdict === "DONE") {
+        await finalizeTask("done", "✅ Validator menilai seluruh tujuan pengguna telah tercapai.");
+        return;
+      }
+      if (verdict.verdict === "RETRY") {
+        const retryKey = `${sub.id}`;
+        activeTask.retries[retryKey] = (activeTask.retries[retryKey] || 0) + 1;
+        if (activeTask.retries[retryKey] >= CFG.MAX_RETRIES_PER_SUBTASK) {
+          await tryReplanOrFail(sub, `Validator menilai RETRY tetapi subtask #${sub.id} sudah mentok batas percobaan.`);
+        }
+        continue;
+      }
+      if (verdict.verdict === "REPLAN") {
+        await tryReplanOrFail(sub, `Validator menilai strategi subtask #${sub.id} macet.`);
+        continue;
+      }
+      if (verdict.verdict === "ASK_USER") {
+        const answer = await requestAskUser(
+          verdict.reason || "Dibutuhkan keputusan Anda. Bagaimana sebaiknya lanjut?",
+          ["Lanjutkan seperti biasa", "Coba strategi lain", "Batalkan task"]
+        );
+        if (!answer || shouldStopAgent) {
+          await finalizeTask("cancelled", "Task dibatalkan saat menunggu jawaban pengguna.");
+          return;
+        }
+        if (answer.toLowerCase().includes("strategi lain")) {
+          await tryReplanOrFail(sub, "Pengguna meminta strategi lain.");
+        } else if (answer.toLowerCase().includes("batalkan")) {
+          await finalizeTask("cancelled", "Task dibatalkan oleh pengguna.");
+          return;
+        }
+        activeTask.clarifications.push(answer);
+        activeTask.status = "EXECUTING";
+        persistTask();
+        continue;
+      }
+
+      // CONTINUE → lanjut langkah berikutnya
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    if (activeTask && activeTask.stepsUsed >= activeTask.stepBudget && !shouldStopAgent) {
+      await finalizeTask("failed", "Tugas belum dapat diselesaikan. Coba perintah yang lebih spesifik.");
+    }
+  }
+
+  async function tryReplanOrFail(failedSub, reason) {
+    if (!activeTask) return;
+    markSubtask(failedSub.id, "failed");
+    refreshTaskCard();
+
+    if (activeTask.replansUsed >= CFG.MAX_REPLANS) {
+      appendLog(`Strategi alternatif habis: ${reason}`, "WARN");
+      await finalizeTask("failed", "Tugas belum dapat diselesaikan. Coba perintah yang lebih spesifik.");
+      return;
+    }
+
+    activeTask.replansUsed++;
+    showStatusIndicator();
+    appendLog(`🔁 Re-plan ${activeTask.replansUsed}/${CFG.MAX_REPLANS}: ${reason}`, "WARN");
+
+    try {
+      const scan = await scanPage(false);
+      const replanPrompt = `
+[KONDISI HALAMAN SAAT INI]
+Judul: ${scan.title} | URL: ${scan.url}
+
+[RE-PLAN DIBUTUHKAN]
+Subtask yang gagal: #${failedSub.id} — ${failedSub.description}
+Alasan: ${reason}
+Riwayat aksi terakhir:
+${activeTask.scratchpad.slice(-6).map(e => `  step ${e.step} [${e.result}] ${e.observation}`).join("\n")}
+
+Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti strategi untuk sisanya (maksimal 7 subtask total).
+`.trim();
+
+      const reply = await callLLM("plan", replanPrompt);
+      const parsed = parseActionJSON(reply);
+      if (parsed && Array.isArray(parsed.plan) && parsed.plan.length > 0) {
+        const doneItems = activeTask.plan.filter(s => s.status === "done");
+        const newItems = parsed.plan
+          .map((s, i) => ({
+            id: s.id || (100 + i),
+            description: String(s.description || s).substring(0, 200),
+            status: "pending"
+          }))
+          .slice(0, 7);
+        activeTask.plan = [...doneItems, ...newItems].slice(0, 10);
+        activeTask.retries = {};
+        refreshTaskCard();
+        await persistTask();
+        appendLog(`🗓️ Rencana baru disusun (${activeTask.plan.length} subtask, ${doneItems.length} dipertahankan).`);
+        return;
+      }
+    } catch (err) {
+      appendLog(`Re-plan error: ${err.message}`, "ERROR");
+    }
+    appendLog(`Strategi alternatif gagal: ${reason}`, "ERROR");
+    await finalizeTask("failed", "Tugas belum dapat diselesaikan. Coba lagi atau gunakan perintah yang lebih spesifik.");
+  }
+
+  async function finalizeTask(status, message) {
+    if (!activeTask) return;
+
+    activeTask.status = status.toUpperCase();
+    refreshTaskCard();
+
+    const isSuccess = activeTask.status === "DONE";
+    const isCancelled = activeTask.status === "CANCELLED";
+    const heading = isSuccess ? "✅ **Selesai**" : (isCancelled ? "⏹️ **Dihentikan**" : "⚠️ **Belum selesai**");
+    const resultText = String(message || (isSuccess ? "Tugas selesai." : "Tugas belum dapat diselesaikan.")).trim();
+
+    addMessageToCurrentSession("assistant", `${heading}\n\n${resultText}`);
+    appendLog(
+      `🏁 Task ${activeTask.status}: ${activeTask.goal} (${activeTask.stepsUsed} langkah)`,
+      isSuccess ? "ACTION" : "WARN",
+      { goal: activeTask.goal, status: activeTask.status, steps: activeTask.stepsUsed, artifacts: activeTask.artifacts?.length || 0 },
+      "TASK_END"
+    );
+
+    activeTask = null;
+    taskCardMsgIndex = -1;
+    await clearPersistedTask();
+    setAgentRunning(false);
+    hideStatusIndicator();
+    sendToContentScript({ type: "UNLOCK_PAGE" }).catch(() => {});
+  }
+
+  // ── Resume task dari sesi sebelumnya (checkpoint) ──
+  async function resumeStoredTask() {
+    try {
+      const data = await chrome.storage.session.get([TASK_STORAGE_KEY]);
+      const task = data?.[TASK_STORAGE_KEY];
+      if (!task) return;
+
+      activeTask = task;
+      activeTask._pendingScreenshot = null;
+      shouldStopAgent = false;
+      taskCardMsgIndex = -1;
+      setAgentRunning(true);
+      showStatusIndicator();
+      appendLog(`▶ Melanjutkan task tersimpan: "${activeTask.goal}" (${activeTask.stepsUsed}/${activeTask.stepBudget} langkah)`);
+      await executeTaskLoop();
+    } catch (err) {
+      appendLog(`Resume error: ${err.message}`, "ERROR");
+    }
+  }
+
+  // Tombol resume dirender via event delegation (kartu resume)
+  chatArea.addEventListener("click", (e) => {
+    const resumeBtn = e.target.closest("[data-resume-task]");
+    if (resumeBtn && !isAgentRunning) {
+      resumeStoredTask();
+      return;
+    }
+  });
+
+  // ═══════════════════════════════════════════════════
+  // QUICK CHIPS
+  // ═══════════════════════════════════════════════════
   function applyPromptToInput(text) {
     promptInput.value = text;
     promptInput.style.height = "auto";
-    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 80), 180) + "px";
+    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 38), 150) + "px";
     promptInput.focus();
   }
 
-  chipSummarize.addEventListener("click", () => {
-    applyPromptToInput("Tolong berikan ringkasan poin-poin utama dari isi konten halaman web ini dalam format Markdown yang rapi dengan bullet points.");
-    handleSend();
-  });
+  function initQuickChipsSlider() {
+    if (!quickChipsContainer) return;
 
-  chipExtract.addEventListener("click", () => {
-    applyPromptToInput("Tolong ekstrak data atau tabel penting yang ada pada halaman ini dan sajikan dalam format tabel Markdown.");
-    handleSend();
-  });
+    const updateSliderArrows = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = quickChipsContainer;
+      if (btnSlideChipsLeft) {
+        btnSlideChipsLeft.classList.toggle("hidden", scrollLeft <= 4);
+      }
+      if (btnSlideChipsRight) {
+        btnSlideChipsRight.classList.toggle("hidden", scrollLeft + clientWidth >= scrollWidth - 4);
+      }
+    };
 
-  chipAutoFill.addEventListener("click", () => {
-    applyPromptToInput("Tolong periksa kolom input atau formulir pada halaman ini, lalu pandu saya cara mengisinya dengan bahasa yang ramah dan mudah dipahami.");
-    handleSend();
-  });
+    if (btnSlideChipsLeft) {
+      btnSlideChipsLeft.addEventListener("click", () => {
+        quickChipsContainer.scrollBy({ left: -140, behavior: "smooth" });
+      });
+    }
 
-  chipToggleMarkers.addEventListener("click", async () => {
-    markersVisible = !markersVisible;
-    if (markersVisible) {
-      await sendToContentScript({ type: "SCAN_DOM", showOverlay: true });
-      appendLog("Marker visual diaktifkan.");
+    if (btnSlideChipsRight) {
+      btnSlideChipsRight.addEventListener("click", () => {
+        quickChipsContainer.scrollBy({ left: 140, behavior: "smooth" });
+      });
+    }
+
+    quickChipsContainer.addEventListener("scroll", updateSliderArrows, { passive: true });
+
+    // Mouse drag-to-scroll
+    let isDown = false;
+    let startX = 0;
+    let scrollLeftVal = 0;
+
+    quickChipsContainer.addEventListener("mousedown", (e) => {
+      isDown = true;
+      quickChipsContainer.classList.add("is-dragging");
+      startX = e.pageX - quickChipsContainer.offsetLeft;
+      scrollLeftVal = quickChipsContainer.scrollLeft;
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (isDown) {
+        isDown = false;
+        quickChipsContainer.classList.remove("is-dragging");
+      }
+    });
+
+    quickChipsContainer.addEventListener("mousemove", (e) => {
+      if (!isDown) return;
+      e.preventDefault();
+      const x = e.pageX - quickChipsContainer.offsetLeft;
+      const walk = (x - startX) * 1.5;
+      quickChipsContainer.scrollLeft = scrollLeftVal - walk;
+    });
+
+    // Horizontal mouse wheel
+    quickChipsContainer.addEventListener("wheel", (e) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        quickChipsContainer.scrollLeft += e.deltaY;
+      }
+    }, { passive: false });
+
+    setTimeout(updateSliderArrows, 120);
+    window.addEventListener("resize", updateSliderArrows);
+  }
+
+  if (chipSummarize) {
+    chipSummarize.addEventListener("click", () => {
+      applyPromptToInput("Tolong buat ringkasan poin-poin penting dari isi konten halaman web ini.");
+      handleSend();
+    });
+  }
+
+  if (chipExtract) {
+    chipExtract.addEventListener("click", () => {
+      applyPromptToInput("Tolong ekstrak data atau tabel penting dari halaman ini dalam format tabel Markdown.");
+      handleSend();
+    });
+  }
+
+  if (chipAutoFill) {
+    chipAutoFill.addEventListener("click", () => {
+      applyPromptToInput("Tolong bantu jelaskan dan isi kolom formulir pada halaman ini.");
+      handleSend();
+    });
+  }
+
+  if (chipAuditSecurity) {
+    chipAuditSecurity.addEventListener("click", () => {
+      applyPromptToInput("Tolong lakukan audit keamanan, resource server, dan status pada halaman ini. Berikan temuan serta rekomendasi perbaikan.");
+      handleSend();
+    });
+  }
+
+  if (chipSeoAnalysis) {
+    chipSeoAnalysis.addEventListener("click", () => {
+      applyPromptToInput("Tolong lakukan audit dan analisis SEO pada halaman ini: title, meta tag, struktur konten, dan rekomendasi optimasi.");
+      handleSend();
+    });
+  }
+
+  if (chipCopyText) {
+    chipCopyText.addEventListener("click", () => {
+      applyPromptToInput("Tolong ekstrak dan salin seluruh teks konten utama dari halaman web ini secara bersih.");
+      handleSend();
+    });
+  }
+
+  if (chipToggleMarkers) {
+    chipToggleMarkers.addEventListener("click", async () => {
+      markersVisible = !markersVisible;
+      if (markersVisible) {
+        await sendToContentScript({ type: "SCAN_DOM", showOverlay: true });
+        appendLog("Marker visual diaktifkan.");
+      } else {
+        await sendToContentScript({ type: "CLEAR_MARKERS" });
+        appendLog("Marker visual dibersihkan.");
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // UNIVERSAL @MENTION & FILE INGESTION (Perplexity-Grade)
+  // ═══════════════════════════════════════════════════
+  let mentionQueryCounter = 0; // Race condition prevention
+
+  function renderComposerChips() {
+    if (!composerChipsTray) return;
+    composerChipsTray.innerHTML = "";
+    if (attachedContextSources.length === 0) {
+      composerChipsTray.classList.add("hidden");
+      return;
+    }
+    composerChipsTray.classList.remove("hidden");
+    attachedContextSources.forEach((src, idx) => {
+      const chip = document.createElement("span");
+      chip.className = "context-chip";
+      const icon = src.type === "Connector" ? (src.metadata?.icon || "⚡") : (src.type === "BrowserTab" ? "🌐" : (src.type === "CurrentPage" ? "📄" : (src.type === "Image" ? "🖼️" : "📎")));
+      const label = src.name.length > 24 ? src.name.slice(0, 22) + "…" : src.name;
+      chip.title = `${src.name} (${src.type})`;
+      chip.innerHTML = `<span class="chip-label">${icon} ${escapeHtml(label)}</span><button type="button" class="chip-remove" title="Hapus">×</button>`;
+      chip.querySelector(".chip-remove")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        attachedContextSources.splice(idx, 1);
+        renderComposerChips();
+      });
+      composerChipsTray.appendChild(chip);
+    });
+  }
+
+  function renderMentionItemIcon(src) {
+    if (src.type === "Connector") {
+      const emoji = src.metadata?.icon || "⚡";
+      return `<div class="mention-item-icon-wrap"><span class="mention-icon-emoji">${emoji}</span></div>`;
+    }
+    const favUrl = src.metadata?.favIconUrl;
+    if (favUrl && !favUrl.startsWith("chrome://")) {
+      return `<div class="mention-item-icon-wrap"><img src="${escapeHtml(favUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';" /><span class="mention-icon-fallback" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
+    }
+    return `<div class="mention-item-icon-wrap"><span class="mention-icon-fallback"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
+  }
+
+  function renderMentionPickerDOM(groups) {
+    if (!mentionPickerList) return;
+    mentionPickerList.innerHTML = "";
+    currentFilteredMentionSources = [];
+    let globalIdx = 0;
+
+    for (const group of groups) {
+      if (!group.items || group.items.length === 0) continue;
+
+      // Group header
+      const header = document.createElement("div");
+      header.className = "mention-picker-group-title";
+      header.textContent = group.title;
+      mentionPickerList.appendChild(header);
+
+      for (const src of group.items) {
+        const flatIdx = globalIdx++;
+        currentFilteredMentionSources.push(src);
+
+        const item = document.createElement("div");
+        item.className = `mention-picker-item${flatIdx === 0 ? " active" : ""}`;
+        item.setAttribute("data-flat-index", flatIdx);
+
+        const titleText = src.metadata?.title || src.name;
+        const subText = src.metadata?.domain || src.metadata?.description || "";
+        const badge = src.type === "BrowserTab" ? (src.metadata?.active ? "Aktif" : "Tab") : (src.type === "Connector" ? "Konektor" : "");
+
+        item.innerHTML = `
+          ${renderMentionItemIcon(src)}
+          <div class="mention-item-info">
+            <div class="mention-item-title-row">
+              <span class="mention-item-title">${escapeHtml(titleText)}</span>
+              ${badge ? `<span class="mention-item-badge">${escapeHtml(badge)}</span>` : ""}
+            </div>
+            <span class="mention-item-sub">${escapeHtml(subText)}</span>
+          </div>
+        `;
+
+        item.addEventListener("click", () => selectMentionSource(src));
+        mentionPickerList.appendChild(item);
+      }
+    }
+
+    if (currentFilteredMentionSources.length === 0) {
+      mentionPickerList.innerHTML = `<div class="mention-empty-state">Tidak ada tab atau konektor yang cocok</div>`;
+    }
+
+    mentionActiveIndex = 0;
+    mentionPicker?.classList.remove("hidden");
+  }
+
+  async function openMentionPicker(query = "") {
+    if (!mentionPicker || !mentionPickerList) return;
+    mentionQuery = query;
+
+    const thisQuery = ++mentionQueryCounter;
+
+    let groups = [];
+    if (typeof PesatContextEngine !== "undefined") {
+      const { connectors, tabs } = await PesatContextEngine.getFilteredGrouped(query);
+      if (thisQuery !== mentionQueryCounter) return; // stale result
+      groups = [
+        { title: "Connectors", items: connectors },
+        { title: "Browser Tabs", items: tabs.slice(0, 20) }
+      ];
+    }
+
+    renderMentionPickerDOM(groups);
+  }
+
+  function closeMentionPicker() {
+    if (mentionPicker) mentionPicker.classList.add("hidden");
+    currentFilteredMentionSources = [];
+    mentionQuery = "";
+    mentionActiveIndex = 0;
+  }
+
+  // ── Caret-aware @ detection helpers ──
+  function findMentionTrigger() {
+    const pos = promptInput.selectionStart;
+    if (pos == null) return null;
+    const val = promptInput.value;
+
+    // Walk backwards from caret to find '@'
+    let atPos = -1;
+    for (let i = pos - 1; i >= 0; i--) {
+      const ch = val[i];
+      if (ch === "@") {
+        // Must be at start of input or preceded by whitespace
+        if (i === 0 || /\s/.test(val[i - 1])) {
+          atPos = i;
+        }
+        break;
+      }
+      if (/\s/.test(ch)) break; // hit space before @
+    }
+
+    if (atPos < 0) return null;
+
+    const queryPart = val.slice(atPos + 1, pos);
+    if (/\s/.test(queryPart)) return null; // space inside query = no longer active
+
+    return { atPos, query: queryPart };
+  }
+
+  function selectMentionSource(source) {
+    if (!source) return;
+    if (!attachedContextSources.some(s => s.id === source.id)) {
+      attachedContextSources.push(source);
+      renderComposerChips();
+    }
+
+    // Smart insertion: replace @query with @Name at caret position, preserving surrounding text
+    const val = promptInput.value;
+    const pos = promptInput.selectionStart ?? val.length;
+    const trigger = findMentionTrigger();
+
+    let before, after, insertText;
+    if (trigger) {
+      before = val.slice(0, trigger.atPos);
+      after = val.slice(pos);
+      insertText = `@${source.name} `;
     } else {
-      await sendToContentScript({ type: "CLEAR_MARKERS" });
-      appendLog("Marker visual dibersihkan.");
+      before = val.slice(0, pos);
+      after = val.slice(pos);
+      const needSpace = pos > 0 && !/\s/.test(val[pos - 1]);
+      insertText = `${needSpace ? " " : ""}@${source.name} `;
+    }
+
+    if (insertText.endsWith(" ") && after.startsWith(" ")) {
+      after = after.slice(1);
+    }
+
+    promptInput.value = before + insertText + after;
+    const newPos = before.length + insertText.length;
+    promptInput.setSelectionRange(newPos, newPos);
+
+    promptInput.style.height = "auto";
+    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 38), 140) + "px";
+
+    closeMentionPicker();
+    promptInput.focus();
+  }
+
+  async function handleIncomingFiles(fileList) {
+    if (!fileList || fileList.length === 0) return;
+    for (const file of Array.from(fileList)) {
+      showStatusIndicator();
+      try {
+        if (typeof PesatFileEngine !== "undefined" && typeof PesatContextEngine !== "undefined") {
+          const processed = await PesatFileEngine.processLocalFile(file);
+          const source = PesatContextEngine.createContextSource({
+            type: processed.fileType === "image" ? "Image" : "File",
+            name: file.name,
+            metadata: {
+              fileType: processed.fileType,
+              size: processed.size,
+              sizeFormatted: processed.sizeFormatted,
+              summary: processed.summary,
+              schema: processed.schema,
+              sampleText: processed.sampleText,
+              fullText: processed.fullText,
+              dataUrl: processed.dataUrl
+            }
+          });
+          attachedContextSources.push(source);
+          appendLog(`📎 File dilampirkan: ${file.name} (${processed.summary})`);
+        }
+      } catch (err) {
+        appendLog(`Gagal memproses file ${file.name}: ${err.message}`, "WARN");
+      }
+    }
+    hideStatusIndicator();
+    renderComposerChips();
+  }
+
+  // ── Event Listeners Mention & Files ──
+  if (btnTriggerMention) {
+    btnTriggerMention.addEventListener("click", (e) => {
+      e.stopPropagation();
+      promptInput.focus();
+      openMentionPicker("");
+    });
+  }
+
+  // Klik di luar mention picker untuk menutup
+  document.addEventListener("click", (e) => {
+    if (mentionPicker && !mentionPicker.classList.contains("hidden")) {
+      if (!mentionPicker.contains(e.target) && e.target !== btnTriggerMention && e.target !== promptInput) {
+        closeMentionPicker();
+      }
     }
   });
 
-  // Auto resize textarea on typing
+  if (btnAttachFile && fileInput) {
+    btnAttachFile.addEventListener("click", () => {
+      fileInput.click();
+    });
+    fileInput.addEventListener("change", (e) => {
+      handleIncomingFiles(e.target.files);
+      fileInput.value = "";
+    });
+  }
+
+  // Drag and drop overlay (§ 5, 11)
+  window.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    if (dropOverlay) dropOverlay.classList.remove("hidden");
+  });
+  window.addEventListener("dragover", (e) => {
+    e.preventDefault();
+  });
+  window.addEventListener("dragleave", (e) => {
+    if (e.relatedTarget === null && dropOverlay) {
+      dropOverlay.classList.add("hidden");
+    }
+  });
+  window.addEventListener("drop", (e) => {
+    e.preventDefault();
+    if (dropOverlay) dropOverlay.classList.add("hidden");
+    if (e.dataTransfer?.files?.length > 0) {
+      handleIncomingFiles(e.dataTransfer.files);
+    }
+  });
+
+  // Clipboard paste with image/files
+  promptInput.addEventListener("paste", (e) => {
+    if (e.clipboardData?.files?.length > 0) {
+      e.preventDefault();
+      handleIncomingFiles(e.clipboardData.files);
+    }
+  });
+
+  // Download Observer Listener (§ 26)
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg && msg.action === "DOWNLOAD_COMPLETED_EVENT" && msg.downloadItem) {
+      const item = msg.downloadItem;
+      appendLog(`⬇️ Download terdeteksi selesai: ${item.filename} (${item.fileSize} bytes)`);
+      if (typeof PesatContextEngine !== "undefined") {
+        const downloadSource = PesatContextEngine.createContextSource({
+          type: "Download",
+          name: item.filename,
+          metadata: { ...item }
+        });
+        if (activeTask) {
+          activeTask.contextSources.push(downloadSource);
+          activeTask.scratchpad.push({
+            step: activeTask.stepsUsed,
+            subtask: activeTask.currentSubtask,
+            observation: `File terunduh dari browser: ${item.filename} (${item.fileSize} bytes)`,
+            action: "download_complete",
+            result: "success"
+          });
+          persistTask();
+        }
+      }
+    }
+  });
+
   promptInput.addEventListener("input", () => {
     promptInput.style.height = "auto";
-    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 80), 180) + "px";
+    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 38), 140) + "px";
+
+    const trigger = findMentionTrigger();
+    if (trigger) {
+      openMentionPicker(trigger.query);
+    } else {
+      closeMentionPicker();
+    }
   });
 
   promptInput.addEventListener("keydown", (e) => {
+    // Navigasi keyboard mention picker
+    if (mentionPicker && !mentionPicker.classList.contains("hidden") && currentFilteredMentionSources.length > 0) {
+      const items = mentionPickerList?.querySelectorAll(".mention-picker-item");
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        mentionActiveIndex = (mentionActiveIndex + 1) % currentFilteredMentionSources.length;
+        items?.forEach((it, idx) => it.classList.toggle("active", idx === mentionActiveIndex));
+        items?.[mentionActiveIndex]?.scrollIntoView({ block: "nearest" });
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        mentionActiveIndex = (mentionActiveIndex - 1 + currentFilteredMentionSources.length) % currentFilteredMentionSources.length;
+        items?.forEach((it, idx) => it.classList.toggle("active", idx === mentionActiveIndex));
+        items?.[mentionActiveIndex]?.scrollIntoView({ block: "nearest" });
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const sel = currentFilteredMentionSources[mentionActiveIndex];
+        if (sel) selectMentionSource(sel);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeMentionPicker();
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   });
 
-  // ----------------------------------------------------
-  // Helpers
-  // ----------------------------------------------------
-  function setAgentRunning(running, statusText = "Siap") {
+  // ═══════════════════════════════════════════════════
+  // HELPERS: STATUS, STOP, LOG
+  // ═══════════════════════════════════════════════════
+  function setAgentRunning(running) {
     isAgentRunning = running;
-    agentStatus.textContent = statusText;
+    agentStatus.textContent = running ? "Bekerja" : "Siap";
     if (running) {
       agentStatus.classList.add("working");
       stopBar.classList.remove("hidden");
+      sendToContentScript({
+        type: "LOCK_PAGE",
+        message: "Tab ini sedang dikontrol oleh Pesat AI Agent... (Halaman dikunci agar AI fokus)"
+      }).catch(() => {});
     } else {
       agentStatus.classList.remove("working");
       stopBar.classList.add("hidden");
+      sendToContentScript({ type: "UNLOCK_PAGE" }).catch(() => {});
     }
   }
 
@@ -1229,13 +3287,24 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       } catch (e) {}
       activeAbortController = null;
     }
-    setAgentRunning(false, "Dihentikan");
+    if (planApprovalResolver) { planApprovalResolver(false); planApprovalResolver = null; }
+    if (askUserResolver) { askUserResolver(null); askUserResolver = null; }
+    if (confirmResolver) { confirmResolver({ approved: false, cancelled: true }); confirmResolver = null; }
+    if (activeTask) {
+      activeTask.status = "PAUSED";
+      refreshTaskCard();
+      appendLog("🛑 Task dihentikan oleh pengguna (checkpoint tersimpan untuk dilanjutkan).", "WARN");
+      persistTask();
+      activeTask = null;
+      taskCardMsgIndex = -1;
+    }
+    setAgentRunning(false);
     hideStatusIndicator();
+    sendToContentScript({ type: "UNLOCK_PAGE" }).catch(() => {});
     appendLog("🛑 Otomatisasi dihentikan oleh pengguna.");
   });
 
   function appendLog(logText, level = "INFO", details = null, type = "EVENT") {
-    // 1. Kirim telemetri silent ke Cloudflare Pages / Workers
     if (typeof PesatLogger !== "undefined" && typeof PesatLogger.sendRemoteLog === "function") {
       PesatLogger.sendRemoteLog({
         level,
@@ -1247,7 +3316,6 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       });
     }
 
-    // 2. Jika elemen logContent ada (opsional), append secara aman
     if (logContent) {
       if (logContent.querySelector(".log-empty")) {
         logContent.innerHTML = "";
@@ -1271,9 +3339,11 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       .replace(/'/g, "&#039;");
   }
 
-  // Event Listeners Header & Drawers
-  btnNewChat.addEventListener("click", createNewSession);
-  btnDrawerNewChat.addEventListener("click", createNewSession);
+  // ═══════════════════════════════════════════════════
+  // HEADER & DRAWERS & EXPORT
+  // ═══════════════════════════════════════════════════
+  btnNewChat.addEventListener("click", () => createNewSession());
+  btnDrawerNewChat.addEventListener("click", () => createNewSession());
 
   btnHistory.addEventListener("click", () => {
     historyDrawer.classList.toggle("hidden");
@@ -1290,7 +3360,14 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
 
   btnSettings.addEventListener("click", () => {
     settingsPanel.classList.toggle("hidden");
+    refreshGoogleStatus();
   });
+  if (btnComposerModel) {
+    btnComposerModel.addEventListener("click", () => {
+      settingsPanel.classList.toggle("hidden");
+      refreshGoogleStatus();
+    });
+  }
   btnCloseSettings.addEventListener("click", () => {
     settingsPanel.classList.add("hidden");
   });
@@ -1318,6 +3395,50 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       appendLog("📥 Riwayat percakapan berhasil diekspor.");
     });
   }
+
+  // ── Onboarding Wizard Extra Controls ──
+  if (btnWizardClose && onboardingModal) {
+    btnWizardClose.addEventListener("click", () => {
+      onboardingModal.classList.add("hidden");
+    });
+  }
+  if (onboardingModal) {
+    onboardingModal.addEventListener("click", (e) => {
+      if (e.target === onboardingModal) {
+        onboardingModal.classList.add("hidden");
+      }
+    });
+  }
+  if (btnWizardMore) {
+    btnWizardMore.addEventListener("click", () => {
+      settingsPanel?.classList.toggle("hidden");
+    });
+  }
+  if (wizardProviderToggle) {
+    wizardProviderToggle.addEventListener("change", (e) => {
+      if (settingsProviderToggle) settingsProviderToggle.checked = e.target.checked;
+      appendLog(e.target.checked ? "Provider PesatRouter diaktifkan." : "Provider PesatRouter dinonaktifkan.");
+    });
+  }
+  if (settingsProviderToggle) {
+    settingsProviderToggle.addEventListener("change", (e) => {
+      if (wizardProviderToggle) wizardProviderToggle.checked = e.target.checked;
+      appendLog(e.target.checked ? "Provider PesatRouter diaktifkan." : "Provider PesatRouter dinonaktifkan.");
+    });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // INITIALIZATION (Runs after all variables & functions are declared)
+  // ═══════════════════════════════════════════════════
+  await loadSettings();
+  await loadSessions();
+  await refreshGoogleStatus();
+  await loadResumableTask();
+  await refreshUsageDisplay();
+  attachSuggestionListeners();
+  initQuickChipsSlider();
+  checkOnboarding();
+  appendLog("Sesi ekstensi v5.2 (Direct PesatRouter BYOK) diaktifkan.", "INFO", { timestamp: Date.now() }, "SESSION_OPEN");
 
   btnSend.addEventListener("click", handleSend);
 });
