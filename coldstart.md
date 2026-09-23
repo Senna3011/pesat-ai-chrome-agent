@@ -9,7 +9,7 @@
 * **Tujuan**: Membangun ekstensi browser berbasis Chrome Extension Manifest V3 dengan Side Panel UI yang mampu melakukan browser automation (membaca DOM, mengeksekusi aksi web, mengisi formulir) menggunakan AI/LLM internal.
 * **Tech Stack Ekstensi**: Vanilla HTML, CSS, JavaScript (Ringan, mudah dipahami, tanpa build tools).
 * **Infrastruktur API**: Cloudflare Pages Functions (Serverless Proxy Middleware untuk mengamankan API Key AI Internal).
-* **Target Mentor**: Pak Nell
+* **Target Stakeholder**: Tim Internal & Product Lead
 
 ---
 
@@ -95,12 +95,51 @@
 	  - *Current-URL awareness*: Mencegah AI mengeksekusi navigasi ulang jika URL sudah terbuka di tab aktif.
 	- [x] **Pengujian & Verifikasi Pengguna**: Uji coba instalasi dan automasi browser di lingkungan eksternal berhasil berjalan lancar dan aman.
 
-	### 🗓️ Day 3 (Phase 5: High-Accuracy AXTree, Anti-Loop Guardrails, & Human-in-the-Loop)
-	- [x] **Akurasi Form React/Vue/SPA**: Menggunakan `Object.getOwnPropertyDescriptor` prototype setter agar nilai form terisi sempurna tanpa memicu validasi kosong.
-	- [x] **Mekanisme Human-in-the-Loop (`ask_user`)**: Jika instruksi pengguna ambigu (contoh: mengetik satu kata nama brand), AI berhenti menebak dan menyajikan tombol opsi klarifikasi interaktif.
-	- [x] **Anti-Loop Circuit Breaker**: Mendeteksi jika aksi identik terpanggil 2–3x berturut-turut di background worker dan memutus siklus secara aman.
-	- [x] **Dukungan Aksi Keyboard (`press_key`)**: Menambahkan event simulasi penekanan tombol keyboard (Enter/Tab/Escape) dan form submission fallback.
-	- [x] **Penyempurnaan Perangkuman Halaman (Readable Content)**: Ekstraksi teks semantik murni (judul, artikel, paragraf) tanpa gangguan elemen navigasi/footer, dan sanitasi respons JSON agar tampil sebagai Markdown bersih.
-	- [x] **Hardening Keamanan & CORS Lockdown**: Pembatasan akses origin backend hanya untuk Chrome Extension resmi serta sensor otomatis password pada log.
+		### 🗓️ Day 3 (Phase 5: High-Accuracy AXTree, Anti-Loop Guardrails, & Human-in-the-Loop)
+		- [x] **Akurasi Form React/Vue/SPA**: Menggunakan `Object.getOwnPropertyDescriptor` prototype setter agar nilai form terisi sempurna tanpa memicu validasi kosong.
+		- [x] **Mekanisme Human-in-the-Loop (`ask_user`)**: Jika instruksi pengguna ambigu (contoh: mengetik satu kata nama brand), AI berhenti menebak dan menyajikan tombol opsi klarifikasi interaktif.
+		- [x] **Anti-Loop Circuit Breaker**: Mendeteksi jika aksi identik terpanggil 2–3x berturut-turut di background worker dan memutus siklus secara aman.
+		- [x] **Dukungan Aksi Keyboard (`press_key`)**: Menambahkan event simulasi penekanan tombol keyboard (Enter/Tab/Escape) dan form submission fallback.
+		- [x] **Penyempurnaan Perangkuman Halaman (Readable Content)**: Ekstraksi teks semantik murni (judul, artikel, paragraf) tanpa gangguan elemen navigasi/footer, dan sanitasi respons JSON agar tampil sebagai Markdown bersih.
+		- [x] **Hardening Keamanan & CORS Lockdown**: Pembatasan akses origin backend hanya untuk Chrome Extension resmi serta sensor otomatis password pada log.
+
+		### 🗓️ Day 4 (Phase 6: Centralized Telemetry, Stealth UX ala Comet, & Modular Engine Refactoring)
+		- [x] **Centralized Multi-User Telemetry & Real-Time Log Dashboard** (`logger.js`, `functions/api/logs.js`, `public/logs.html`):
+		  - Dashboard telemetry interaktif berbasis web untuk memantau performa, latency, error, dan aktivitas agent seluruh user secara live.
+		  - Endpoint serverless `/api/logs` dengan CORS policy yang aman dan buffer in-memory.
+		  - Zero UI leakage: Telemetry berjalan di latar belakang tanpa mengganggu tampilan Side Panel pengguna.
+		- [x] **Stealth UX (Perplexity/Comet-like Minimalist Experience)** (`sidepanel.js`, `content.js`):
+		  - Sembunyikan jejak teknis mentah (trace kartu Planner/Navigator/Validator) dari antarmuka chat.
+		  - Tampilan visual super bersih: Floating indicator ringkas ("Sedang mengerjakan..."), status badge ("Bekerja" / "Siap"), dan hasil akhir disajikan dalam Markdown rapi.
+		  - Pilihan pemulihan kesalahan yang ramah pengguna ("Coba strategi lain").
+		- [x] **Refactoring Modular Engine & Sinkronisasi Ekstensi**:
+		  - Pemisahan core logic ke modul terpisah (`ai-engine.js`, `file-engine.js`, `config.js`, `logger.js`).
+		  - Sinkronisasi penuh antara root workspace dan direktori `/extension` untuk kemudahan deploy & debugging.
+		  - Polish UI Dark-Glass Pesat.ai (Sora, Plus Jakarta Sans, Obsidian theme, high-contrast readability).
+		- [x] **Peningkatan Robustness DOM & AI Loop System**:
+		  - Propagasi `stateChanged` dari Content Script ke Sidepanel untuk deteksi akurat saat DOM mengalami mutasi/stuck.
+		  - Batch action result handling yang lebih stabil pada dynamic SPA / framework modern.
+
+	### 🗓️ Day 5 (Agentic Realignment, BYOK PesatRouter Integration, UI/UX Polish, & QA Evaluation)
+	- [x] **Penyelarasan Visi Agentic vs Generative (Kebutuhan Produktivitas Tim)**:
+	  - Menggeser orientasi ekstensi dari sekadar chatbot teks pasif/generatif menjadi **Autonomous Agentic Assistant** yang mengeksekusi tindakan nyata di browser (membuka Gmail, menyusun draf email, inspeksi Google Search Console, mengetik artikel Docs, posting sosmed, dan live code fix).
+	  - Prinsip utama: *"Bisa mempermudah pekerjaan manusia dan meningkatkan produktivitas tim."*
+	- [x] **Integrasi Direct BYOK PesatRouter (`api.pesatrouter.com`)**:
+	  - Panggilan API langsung ke PesatRouter via `ai-engine.js` dengan opsi model: `pesat-flash` (cepat/umum), `pesat-pro` (penalaran mendalam), dan `pesat-lite`.
+	  - Penanganan transisi fleksibel antara BYOK PesatRouter dan fallback Cloudflare Worker.
+	- [x] **Penyempurnaan UI/UX & Verifikasi Panduan Desain Pesat.ai (Skor QA: 9.96/10)**:
+	  - Desain Dark-Glass Obsidian (`#0a0a14`) dengan ambient aurora glow violet/indigo.
+	  - Standar tipografi: **Sora** (Headings) dan **Plus Jakarta Sans** (Body) dengan batas minimum ukuran font 14px.
+	  - Komponen lengkap: Slider Quick Action Chips, Composer Card modern dengan `@ Konteks` dan `📎 Lampiran File`.
+	  - Modal Onboarding PesatRouter dan Pengaturan terisolasi rapi (tidak bocor ke chat).
+	- [x] **Penyempurnaan Analytic Pipeline (SEO & Perangkuman)**:
+	  - Format Markdown profesional pada fitur Rangkum Halaman (Ringkasan Eksekutif, Poin-Poin Kunci, Kesimpulan).
+	  - Jalur analisis langsung untuk audit SEO dan keamanan web tanpa memicu peringatan log action navigator.
+	- [x] **Temuan Teknis & Evaluasi QA Otomasi Email (Gmail)**:
+	  - *Chip Tokenization*: Input penerima email Gmail memerlukan event `Enter` agar terdaftar sebagai chip kontak yang sah.
+	  - *Dialog Timing & Auto-Waiting*: Pop-up form compose Gmail membutuhkan waktu render 300–500ms sebelum input penerima siap diinteraksi.
+	  - *Multi-Intent Decomposition*: Perintah majemuk (navigasi + compose + input + send) memerlukan pemecahan subtask otomatis agar tidak memicu deteksi stuck atau looping.
+
+
 
 
