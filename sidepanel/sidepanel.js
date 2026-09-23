@@ -2111,21 +2111,21 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     }
     addMessageToCurrentSession("user", displayPrompt);
 
-    // Jalur perangkuman (bypass agent loop)
-    const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
-    if (isSummarize) {
-      await runSummarizeFlow(userPrompt);
+    // Jalur analisis konten langsung (bypass action loop untuk hasil cepat & rapi)
+    const isDirectAnalysis = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt);
+    if (isDirectAnalysis) {
+      await runAnalysisFlow(userPrompt);
       return;
     }
 
     await startTask(userPrompt, contextSourcesToSend);
   }
 
-  async function runSummarizeFlow(userPrompt) {
+  async function runAnalysisFlow(userPrompt) {
     try {
       setAgentRunning(true);
       showStatusIndicator();
-      appendLog("Mengambil konten teks utama (Readable Content)...");
+      appendLog("Mengambil konten dan metadata halaman web...");
 
       const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
       let cleanText = textRes?.text || "";
@@ -2140,30 +2140,73 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
       }
 
       if (!cleanText || cleanText.length < 20) {
-        addMessageToCurrentSession("assistant", "⚠️ Tidak ditemukan artikel atau teks utama yang memadai untuk dirangkum pada halaman ini. Pastikan halaman sudah termuat sempurna.");
+        addMessageToCurrentSession("assistant", "⚠️ Tidak ditemukan artikel atau konten utama yang memadai pada halaman ini. Pastikan halaman sudah termuat sempurna.");
         return;
       }
 
-      const promptPayload = `[TEKS UTAMA ARTIKEL / HALAMAN WEB]
+      const isSeo = /(?:seo|meta|kata kunci|keyword)/i.test(userPrompt);
+      const isSecurity = /(?:keamanan|security|audit keamanan|ssl|https)/i.test(userPrompt);
+
+      let promptPayload = "";
+      if (isSeo) {
+        promptPayload = `Lakukan audit SEO profesional dan mendalam untuk halaman web berikut:
+
+Judul Halaman: ${pageTitle}
+URL Halaman: ${pageUrl}
+
+[KONTEN & STRUKTUR HALAMAN]:
+${cleanText.substring(0, 7000)}
+
+Format laporan dalam Markdown yang rapi:
+1. ### 🔍 Ringkasan & Skor SEO Halaman
+2. ### 🏷️ Evaluasi Judul & Meta Tag
+3. ### 📑 Analisis Struktur Konten & Heading (H1/H2/H3)
+4. ### 🔑 Kerapatan & Distribusi Kata Kunci
+5. ### 💡 Rekomendasi Optimasi Konkret (Actionable Fixes)`;
+      } else if (isSecurity) {
+        promptPayload = `Lakukan audit keamanan dan integritas web untuk halaman berikut:
+
+Judul Halaman: ${pageTitle}
+URL Halaman: ${pageUrl}
+
+[KONTEN & STRUKTUR HALAMAN]:
+${cleanText.substring(0, 7000)}
+
+Format laporan dalam Markdown:
+1. ### 🛡️ Status Protokol & Transport Security
+2. ### ⚠️ Temuan Potensi Kerentanan & Resiko
+3. ### 🔒 Rekomendasi Pengamanan Web`;
+      } else {
+        promptPayload = `Tolong buat ringkasan komprehensif, rapi, dan mudah dipahami dari konten halaman web berikut:
+
 Judul: ${pageTitle}
 URL: ${pageUrl}
 
-${cleanText}
+[ISI KONTEN HALAMAN]:
+${cleanText.substring(0, 7000)}
 
-[INSTRUKSI PERANGKUMAN]
-${userPrompt}`;
+Format ringkasan dalam Markdown yang elegan:
+### 📄 Ringkasan Eksekutif
+(Satu paragraf ringkasan esensi utama)
+
+### 📌 Poin-Poin Kunci
+- (Gunakan bullet points berbobot dengan teks tebal pada topik penting)
+
+### 💡 Kesimpulan & Tindak Lanjut
+(Penjelasan akhir yang aplikatif)`;
+      }
 
       showStatusIndicator();
 
       const aiReply = await callLLM("chat", promptPayload, { isSummarize: true });
       addMessageToCurrentSession("assistant", aiReply);
-      appendLog("✅ Rangkuman berhasil dibuat.");
+      appendLog("✅ Analisis konten berhasil disajikan.");
     } catch (err) {
       if (err.name === "AbortError" || shouldStopAgent) {
-        appendLog("🛑 Perangkuman dibatalkan.");
+        appendLog("🛑 Analisis dibatalkan.");
       } else {
-        appendLog(`Error perangkuman: ${err.message}`, "ERROR");
-        addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat merangkum: ${err.message}`);
+        appendLog(`Error analisis: ${err.message}`, "ERROR");
+        addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat menganalisis: ${err.message}`);
       }
     } finally {
       setAgentRunning(false);

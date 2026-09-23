@@ -3,6 +3,15 @@
   const DEFAULT_CF_WORKER = "https://pesat-ai-chrome-agent.senna-947.workers.dev";
   const DEFAULT_PESATROUTER = "https://api.pesatrouter.com/v1";
 
+  const SYSTEM_CHAT_PROMPT = `Anda adalah Pesat AI - Asisten profesional untuk analisis konten web, audit SEO, riset, dan perangkuman dokumen.
+Berikan respon dalam format Markdown yang rapi, profesional, dan nyaman dibaca:
+- Gunakan struktur judul dan subjudul jelas (###)
+- Buat poin-poin penting (bullet points) yang padat dan informatif
+- Berikan penekanan teks tebal (**bold**) pada kata kunci penting
+- Buat tabel Markdown yang rapi jika menyajikan data metrik/komparasi
+- Sajikan kesimpulan dan rekomendasi konkret di akhir respon.
+JANGAN berikan format JSON untuk obrolan/analisis, berikan langsung teks Markdown lengkap.`;
+
   const SYSTEM_AGENTIC_PROMPT = `Anda adalah Pesat AI Agent - Asisten otomatisasi browser otonom cerdas (AGENTIC) untuk membantu produktivitas tim dan mempermudah pekerjaan manusia di browser.
 Anda BUKAN sekadar chatbot teks generatif; Anda mengeksekusi aksi nyata fisik di halaman web pengguna secara berurutan sampai tugas selesai tuntas.
 
@@ -106,10 +115,12 @@ Untuk Fase VALIDATE:
       const apiKey = (config.apiKey || "").trim();
       const model = (config.modelName || "").trim() || "pesat-flash";
 
+      const isChat = phase === "chat";
       const phaseInstruction = `\n[FASE EKSEKUSI SAAT INI]: ${phase.toUpperCase()}\n[STATUS STATE TUGAS]: ${typeof taskState === "string" ? taskState : JSON.stringify(taskState || {})}`;
+      const systemInstruction = isChat ? SYSTEM_CHAT_PROMPT : (SYSTEM_AGENTIC_PROMPT + phaseInstruction);
 
       const payloadMessages = [
-        { role: "system", content: SYSTEM_AGENTIC_PROMPT + phaseInstruction },
+        { role: "system", content: systemInstruction },
         ...messages.filter(m => m.role !== "system").slice(-4),
         { role: "user", content: promptText }
       ];
@@ -126,7 +137,7 @@ Untuk Fase VALIDATE:
           body: JSON.stringify({
             model: model,
             messages: payloadMessages,
-            temperature: 0.1
+            temperature: isChat ? 0.3 : 0.1
           }),
           signal: signal
         });
