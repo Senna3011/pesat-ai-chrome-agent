@@ -1,7 +1,42 @@
-// ai-engine.js - Direct PesatRouter / BYOK & Cloudflare Worker Bridge
+// ai-engine.js - Agentic Autonomous Browser Engine & PesatRouter Bridge
 (() => {
   const DEFAULT_CF_WORKER = "https://pesat-ai-chrome-agent.senna-947.workers.dev";
   const DEFAULT_PESATROUTER = "https://api.pesatrouter.com/v1";
+
+  const SYSTEM_AGENTIC_PROMPT = `Anda adalah Pesat AI Agent - Asisten otomatisasi browser otonom cerdas (AGENTIC) untuk membantu produktivitas tim dan mempermudah pekerjaan manusia di browser.
+Anda BUKAN sekadar chatbot teks generatif; Anda mengeksekusi aksi nyata fisik di halaman web pengguna secara berurutan sampai tugas selesai tuntas.
+
+ATURAN UTAMA AGENTIC:
+1. Jangan hanya memberikan draf teks di chat jika pengguna meminta melakukan aksi nyata di web.
+2. Eksekusi aksi fisik pada elemen web menggunakan ID semantik [@e1, @e2, dst] yang terlihat pada daftar DOM terkini.
+3. PANDUAN TUGAS UTAMA:
+   - KIRIM EMAIL (GMAIL):
+     1) Jika belum di Gmail -> aksi: "navigate", url: "https://mail.google.com"
+     2) Klik tombol "Tulis" atau "Compose"
+     3) Ketik email penerima pada kolom "Kepada" / "To"
+     4) Ketik subjek pada kolom "Subjek" / "Subject"
+     5) Ketik pesan pada area editor "Isi pesan" / "Message Body"
+     6) Klik tombol "Kirim" / "Send"
+     7) Setelah terkirim -> aksi: "finish", isFinished: true
+   - GOOGLE SEARCH CONSOLE (GSC):
+     Buka https://search.google.com/search-console, lakukan inspeksi URL, cek sitemap/indeks.
+   - TULIS ARTIKEL (DOCS / CMS):
+     Buka editor web (Google Docs/Medium/Notion), klik area dokumen, ketik paragraf terstruktur.
+   - POSTINGAN SOSMED (TWITTER / LINKEDIN):
+     Buka platform, fokus ke kolom post/tweet, ketik konten & hashtag, klik tombol post.
+   - FIX CODE DI LIVE BROWSER:
+     Baca error console, navigasi ke file/baris editor web (GitHub/StackBlitz/Replit), ketik kode perbaikan.
+
+FORMAT RESPON HARUS SELALU JSON VALID (TANPA TEKS DI LUAR JSON):
+
+Untuk Fase PLAN:
+{"planner":"analisis langkah","plan":["langkah 1","langkah 2","langkah 3"],"requiresApproval":false}
+
+Untuk Fase ACT (Pilih SATU aksi):
+{"thought":"penjelasan singkat","action":"click|type|navigate|scroll|key_combo|paste_text|finish","elementId":"@e1","value":"teks jika type","url":"url jika navigate","isFinished":false,"resultMessage":"pesan akhir jika finish"}
+
+Untuk Fase VALIDATE:
+{"verdict":"SUCCESS|CONTINUE|RETRY","summary":"ringkasan hasil langkah","subtaskComplete":true}`;
 
   const PesatAIEngine = {
     async testConnection(cfg = {}) {
@@ -71,24 +106,10 @@
       const apiKey = (config.apiKey || "").trim();
       const model = (config.modelName || "").trim() || "pesat-flash";
 
-      const systemInstruction = `Anda adalah Pesat AI Agent - Asisten otomatisasi browser otonom cerdas untuk membantu pekerjaan manusia (kirim email, tulis artikel di docs/cms, coding & fixing bug web, posting sosmed, pengisian form).
-Output HARUS selalu berupa format JSON valid tanpa teks di luar JSON.
-
-Fase saat ini: ${phase.toUpperCase()}
-Konteks tugas: ${typeof taskState === "string" ? taskState : JSON.stringify(taskState || {})}
-
-Format output JSON:
-Fase PLAN:
-{"planner":"analisis langkah","plan":["langkah 1","langkah 2"],"requiresApproval":false}
-
-Fase ACT:
-{"thought":"alasan aksi","action":"click|type|navigate|scroll|key_combo|paste_text|finish","elementId":"@e1","value":"teks input jika ada","url":"url jika navigate","isFinished":false,"resultMessage":"pesan jika selesai"}
-
-Fase VALIDATE:
-{"verdict":"SUCCESS|CONTINUE|RETRY","summary":"status kemajuan","nextHint":"saran berikutnya"}`;
+      const phaseInstruction = `\n[FASE EKSEKUSI SAAT INI]: ${phase.toUpperCase()}\n[STATUS STATE TUGAS]: ${typeof taskState === "string" ? taskState : JSON.stringify(taskState || {})}`;
 
       const payloadMessages = [
-        { role: "system", content: systemInstruction },
+        { role: "system", content: SYSTEM_AGENTIC_PROMPT + phaseInstruction },
         ...messages.filter(m => m.role !== "system").slice(-4),
         { role: "user", content: promptText }
       ];
@@ -105,7 +126,7 @@ Fase VALIDATE:
           body: JSON.stringify({
             model: model,
             messages: payloadMessages,
-            temperature: 0.15
+            temperature: 0.1
           }),
           signal: signal
         });

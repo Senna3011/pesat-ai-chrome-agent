@@ -1612,6 +1612,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     const actionType = resObj.action || "";
     if (WRITE_SKILLS.includes(actionType)) return true;
 
+    // Jika pengguna sudah secara eksplisit memerintahkan aksi di prompt awal (misal kirim email/post), jangan interupsi
+    if (activeTask && /(?:kirim|send|buatkan|draft|tulis|post)\s+(?:email|pesan|surat|tweet|postingan|artikel)/i.test(activeTask.goal)) {
+      return false;
+    }
+
     const checkOne = (a) => {
       if (!a || typeof a !== "object") return false;
       const act = a.action || "";
