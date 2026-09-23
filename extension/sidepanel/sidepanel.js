@@ -1570,6 +1570,24 @@ document.addEventListener("DOMContentLoaded", async () => {
       };
     }
 
+    // Email intent detection (e.g. kirim email ke X subjek Y pesan Z)
+    const emailToMatch = combined.match(/(?:ke|to)\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+    const emailSubMatch = combined.match(/(?:subjek|subject|judul)\s*[:=]?\s*[`"']?([^`"'\n,]+)[`"']?/i);
+    const emailBodyMatch = combined.match(/(?:pesan|isi|body|pesan email|isi pesan)\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i);
+    const isEmailIntent = /(?:kirim|tulis|buat|draft|send)\s+(?:pesan\s+)?email/i.test(combined);
+
+    if (isEmailIntent && emailToMatch) {
+      return {
+        planner: { steps: [`1. Membuka Gmail`, `2. Menulis email ke ${emailToMatch[1]}`, `3. Mengisi subjek & pesan`, `4. Mengirim email`] },
+        action: "send_email",
+        to: emailToMatch[1],
+        subject: emailSubMatch ? emailSubMatch[1].trim() : "Pesan Baru",
+        body: emailBodyMatch ? emailBodyMatch[1].trim() : "Halo,",
+        sendNow: /(?:kirim|send)/i.test(combined),
+        message: `Mempersiapkan pengiriman email ke ${emailToMatch[1]}...`
+      };
+    }
+
     const lines = text.split('\n');
     const actions = [];
 
@@ -1911,6 +1929,39 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         result.success = false;
         result.error = `Clipboard gagal: ${err.message}`;
       }
+      return result;
+    }
+
+    // ── Aksi otomatisasi Email Khusus (Gmail / Webmail) ──
+    if (actionType === "send_email" || actionType === "compose_email") {
+      let currentTab = null;
+      try {
+        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+        if (tabs && tabs[0]) currentTab = tabs[0];
+      } catch (e) {}
+
+      if (!currentTab || !/mail\.google\.com/i.test(currentTab.url || "")) {
+        appendLog("Navigasi ke Gmail...");
+        await sendToBackground({ action: "NAVIGATE_TAB", url: "https://mail.google.com" });
+        await new Promise(r => setTimeout(r, 2500));
+      }
+
+      showStatusIndicator();
+      const r = await sendToContentScript({
+        type: "EXECUTE_ACTION",
+        actionData: {
+          action: "send_email",
+          to: resObj.to || resObj.recipient,
+          subject: resObj.subject,
+          body: resObj.body || resObj.message || resObj.value,
+          sendNow: resObj.sendNow !== false
+        }
+      }, 15000);
+
+      result.success = !!(r && r.success);
+      result.message = (r && (r.message || r.error)) || "Email berhasil diproses.";
+      result.stateChanged = true;
+      result.isFinished = true;
       return result;
     }
 

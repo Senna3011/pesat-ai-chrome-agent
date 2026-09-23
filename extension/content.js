@@ -1479,7 +1479,12 @@
         targetEl.focus();
         setNativeInputValue(targetEl, value || "");
 
-        if (pressEnter) {
+        // Deteksi jika elemen adalah input penerima email (Gmail / webmail)
+        const isRecipientField = targetEl.getAttribute("role") === "combobox" ||
+                                 targetEl.classList.contains("agP") ||
+                                 /(?:to|kepada|penerima|recipient)/i.test(targetEl.getAttribute("aria-label") || targetEl.getAttribute("placeholder") || targetEl.name || "");
+
+        if (pressEnter || isRecipientField) {
           targetEl.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
           targetEl.dispatchEvent(new KeyboardEvent("keypress", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
           targetEl.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
@@ -1554,11 +1559,101 @@
     }
   }
 
+  async function handleEmailComposeAutomation(actionData) {
+    const to = actionData.to || actionData.recipient || "";
+    const subject = actionData.subject || "";
+    const body = actionData.body || actionData.message || actionData.value || "";
+    const sendNow = !!actionData.sendNow;
+
+    // 1. Cek tombol Compose/Tulis jika popup belum terbuka
+    let composeBox = document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD');
+    if (!composeBox) {
+      const composeBtn = document.querySelector('div[gh="cm"]') ||
+                         document.querySelector('div[role="button"][aria-label*="Tulis"]') ||
+                         document.querySelector('div[role="button"][aria-label*="Compose"]') ||
+                         document.querySelector('.T-I.T-I-KE.L3') ||
+                         findElementByFuzzy("Tulis", "click") ||
+                         findElementByFuzzy("Compose", "click");
+      if (composeBtn) {
+        composeBtn.click();
+        await new Promise(r => setTimeout(r, 600));
+      }
+    }
+
+    // 2. Isi Penerima (To)
+    if (to) {
+      const toInput = document.querySelector('input[aria-label*="Kepada"]') ||
+                      document.querySelector('input[aria-label*="To"]') ||
+                      document.querySelector('input.agP') ||
+                      document.querySelector('input[peoplekit-id]') ||
+                      findElementByFuzzy("Kepada", "type") ||
+                      findElementByFuzzy("To", "type");
+      if (toInput) {
+        toInput.focus();
+        setNativeInputValue(toInput, to);
+        toInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+        toInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    // 3. Isi Subjek
+    if (subject) {
+      const subjectInput = document.querySelector('input[name="subjectbox"]') ||
+                            document.querySelector('input[aria-label*="Subjek"]') ||
+                            document.querySelector('input[aria-label*="Subject"]') ||
+                            findElementByFuzzy("Subjek", "type") ||
+                            findElementByFuzzy("Subject", "type");
+      if (subjectInput) {
+        subjectInput.focus();
+        setNativeInputValue(subjectInput, subject);
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    // 4. Isi Pesan
+    if (body) {
+      const bodyEditor = document.querySelector('div[role="textbox"][aria-label*="Pesan"]') ||
+                          document.querySelector('div[role="textbox"][aria-label*="Message Body"]') ||
+                          document.querySelector('div.Am.Al.editable') ||
+                          document.querySelector('[contenteditable="true"]');
+      if (bodyEditor) {
+        bodyEditor.focus();
+        let inserted = false;
+        try { inserted = document.execCommand("insertText", false, body); } catch (_) {}
+        if (!inserted) { bodyEditor.innerText = body; }
+        bodyEditor.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    // 5. Klik Kirim jika sendNow aktif
+    if (sendNow) {
+      const sendBtn = document.querySelector('div[role="button"][data-tooltip*="Kirim"]') ||
+                      document.querySelector('div[role="button"][data-tooltip*="Send"]') ||
+                      document.querySelector('div[aria-label*="Kirim"]') ||
+                      document.querySelector('div.T-I.J-J5-Ji.aoO.v7.T-I-atl.L3') ||
+                      findElementByFuzzy("Kirim", "click") ||
+                      findElementByFuzzy("Send", "click");
+      if (sendBtn) {
+        sendBtn.click();
+        await new Promise(r => setTimeout(r, 600));
+        return { success: true, message: `Email ke "${to}" dengan subjek "${subject}" berhasil dikirim.`, stateChanged: true };
+      }
+    }
+
+    return { success: true, message: `Email draf ke "${to}" dengan subjek "${subject}" berhasil disusun di editor.`, stateChanged: true };
+  }
+
   // ─────────────────────────────────────────────────────
   // BATCH & SINGLE ACTION DISPATCHER
   // ─────────────────────────────────────────────────────
   async function executeAction(actionData) {
     if (!actionData) return { success: false, error: "Data aksi kosong" };
+
+    if (actionData.action === "compose_email" || actionData.action === "send_email" || actionData.action === "email_compose") {
+      return await handleEmailComposeAutomation(actionData);
+    }
 
     if (Array.isArray(actionData.actions) && actionData.actions.length > 0) {
       const results = [];
