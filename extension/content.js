@@ -961,11 +961,13 @@
         selection.addRange(range);
       } catch (_) {}
 
-      let inserted = false;
       try {
-        inserted = document.execCommand("insertText", false, value);
+        document.execCommand("insertText", false, value);
       } catch (_) {}
-      if (!inserted) {
+
+      // Verifikasi apakah teks berhasil masuk, hindari duplikasi jika sudah terisi
+      const currentText = (el.innerText || el.textContent || "").trim();
+      if (!currentText || currentText.length < 3) {
         try {
           el.innerText = value;
         } catch (_) {
@@ -1884,28 +1886,36 @@
       return { success: false, error: "Kotak postingan media sosial tidak ditemukan di halaman ini.", errorType: "ELEMENT_NOT_FOUND" };
     }
 
-    // 2. Tuliskan teks postingan ke dalam composeBox
+    // 2. Tuliskan teks postingan ke dalam composeBox (cegah duplikasi teks ganda)
     composeBox.focus();
-    let inserted = false;
     try {
-      inserted = document.execCommand("insertText", false, postText);
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(composeBox);
+      selection.removeAllRanges();
+      selection.addRange(range);
     } catch (_) {}
 
-    if (!inserted) {
+    try {
+      document.execCommand("insertText", false, postText);
+    } catch (_) {}
+
+    const currentBoxText = (composeBox.innerText || composeBox.textContent || "").trim();
+    if (!currentBoxText || currentBoxText.length < 5) {
       try {
         const dt = new DataTransfer();
         dt.setData("text/plain", postText);
         const pasteEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
         composeBox.dispatchEvent(pasteEv);
-        inserted = true;
-      } catch (_) {}
+      } catch (_) {
+        try {
+          composeBox.innerText = postText;
+        } catch (_) {}
+      }
     }
 
-    if (!inserted) {
-      composeBox.innerText = postText;
-      composeBox.dispatchEvent(new Event("input", { bubbles: true }));
-      composeBox.dispatchEvent(new Event("change", { bubbles: true }));
-    }
+    composeBox.dispatchEvent(new Event("input", { bubbles: true }));
+    composeBox.dispatchEvent(new Event("change", { bubbles: true }));
 
     await new Promise(r => setTimeout(r, 600));
 
