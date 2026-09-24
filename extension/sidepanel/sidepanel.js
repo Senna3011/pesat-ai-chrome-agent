@@ -3159,7 +3159,9 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
 
       if (resObj && resObj.action && resObj.action !== "ask_user" && resObj.action !== "finish") {
         const isTypingAction = resObj.action === "type" || resObj.action === "type_text" || resObj.action === "fill";
+        const isClickAction = resObj.action === "click" || resObj.action === "click_element";
         const isSocialPage = /x\.com|twitter\.com|linkedin\.com|facebook\.com|threads\.net/i.test(pageData.url || "");
+        const isGmailPage = /mail\.google\.com/i.test(pageData.url || "");
 
         // Anti-Loop Khusus Komposer Media Sosial / Editor: Cegah pengetikan berulang pada elemen textbox yang sama
         if (isTypingAction && isSocialPage) {
@@ -3172,6 +3174,30 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
             return;
           }
           activeTask._socialComposerFilled = true;
+        }
+
+        // Anti-Loop Khusus Gmail: Jika dialog 'Pesan Baru' / Compose sudah terbuka, cegah klik tombol Tulis berulang dan langsung isi form
+        if (isGmailPage && isClickAction) {
+          const isTargetingCompose = /tulis|compose/i.test(resObj.targetText || "") || resObj.elementId === "@e1";
+          const isComposeDialogOpen = (pageData.reducedDOM || "").includes("Kepada") ||
+                                      (pageData.reducedDOM || "").includes("Subjek") ||
+                                      (pageData.reducedDOM || "").includes("Subject");
+
+          if (isTargetingCompose && isComposeDialogOpen) {
+            appendLog(`✉️ Formulir Compose Gmail sudah terbuka di layar. Mengarahkan agen langsung mengisi penerima, subjek, & pesan.`, "INFO");
+            const goalText = activeTask.goal || "";
+            const toM = goalText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+            const subM = goalText.match(/(?:subjek|subject|judul)\s*[:=]?\s*[`"']?([^`"'\n,]+)[`"']?/i);
+            const bodyM = goalText.match(/(?:pesan|isi|body|draf email|tulis draf|tulis)\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i);
+
+            resObj = {
+              action: "send_email",
+              to: toM ? toM[1] : "",
+              subject: subM ? subM[1].trim() : "Laporan Progres Pesat AI",
+              body: bodyM ? bodyM[1].trim() : "Halo, berikut terlampir draf pesan yang diminta.",
+              sendNow: /(?:kirim sekarang|langsung kirim|auto send|kirimkan|kirim)/i.test(goalText)
+            };
+          }
         }
 
         const actionSig = `${resObj.action}:${resObj.elementId || resObj.targetText || resObj.url || resObj.key || ""}:${resObj.text || resObj.value || ""}`;

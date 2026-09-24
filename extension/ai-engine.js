@@ -111,6 +111,9 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
      b. Cari berdasarkan teks visible (contoh: tombol bertuliskan "Kirim", "Send", "Post", "Tweet", "Search").
      c. Cari berdasarkan atribut data-* (data-testid, data-tooltip, name).
      d. Evaluasi titik tengah elemen dengan elementFromPoint untuk memastikan tidak ada overlay penutup.
+   - ATURAN KHUSUS GMAIL COMPOSE:
+     * Jika dialog form 'Pesan Baru' / Compose sudah terbuka di layar, DILARANG KERAS mengklik tombol 'Tulis' lagi!
+     * Langkah berikutnya: Panggil type_text untuk kolom 'Kepada', panggil type_text untuk kolom 'Subjek', panggil type_text untuk 'Badan Pesan', lalu panggil click_element pada tombol 'Kirim'.
    - VERIFIKASI SEBELUM & SETELAH AKSI (Act -> Wait -> Verify):
      * Setelah mengisi field penerima/kolom input autocomplete (Gmail/Search), kirim Enter/Tab lalu verifikasi bahwa chip kontak terbentuk sebelum berpindah ke field berikutnya.
      * Jika muncul dropdown autocomplete yang menutupi tombol eksekusi (seperti tombol Kirim di Gmail), tutup overlay dengan Escape sebelum melakukan klik.

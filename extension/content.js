@@ -560,7 +560,16 @@
       "summary"
     ].join(", ");
 
-    const candidateElements = Array.from(document.querySelectorAll(selector));
+    let candidateElements = Array.from(document.querySelectorAll(selector));
+
+    // Prioritaskan elemen di dalam dialog/modal aktif (misal dialog Compose Gmail atau popup form) di urutan pertama
+    const activeDialog = document.querySelector('div[role="dialog"]') || document.querySelector('[aria-modal="true"]') || document.querySelector('.modal.show') || document.querySelector('table.Ao.Il');
+    if (activeDialog) {
+      const dialogEls = candidateElements.filter(el => activeDialog.contains(el));
+      const outsideEls = candidateElements.filter(el => !activeDialog.contains(el));
+      candidateElements = [...dialogEls, ...outsideEls];
+    }
+
     const visibleElements = candidateElements.filter(isElementVisible);
 
     if (!showOverlay) {
