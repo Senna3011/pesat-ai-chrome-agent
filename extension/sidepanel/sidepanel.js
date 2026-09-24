@@ -1963,11 +1963,13 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
 
       if (!currentTab || !/mail\.google\.com/i.test(currentTab.url || "")) {
         appendLog("Navigasi ke Gmail...");
+        showStatusIndicator("Membuka halaman Gmail...");
         await sendToBackground({ action: "NAVIGATE_TAB", url: "https://mail.google.com" });
-        await new Promise(r => setTimeout(r, 2500));
+        await new Promise(r => setTimeout(r, 4000));
+        await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
       }
 
-      showStatusIndicator();
+      showStatusIndicator("Mengisi formulir email di Gmail...");
       const r = await sendToContentScript({
         type: "EXECUTE_ACTION",
         actionData: {
@@ -1975,9 +1977,9 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           to: resObj.to || resObj.recipient,
           subject: resObj.subject,
           body: resObj.body || resObj.message || resObj.value,
-          sendNow: resObj.sendNow !== false
+          sendNow: resObj.sendNow === true
         }
-      }, 15000);
+      }, 20000);
 
       result.success = !!(r && r.success);
       result.message = (r && (r.message || r.error)) || "Email berhasil diproses.";
@@ -2626,10 +2628,22 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
       }
 
       if (!resObj) {
-        const isContentTask = /(copywriting|tulis|buatkan|draft|artikel|surat|email|konten|penawaran)/i.test(activeTask.goal || sub.description);
+        // Cek apakah instruksi adalah tindakan nyata pengiriman email di browser
+        const isEmailAction = /(?:kirim|tulis|buka|send)\s+(?:ke\s+)?email|gmail/i.test(activeTask.goal || sub.description || "");
+        const isContentTask = !isEmailAction && /(copywriting|tulis artikel|buatkan draf artikel|surat penawaran)/i.test(activeTask.goal || sub.description);
 
-        // Jika teks model adalah draf tulisan/copywriting yang substansial
-        if (reply && (reply.length > 100 || isContentTask)) {
+        if (isEmailAction) {
+          const emailMatch = (activeTask.goal || "").match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+          const subMatch = (activeTask.goal || "").match(/(?:subjek|subject|judul)\s*[:=]?\s*[`"']?([^`"'\n,]+)[`"']?/i);
+          appendLog(`📧 Mengonversi draf ke aksi automasi email fisik ke ${emailMatch ? emailMatch[1] : "penerima"}...`);
+          resObj = {
+            action: "send_email",
+            to: emailMatch ? emailMatch[1] : "",
+            subject: subMatch ? subMatch[1].trim() : "Pesan Baru",
+            body: reply || activeTask.goal,
+            sendNow: /(?:kirim sekarang|langsung kirim|auto send)/i.test(activeTask.goal)
+          };
+        } else if (reply && (reply.length > 100 || isContentTask)) {
           appendLog(`✍️ Model berhasil menghasilkan draf tulisan/copywriting (${reply.length} karakter).`);
           const artTitle = `Draf-${(activeTask.goal || "Copywriting").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.md`;
           const artifact = {

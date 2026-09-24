@@ -1636,84 +1636,135 @@
     const body = actionData.body || actionData.message || actionData.value || "";
     const sendNow = !!actionData.sendNow;
 
-    // 1. Cek tombol Compose/Tulis jika popup belum terbuka
+    // Helper polling elemen dengan timeout
+    async function waitForElement(selectorFn, timeoutMs = 4000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const el = selectorFn();
+        if (el) return el;
+        await new Promise(r => setTimeout(r, 200));
+      }
+      return selectorFn();
+    }
+
+    // 1. Cek atau buka popup Compose/Tulis di Gmail
     let composeBox = document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD');
     if (!composeBox) {
       const composeBtn = document.querySelector('div[gh="cm"]') ||
-                         document.querySelector('div[role="button"][aria-label*="Tulis"]') ||
-                         document.querySelector('div[role="button"][aria-label*="Compose"]') ||
+                         document.querySelector('div[role="button"][aria-label*="Tulis" i]') ||
+                         document.querySelector('div[role="button"][aria-label*="Compose" i]') ||
                          document.querySelector('.T-I.T-I-KE.L3') ||
+                         document.querySelector('[data-tooltip*="Compose" i]') ||
+                         document.querySelector('[data-tooltip*="Tulis" i]') ||
                          findElementByFuzzy("Tulis", "click") ||
                          findElementByFuzzy("Compose", "click");
       if (composeBtn) {
         composeBtn.click();
-        await new Promise(r => setTimeout(r, 600));
+        composeBox = await waitForElement(() => document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD'), 3500);
       }
     }
 
-    // 2. Isi Penerima (To)
+    await new Promise(r => setTimeout(r, 400));
+
+    // 2. Isi Penerima (To / Kepada)
     if (to) {
-      const toInput = document.querySelector('input[aria-label*="Kepada"]') ||
-                      document.querySelector('input[aria-label*="To"]') ||
-                      document.querySelector('input.agP') ||
-                      document.querySelector('input[peoplekit-id]') ||
-                      findElementByFuzzy("Kepada", "type") ||
-                      findElementByFuzzy("To", "type");
+      const toInput = await waitForElement(() => {
+        return document.querySelector('input[peoplekit-id]') ||
+               document.querySelector('input.agP') ||
+               document.querySelector('input[aria-label*="Kepada" i]') ||
+               document.querySelector('input[aria-label*="To" i]') ||
+               document.querySelector('input[role="combobox"]') ||
+               document.querySelector('div[aria-label*="Kepada" i] input') ||
+               document.querySelector('div[aria-label*="To" i] input') ||
+               document.querySelector('table.Ao input') ||
+               findElementByFuzzy("Kepada", "type") ||
+               findElementByFuzzy("To", "type");
+      }, 3000);
+
       if (toInput) {
         toInput.focus();
         setNativeInputValue(toInput, to);
-        toInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
-        toInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
-        await new Promise(r => setTimeout(r, 300));
+        toInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+        toInput.dispatchEvent(new KeyboardEvent("keypress", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+        toInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+        toInput.dispatchEvent(new Event("change", { bubbles: true }));
+        await new Promise(r => setTimeout(r, 400));
       }
     }
 
     // 3. Isi Subjek
     if (subject) {
-      const subjectInput = document.querySelector('input[name="subjectbox"]') ||
-                            document.querySelector('input[aria-label*="Subjek"]') ||
-                            document.querySelector('input[aria-label*="Subject"]') ||
-                            findElementByFuzzy("Subjek", "type") ||
-                            findElementByFuzzy("Subject", "type");
+      const subjectInput = await waitForElement(() => {
+        return document.querySelector('input[name="subjectbox"]') ||
+               document.querySelector('input[aria-label*="Subjek" i]') ||
+               document.querySelector('input[aria-label*="Subject" i]') ||
+               document.querySelector('input[placeholder*="Subjek" i]') ||
+               document.querySelector('input[placeholder*="Subject" i]') ||
+               findElementByFuzzy("Subjek", "type") ||
+               findElementByFuzzy("Subject", "type");
+      }, 2500);
+
       if (subjectInput) {
         subjectInput.focus();
         setNativeInputValue(subjectInput, subject);
+        subjectInput.dispatchEvent(new Event("input", { bubbles: true }));
+        subjectInput.dispatchEvent(new Event("change", { bubbles: true }));
         await new Promise(r => setTimeout(r, 300));
       }
     }
 
-    // 4. Isi Pesan
+    // 4. Isi Pesan (Body)
     if (body) {
-      const bodyEditor = document.querySelector('div[role="textbox"][aria-label*="Pesan"]') ||
-                          document.querySelector('div[role="textbox"][aria-label*="Message Body"]') ||
-                          document.querySelector('div.Am.Al.editable') ||
-                          document.querySelector('[contenteditable="true"]');
+      const bodyEditor = await waitForElement(() => {
+        return document.querySelector('div[role="textbox"][aria-label*="Pesan" i]') ||
+               document.querySelector('div[role="textbox"][aria-label*="Message Body" i]') ||
+               document.querySelector('div[role="textbox"][aria-label*="Body" i]') ||
+               document.querySelector('div.Am.Al.editable') ||
+               document.querySelector('div.editable[contenteditable="true"]') ||
+               document.querySelector('[contenteditable="true"]');
+      }, 2500);
+
       if (bodyEditor) {
         bodyEditor.focus();
         let inserted = false;
-        try { inserted = document.execCommand("insertText", false, body); } catch (_) {}
-        if (!inserted) { bodyEditor.innerText = body; }
+        try {
+          const htmlContent = body.replace(/\n/g, "<br>");
+          inserted = document.execCommand("insertHTML", false, htmlContent);
+        } catch (_) {}
+        if (!inserted) {
+          try {
+            inserted = document.execCommand("insertText", false, body);
+          } catch (_) {}
+        }
+        if (!inserted) {
+          bodyEditor.innerText = body;
+        }
         bodyEditor.dispatchEvent(new Event("input", { bubbles: true }));
+        bodyEditor.dispatchEvent(new Event("change", { bubbles: true }));
         await new Promise(r => setTimeout(r, 300));
       }
     }
 
     // 5. Klik Kirim jika sendNow aktif
     if (sendNow) {
-      const sendBtn = document.querySelector('div[role="button"][data-tooltip*="Kirim"]') ||
-                      document.querySelector('div[role="button"][data-tooltip*="Send"]') ||
-                      document.querySelector('div[aria-label*="Kirim"]') ||
-                      document.querySelector('div.T-I.J-J5-Ji.aoO.v7.T-I-atl.L3') ||
-                      findElementByFuzzy("Kirim", "click") ||
-                      findElementByFuzzy("Send", "click");
+      const sendBtn = await waitForElement(() => {
+        return document.querySelector('div[role="button"][data-tooltip*="Kirim" i]') ||
+               document.querySelector('div[role="button"][data-tooltip*="Send" i]') ||
+               document.querySelector('div[aria-label*="Kirim" i]') ||
+               document.querySelector('div[aria-label*="Send" i]') ||
+               document.querySelector('div.T-I.J-J5-Ji.aoO.v7.T-I-atl.L3') ||
+               findElementByFuzzy("Kirim", "click") ||
+               findElementByFuzzy("Send", "click");
+      }, 2500);
+
       if (sendBtn) {
         sendBtn.click();
-        await new Promise(r => setTimeout(r, 600));
-        return { success: true, message: `Email ke "${to}" dengan subjek "${subject}" berhasil dikirim.`, stateChanged: true };
+        await new Promise(r => setTimeout(r, 800));
+        return { success: true, message: `Email ke "${to}" dengan subjek "${subject}" berhasil dikirim ke penerima.`, stateChanged: true };
       }
     }
 
-    return { success: true, message: `Email draf ke "${to}" dengan subjek "${subject}" berhasil disusun di editor.`, stateChanged: true };
+    return { success: true, message: `Draf email ke "${to}" dengan subjek "${subject}" berhasil disusun rapi di editor Gmail.`, stateChanged: true };
   }
 
   // ─────────────────────────────────────────────────────
