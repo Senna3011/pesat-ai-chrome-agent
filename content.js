@@ -666,7 +666,12 @@
         if (el instanceof HTMLInputElement && el.type === "password") {
           val = el.value ? ' value="[PROTECTED]"' : "";
         } else {
-          val = el.value ? ` value="${el.value.slice(0, 50)}"` : "";
+          val = el.value ? ` value="${el.value.slice(0, 50).replace(/"/g, "'")}"` : "";
+        }
+      } else if (el.isContentEditable || el.getAttribute("contenteditable") === "true") {
+        const textVal = (el.innerText || el.textContent || "").trim();
+        if (textVal) {
+          val = ` value="${textVal.slice(0, 50).replace(/"/g, "'")}"`;
         }
       }
 
@@ -917,6 +922,14 @@
   function setNativeInputValue(el, value) {
     if (el.isContentEditable) {
       el.focus();
+      try {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      } catch (_) {}
+
       let inserted = false;
       try {
         inserted = document.execCommand("insertText", false, value);

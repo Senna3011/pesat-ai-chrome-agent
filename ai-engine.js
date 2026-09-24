@@ -116,6 +116,7 @@ PRINSIP & CARA KERJA UTAMA:
 2. ATURAN EXECUTION & ANTI-LOOPING:
    - Evaluasi struktur elemen DOM setelah setiap aksi.
    - Pilihlah ID elemen semantik [@e1, @e2, dst] atau nama tombol nyata (targetText) yang terlihat pada snapshot halaman terkini.
+   - PENTING FORM & EMAIL: Jika suatu kolom input atau editor (seperti Penerima, Subjek, atau Badan Pesan) sudah memiliki atribut value/terisi, JANGAN ketik ulang. Segera lanjutkan ke langkah berikutnya: klik tombol Kirim/Submit atau panggil finish_task!
    - Jika tujuan pengguna sudah tercapai di layar web, panggil tool \`finish_task\` dengan ringkasan hasil kerja.
    - Jika halaman saat ini adalah newtab atau kosong, gunakan \`navigate_to\` untuk membuka situs target.`;
 
