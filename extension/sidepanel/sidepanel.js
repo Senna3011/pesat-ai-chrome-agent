@@ -2212,11 +2212,13 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     }
     addMessageToCurrentSession("user", displayPrompt);
 
-    // Deteksi cerdas antara Perintah Aksi (Agentic Task) vs Pertanyaan/Analisis (Q&A/Chat)
-    const isDirectAnalysis = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt);
+    // Deteksi cerdas antara Perintah Aksi (Agentic Task) vs Pertanyaan/Analisis/Konten (Q&A/Chat/Writing)
+    const isDirectAnalysis = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks|buatkan artikel|tulis artikel|buat artikel|artikel edukasi|thread|tweet|postingan medsos|postingan twitter|postingan linkedin|caption)/i.test(userPrompt);
 
-    const isActionCommand = /(?:^(?:buka|kunjungi|open|go to|navigate to|kirim|send|tulis|ketik|isi|klik|click|type|select|pilih|hapus|delete|upload|download|login|masuk|daftar|register|pesan|checkout|scroll|jalankan)\b)/i.test(userPrompt) ||
-                            /(?:(?:dan|lalu|kemudian)\s+(?:buka|kirim|tulis|ketik|isi|klik|pilih))/i.test(userPrompt);
+    const isActionCommand = !isDirectAnalysis && (
+      /(?:^(?:buka|kunjungi|open|go to|navigate to|kirim|send|isi|klik|click|select|pilih|hapus|delete|upload|download|login|masuk|daftar|register|pesan|checkout|scroll|jalankan)\b)/i.test(userPrompt) ||
+      /(?:(?:dan|lalu|kemudian)\s+(?:buka|kirim|isi|klik|pilih))/i.test(userPrompt)
+    );
 
     const isQuestionOrChat = !isActionCommand && (
       /(?:^(?:apa|apakah|siapa|bagaimana|mengapa|kenapa|dimana|berapa|kapan|jelaskan|terangkan|ceritakan|sebutkan|tolong jelaskan|info|informasi|what|who|how|why|where|when|which|is this|explain|tell me|ini apa|ini platform apa|ini website apa|halaman apa ini)\b)/i.test(userPrompt) ||
@@ -2253,9 +2255,73 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
       const isSeo = /(?:seo|meta|kata kunci|keyword)/i.test(userPrompt);
       const isSecurity = /(?:keamanan|security|audit keamanan|ssl|https)/i.test(userPrompt);
       const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
+      const isSocialThread = /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed)/i.test(userPrompt);
+      const isArticle = /(?:artikel|tulis artikel|buatkan artikel|blog post|esai|tulisan ilmiah|tulisan edukasi)/i.test(userPrompt);
 
       let promptPayload = "";
-      if (isSeo) {
+      if (isSocialThread) {
+        promptPayload = `Buatkan THREAD TWITTER / X & POSTINGAN MEDIA SOSIAL yang sangat profesional, viral, dan memikat pembaca berdasarkan konteks dan instruksi berikut:
+
+Judul Halaman: ${pageTitle}
+URL Halaman: ${pageUrl}
+
+[KONTEKS / KONTEN HALAMAN]:
+${cleanText.substring(0, 7000) || "(Gunakan instruksi pengguna di bawah sebagai referensi utama)"}
+
+[INSTRUKSI KHUSUS PENGGUNA]:
+${userPrompt}
+
+FORMAT STANDAR THREAD VIRAL TWITTER / X:
+### 🧵 THREAD TWITTER / X (High-Impact & Modern):
+
+**Tweet 1 (The Hook):**
+(Statemen pembuka kuat yang menghentikan scroll, kontras menarik, atau curiosity gap + 🧵👇)
+
+**Tweet 2 (Konteks & Masalah Nyata):**
+(Uraikan problem atau latar belakang secara singkat dan padat)
+
+**Tweet 3 - 5 (Breakdown Wawasan Utama):**
+(Poin-poin bernas, listicle bersih, spasi rapi antar kalimat, tanpa kalimat klise)
+
+**Tweet Terakhir (Takeaway & CTA):**
+(1 kalimat kesimpulan bernas + ajakan diskusi / repost / bookmark)
+(Sematkan 2-3 hashtag industri yang relevan)
+
+---
+### 💼 FORMAT LINKEDIN (Long-form Post):
+(Format Hook $\\to$ Relevansi Bisnis/Karir $\\to$ 3 Poin Kunci $\\to$ Pertanyaan Diskusi)`;
+      } else if (isArticle) {
+        promptPayload = `Buatkan ARTIKEL LENGKAP & PROFESIONAL berstandar publikasi media bisnis/teknologi terkemuka:
+
+Judul Halaman: ${pageTitle}
+URL Halaman: ${pageUrl}
+
+[KONTEN & REFERENSI]:
+${cleanText.substring(0, 7000) || "(Gunakan instruksi pengguna di bawah sebagai referensi utama)"}
+
+[INSTRUKSI KHUSUS PENGGUNA]:
+${userPrompt}
+
+STRUKTUR ARTIKEL PROFESIONAL:
+# [Judul Artikel yang Menarik, Bernas, dan SEO-Friendly]
+
+> **Ringkasan Eksekutif**: (1-2 kalimat esensi utama artikel yang memikat pembaca)
+
+## 1. Pendahuluan: Mengapa Topik Ini Krusial Saat Ini
+(Paragraf pembuka yang menguraikan konteks nyata dan urgensi topik)
+
+## 2. Poin-Poin Analisis & Pembahasan Mendalam
+(Uraikan sub-topik utama dengan penjelasan substantif dan contoh konkret)
+- **Poin Kunci 1**: Penjelasan spesifik
+- **Poin Kunci 2**: Penjelasan spesifik
+- **Poin Kunci 3**: Penjelasan spesifik
+
+## 3. Implikasi Praktis & Cara Penerapan
+(Langkah-langkah aplikatif yang dapat langsung diterapkan)
+
+## 4. Kesimpulan & Pandangan Masa Depan
+(Rangkuman prospektif dan penutup yang bernas)`;
+      } else if (isSeo) {
         promptPayload = `Lakukan audit SEO profesional dan mendalam untuk halaman web berikut:
 
 Judul Halaman: ${pageTitle}
