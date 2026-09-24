@@ -2679,7 +2679,7 @@ FORMAT STANDAR THREAD VIRAL TWITTER / X:
 ### 💼 FORMAT LINKEDIN (Long-form Post):
 (Format Hook $\\to$ Relevansi Bisnis/Karir $\\to$ 3 Poin Kunci $\\to$ Pertanyaan Diskusi)`;
       } else if (isArticle) {
-        promptPayload = `Tuliskan ARTIKEL MENDALAM, ELEGAN, DAN SANGAT PROFESIONAL (standar publikasi jurnalisme teknologi/bisnis terkemuka):
+        promptPayload = `Tuliskan ARTIKEL EKSEKUTIF, MENDALAM, ELEGAN, DAN SANGAT PROFESIONAL (standar publikasi Harvard Business Review / MIT Technology Review):
 
 [INSTRUKSI & TOPIK PENGGUNA]:
 ${userPrompt}
@@ -2688,15 +2688,18 @@ ${userPrompt}
 Judul: ${pageTitle} | URL: ${pageUrl}
 ${cleanText.substring(0, 4000)}
 
-PEDOMAN PENULISAN:
-1. Gaya Bahasa: Otoritatif, mengalir alami, berbobot, berbasis wawasan mendalam (tanpa kalimat pembuka klise seperti "Dalam era digital saat ini...").
-2. Struktur Artikel:
-   - Judul yang kuat dan menarik di baris pertama (# Judul)
-   - Pendahuluan yang langsung menguraikan konteks nyata dan urgensi topik
-   - Sub-judul (## Sub-topik) dengan uraian substantif dan poin-poin bernas
-   - Implikasi praktis atau langkah implementasi nyata
-   - Kesimpulan prospektif yang menginspirasi
-3. Kualitas Tulisan: Buat tulisan lengkap, matang, dan langsung siap dipublikasikan (DILARANG menggunakan teks placeholder seperti tanda kurung siku [Judul...] atau template kosong).`;
+PEDOMAN PENULISAN DOKUMEN ARTIKEL PROFESIONAL:
+1. Gaya Bahasa & Tone: Otoritatif, tajam, mengalir alami, dan berbasis wawasan mendalam (DILARANG menggunakan kalimat pembuka klise seperti "Dalam era digital saat ini...").
+2. Struktur Dokumen:
+   - Judul Utama yang Kuat & Berbobot di baris pertama (# Judul Artikel)
+   - Lead / Paragraf Pembuka yang langsung membedah esensi masalah dan urgensi topik
+   - 2-3 Sub-heading Terstruktur (## Sub-topik) dengan paragraf padat berisi
+   - Poin-poin Analisis & Perbandingan Kunci (gunakan format listicle rapi: • **Poin Kunci**: Penjelasan mendalam)
+   - Kesimpulan Prospektif & Pandangan Strategis Masa Depan
+3. ATURAN KETAT KONTEN:
+   - DILARANG MENYERTAKAN format thread medsos, tweet 1/2, atau hashtag di dalam artikel! Artikel harus 100% murni berupa dokumen tulisan utuh.
+   - DILARANG menggunakan tanda kurung siku placeholder ([Judul...]) atau template kosong.
+   - Buat tulisan lengkap, matang, dan langsung siap dipublikasikan ke lembar kerja resmi.`;
       } else if (isSeo) {
         promptPayload = `Lakukan audit SEO profesional dan mendalam untuk halaman web berikut:
 

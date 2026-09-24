@@ -1004,24 +1004,31 @@
   // RICH TEXT & MARKDOWN SANITIZER UNTUK DOKUMEN WEB
   // ─────────────────────────────────────────────────────
   function convertMarkdownToRichDoc(md = "") {
-    let raw = String(md);
+    let raw = String(md || "").trim();
 
-    // 1. Bersihkan Plain Text yang rapi untuk dokumen (tanpa tanda pagar #, **, dll)
+    // 1. Bersihkan sisa-sisa divider markdown atau section medsos jika terlampir tidak sengaja
+    raw = raw.replace(/\n\s*---\s*\n\s*(?:Thread Ringkas|Tweet|Twitter|#)[\s\S]*$/i, "");
+    raw = raw.replace(/\n\s*---\s*\n/g, "\n\n");
+
+    // 2. Bersihkan Plain Text yang rapi untuk dokumen (tanpa tanda pagar #, **, dll)
     let cleanPlain = raw
       .replace(/^#{1,6}\s+(.*$)/gm, "$1")
+      .replace(/\*\*(.*?)\*\*\s*:\s*/g, "$1: ")
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .replace(/\*(.*?)\*/g, "$1")
       .replace(/^>\s*/gm, "")
-      .replace(/^\s*[\*\-]\s+/gm, "• ");
+      .replace(/^\s*[\*\-]\s+/gm, "• ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
 
-    // 2. HTML Rich Text untuk Clipboard
+    // 3. HTML Rich Text untuk Clipboard
     let cleanHtml = raw
       .replace(/^### (.*$)/gim, '<h3>$1</h3>')
       .replace(/^## (.*$)/gim, '<h2>$1</h2>')
       .replace(/^# (.*$)/gim, '<h1>$1</h1>')
       .replace(/\*\*(.*?)\*\*/gim, '<b>$1</b>')
       .replace(/\*(.*?)\*/gim, '<i>$1</i>')
-      .replace(/^>\s*(.*$)/gim, '<blockquote style="border-left:3px solid #ccc;padding-left:10px;color:#555;">$1</blockquote>')
+      .replace(/^>\s*(.*$)/gim, '<blockquote style="border-left:3px solid #3b82f6;padding-left:12px;color:#475569;margin:8px 0;">$1</blockquote>')
       .replace(/^\s*[\*\-]\s+(.*$)/gim, '<li>$1</li>')
       .replace(/\n\n+/g, '</p><p>')
       .replace(/\n/g, '<br>');
