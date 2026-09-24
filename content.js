@@ -1821,20 +1821,18 @@
     const body = actionData.body || actionData.message || actionData.value || "";
     const sendNow = !!actionData.sendNow;
 
-    // Helper polling elemen dengan MutationObserver & multi-selector fallback
-    async function waitForElement(selectorFns, timeoutMs = 4500) {
+    // Helper polling elemen dengan fallback toleran
+    async function waitForElement(selectorFns, timeoutMs = 5000) {
       const fns = Array.isArray(selectorFns) ? selectorFns : [selectorFns];
       const start = Date.now();
       while (Date.now() - start < timeoutMs) {
         for (const fn of fns) {
-          const el = typeof fn === "string" ? document.querySelector(fn) : fn();
-          if (el && isElementVisible(el)) return el;
+          try {
+            const el = typeof fn === "string" ? document.querySelector(fn) : fn();
+            if (el) return el;
+          } catch (_) {}
         }
         await new Promise(r => setTimeout(r, 200));
-      }
-      for (const fn of fns) {
-        const el = typeof fn === "string" ? document.querySelector(fn) : fn();
-        if (el) return el;
       }
       return null;
     }
@@ -1851,8 +1849,14 @@
       } catch (_) {}
     }
 
-    // 1. Cek atau buka popup Compose/Tulis di Gmail (Multi-Strategy Resolution Instan)
-    let composeBox = document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD');
+    // 1. Cek atau buka popup Compose/Tulis di Gmail (Multi-Strategy Resolution)
+    let composeBox = document.querySelector('div[role="dialog"]') ||
+                     document.querySelector('div.nH.Hd[role="dialog"]') ||
+                     document.querySelector('table.Ao.Il') ||
+                     document.querySelector('div.AD') ||
+                     document.querySelector('input[name="subjectbox"]') ||
+                     document.querySelector('div.Am.Al.editable');
+
     if (!composeBox) {
       if (window.location.hostname.includes("mail.google.com")) {
         try {
@@ -1862,7 +1866,7 @@
         } catch (_) {}
       }
 
-      // Cari dan klik tombol Compose (semua elemen tombol dan anaknya)
+      // Cari dan klik tombol Compose
       const composeBtn = document.querySelector('div[gh="cm"]') ||
                          document.querySelector('div.T-I.T-I-KE.L3') ||
                          document.querySelector('div[role="button"][aria-label*="Tulis" i]') ||
@@ -1873,53 +1877,72 @@
                          findElementByFuzzy("Compose", "click");
 
       if (composeBtn) {
-        const elsToClick = [composeBtn, ...Array.from(composeBtn.querySelectorAll('*')), composeBtn.closest('[role="button"]')].filter(Boolean);
-        for (const el of elsToClick) {
-          try {
-            el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
-            el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
-            el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
-            el.click?.();
-          } catch (_) {}
-        }
+        const targetBtn = composeBtn.closest('[role="button"]') || composeBtn;
+        targetBtn.focus?.();
+        const evt = { bubbles: true, cancelable: true, composed: true, view: window };
+        targetBtn.dispatchEvent(new PointerEvent("pointerdown", evt));
+        targetBtn.dispatchEvent(new MouseEvent("mousedown", evt));
+        targetBtn.dispatchEvent(new PointerEvent("pointerup", evt));
+        targetBtn.dispatchEvent(new MouseEvent("mouseup", evt));
+        targetBtn.dispatchEvent(new MouseEvent("click", evt));
+        targetBtn.click?.();
       }
 
       try {
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", keyCode: 67, which: 67, bubbles: true }));
       } catch (_) {}
 
-      composeBox = await waitForElement(() => document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD'), 4000);
+      composeBox = await waitForElement([
+        'div[role="dialog"]',
+        'div.nH.Hd[role="dialog"]',
+        'table.Ao.Il',
+        'div.AD',
+        'input[name="subjectbox"]',
+        'div.Am.Al.editable',
+        'input.agP'
+      ], 6000);
     }
 
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 500));
+
+    let filledTo = false;
+    let filledSubject = false;
+    let filledBody = false;
 
     // 2. Isi Penerima (To / Kepada) & Verifikasi Chip Terbentuk
     if (to) {
       const toInput = await waitForElement([
         'input[peoplekit-id]',
+        'input.agP.vO',
         'input.agP',
+        'input.vO',
         'input[aria-label*="Kepada" i]',
         'input[aria-label*="To" i]',
         'input[role="combobox"]',
         'div[aria-label*="Kepada" i] input',
         'div[aria-label*="To" i] input',
         'table.Ao input',
+        'textarea[name="to"]',
+        'input[name="to"]',
         () => findElementByFuzzy("Kepada", "type"),
         () => findElementByFuzzy("To", "type")
-      ], 3500);
+      ], 5000);
 
       if (toInput) {
         toInput.focus();
+        toInput.click?.();
         setNativeInputValue(toInput, to);
-        // Dispatch Enter and Tab to commit recipient chip
+        toInput.value = to;
+        toInput.dispatchEvent(new Event("input", { bubbles: true }));
         toInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
         toInput.dispatchEvent(new KeyboardEvent("keypress", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
         toInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
         toInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", code: "Tab", keyCode: 9, which: 9, bubbles: true }));
+        toInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Tab", code: "Tab", keyCode: 9, which: 9, bubbles: true }));
         toInput.dispatchEvent(new Event("change", { bubbles: true }));
+        filledTo = true;
         await new Promise(r => setTimeout(r, 400));
 
-        // Dismiss dropdown autocomplete agar tidak menutupi tombol Kirim
         dismissAutocompleteOverlays();
         await new Promise(r => setTimeout(r, 200));
       }
@@ -1929,19 +1952,23 @@
     if (subject) {
       const subjectInput = await waitForElement([
         'input[name="subjectbox"]',
+        'input.aoT',
         'input[aria-label*="Subjek" i]',
         'input[aria-label*="Subject" i]',
         'input[placeholder*="Subjek" i]',
         'input[placeholder*="Subject" i]',
         () => findElementByFuzzy("Subjek", "type"),
         () => findElementByFuzzy("Subject", "type")
-      ], 3000);
+      ], 4000);
 
       if (subjectInput) {
         subjectInput.focus();
+        subjectInput.click?.();
         setNativeInputValue(subjectInput, subject);
+        subjectInput.value = subject;
         subjectInput.dispatchEvent(new Event("input", { bubbles: true }));
         subjectInput.dispatchEvent(new Event("change", { bubbles: true }));
+        filledSubject = true;
         await new Promise(r => setTimeout(r, 300));
       }
     }
@@ -1949,16 +1976,21 @@
     // 4. Isi Pesan (Body)
     if (body) {
       const bodyEditor = await waitForElement([
+        'div.Am.Al.editable',
         'div[role="textbox"][aria-label*="Pesan" i]',
         'div[role="textbox"][aria-label*="Message Body" i]',
         'div[role="textbox"][aria-label*="Body" i]',
-        'div.Am.Al.editable',
+        'div[role="textbox"]',
+        'div.Am.aJh.Al.editable',
+        'div[aria-label*="Isi pesan" i]',
+        'div[aria-label*="Teks pesan" i]',
         'div.editable[contenteditable="true"]',
         '[contenteditable="true"]'
-      ], 3000);
+      ], 4000);
 
       if (bodyEditor) {
         bodyEditor.focus();
+        bodyEditor.click?.();
         try {
           const sel = window.getSelection();
           const range = document.createRange();
@@ -1977,18 +2009,28 @@
             inserted = document.execCommand("insertText", false, body);
           } catch (_) {}
         }
-        if (!inserted) {
-          bodyEditor.innerText = body;
+        if (!inserted || !bodyEditor.innerText?.trim()) {
+          bodyEditor.innerHTML = body.replace(/\n/g, "<br>");
         }
         bodyEditor.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: body }));
+        bodyEditor.dispatchEvent(new Event("input", { bubbles: true }));
         bodyEditor.dispatchEvent(new Event("change", { bubbles: true }));
-        await new Promise(r => setTimeout(r, 300));
+        filledBody = true;
+        await new Promise(r => setTimeout(r, 400));
       }
     }
 
     // Tutup autocomplete popovers jika masih ada
     dismissAutocompleteOverlays();
     await new Promise(r => setTimeout(r, 300));
+
+    if (!filledTo && !filledSubject && !filledBody) {
+      return {
+        success: false,
+        error: "Formulir Compose Gmail terbuka namun kolom input (Kepada, Subjek, Isi Pesan) belum berhasil diakses. Silakan coba kembali.",
+        stateChanged: true
+      };
+    }
 
     // 5. Klik Kirim jika sendNow aktif dengan multi-strategy & retry backoff
     if (sendNow) {
