@@ -2899,11 +2899,10 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
 
       appendLog(`🎯 Validator: ${verdict.verdict} — ${verdict.reason}`);
 
-      // Subtask selesai jika aksi sukses dan tidak diminta RETRY/REPLAN
+      // Subtask selesai HANYA jika validator secara eksplisit menyatakan subtaskComplete, SUCCESS, atau DONE
       const isSubDone = verdict.subtaskComplete ||
                         verdict.verdict === "DONE" ||
-                        verdict.verdict === "SUCCESS" ||
-                        (exec.success && verdict.verdict !== "RETRY" && verdict.verdict !== "REPLAN");
+                        verdict.verdict === "SUCCESS";
 
       if (isSubDone) {
         markSubtask(sub.id, "done");
