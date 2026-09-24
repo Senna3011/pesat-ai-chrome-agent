@@ -411,20 +411,41 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const hist = actionHistoryPerTab.get(activeTabId);
         hist.push(actionSignature);
 
-        if (hist.length > 3) {
+        if (hist.length > 8) {
           hist.shift();
         }
 
-        // Circuit Breaker: jika aksi 100% identik dipanggil 2-3x berturut-turut (kecuali scroll)
-        const isLooping = (hist.length >= 2 && hist[hist.length - 1] === hist[hist.length - 2] && !actionSignature.includes('"action":"scroll"')) ||
-                          (hist.length === 3 && hist[0] === hist[1] && hist[1] === hist[2] && !actionSignature.includes('"action":"scroll"'));
+        // Circuit Breaker Cerdas:
+        // 1. Hanya terpicu jika aksi 100% IDENTIK diulang >= 4 kali berturut-turut (toleran untuk 1-3x retry normal)
+        // 2. Atau pola ping-pong bolak-balik 2 aksi (A-B-A-B-A-B) >= 6 langkah
+        const isExcludedAction = actionSignature.includes('"action":"scroll"') ||
+                                 actionSignature.includes('"action":"wait"') ||
+                                 actionSignature.includes('press_key');
+
+        let isLooping = false;
+        if (!isExcludedAction) {
+          if (hist.length >= 4) {
+            const last4 = hist.slice(-4);
+            if (last4.every(s => s === last4[0])) {
+              isLooping = true;
+            }
+          }
+          if (!isLooping && hist.length >= 6) {
+            const last6 = hist.slice(-6);
+            if (last6[0] === last6[2] && last6[2] === last6[4] &&
+                last6[1] === last6[3] && last6[3] === last6[5] &&
+                last6[0] !== last6[1]) {
+              isLooping = true;
+            }
+          }
+        }
 
         if (isLooping) {
           actionHistoryPerTab.delete(activeTabId);
           bgLog("WARN", "CIRCUIT_BREAKER", `Looping terdeteksi pada tab ${activeTabId}! Mencegah infinite loop.`, { actionSignature, history: hist }, activeTabId);
           sendResponse({
             success: false,
-            error: "Looping terdeteksi: AI mencoba mengeksekusi aksi yang sama berulang kali. Menghentikan proses secara aman.",
+            error: "Looping terdeteksi: AI mencoba mengeksekusi aksi yang sama 4x berturut-turut tanpa perubahan. Mencoba strategi baru.",
             isLoopDetected: true
           });
           return;

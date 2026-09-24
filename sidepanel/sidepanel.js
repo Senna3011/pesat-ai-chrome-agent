@@ -474,22 +474,169 @@ document.addEventListener("DOMContentLoaded", async () => {
   // MESSAGE RENDERING (user / askUser / taskCard / confirmation / artifact / multiAgent / normal)
   // ═══════════════════════════════════════════════════
   function generateCsvFromMarkdownTable(md) {
-    const lines = String(md || "").split(/\r?\n/);
-    const rows = [];
+    const raw = String(md || "");
+    const lines = raw.split(/\r?\n/);
+    const tableRows = [];
+
+    // 1. Ekstrak baris tabel markdown yang diawali/diakhiri pipe (|)
     for (const line of lines) {
       const trimmed = line.trim();
-      if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) continue;
-      if (/^\|[-:\s|]+\|$/.test(trimmed)) continue; // skip markdown header divider
-      const cells = trimmed.slice(1, -1).split("|").map(c => c.trim().replace(/^[\*\_]+|[\*\_]+$/g, ""));
-      rows.push(cells);
-    }
-    if (rows.length === 0) return md;
-    return rows.map(r => r.map(c => {
-      if (c.includes('"') || c.includes(',') || c.includes('\n')) {
-        return '"' + c.replace(/"/g, '""') + '"';
+      if (!trimmed.includes("|")) continue;
+
+      // Bersihkan pipe di awal dan akhir jika ada
+      const inner = trimmed.replace(/^\|/, "").replace(/\|$/, "");
+      if (/^[-:\s|]+$/.test(inner)) continue; // skip garis pembatas header (---|---|---)
+
+      const cells = inner.split("|").map(cell => {
+        let clean = cell.trim();
+        // Bersihkan markdown link [Text](url) -> Text
+        clean = clean.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
+        // Bersihkan markdown bold/italic
+        clean = clean.replace(/\*\*(.*?)\*\*/g, "$1").replace(/\*(.*?)\*/g, "$1").replace(/_(.*?)_/g, "$1");
+        // Bersihkan karakter backtick code
+        clean = clean.replace(/`([^`]+)`/g, "$1");
+        return clean;
+      });
+
+      if (cells.length > 1 && cells.some(c => c.length > 0)) {
+        tableRows.push(cells);
       }
-      return c;
-    }).join(",")).join("\r\n");
+    }
+
+    // 2. Fallback: Jika tidak ada format tabel pipe, ekstrak dari list / data berulang
+    if (tableRows.length === 0) {
+      tableRows.push(["No", "Nama Produk / Keterangan", "Detail / Spesifikasi"]);
+      let itemIdx = 1;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (/^[\*\-•\d\.]+\s+/.test(trimmed)) {
+          const cleanLine = trimmed.replace(/^[\*\-•\d\.]+\s+/, "")
+            .replace(/\*\*(.*?)\*\*/g, "$1")
+            .replace(/\*(.*?)\*/g, "$1");
+          const parts = cleanLine.split(/[:–—\-]\s+/);
+          if (parts.length >= 2) {
+            tableRows.push([String(itemIdx++), parts[0].trim(), parts.slice(1).join(" - ").trim()]);
+          } else if (cleanLine.length > 5) {
+            tableRows.push([String(itemIdx++), cleanLine, "-"]);
+          }
+        }
+      }
+    }
+
+    // 3. Jika tetap kosong, kembalikan tabel default
+    if (tableRows.length === 0) {
+      tableRows.push(["Keterangan", "Isi Data"]);
+      lines.forEach(l => {
+        const t = l.trim().replace(/^#+\s*/, "");
+        if (t) tableRows.push(["Info", t]);
+      });
+    }
+
+    // 4. Standarisasi jumlah kolom per baris
+    const maxCols = Math.max(...tableRows.map(r => r.length));
+    const normalizedRows = tableRows.map(r => {
+      while (r.length < maxCols) r.push("");
+      return r;
+    });
+
+    // 5. Format ke string CSV RFC 4180
+    return normalizedRows.map(row => {
+      return row.map(cell => {
+        let val = String(cell ?? "");
+        if (val.includes('"') || val.includes(',') || val.includes('\n') || val.includes('\r')) {
+          val = '"' + val.replace(/"/g, '""') + '"';
+        }
+        return val;
+      }).join(",");
+    }).join("\r\n");
+  }
+
+  function generateExcelSpreadsheetHtml(markdownContent, title = "Tabel Riset Produk Pesat AI") {
+    const raw = String(markdownContent || "");
+    const lines = raw.split(/\r?\n/);
+    const tableRows = [];
+
+    // 1. Ekstrak baris tabel markdown
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.includes("|")) continue;
+      const inner = trimmed.replace(/^\|/, "").replace(/\|$/, "");
+      if (/^[-:\s|]+$/.test(inner)) continue;
+
+      const cells = inner.split("|").map(cell => {
+        let clean = cell.trim();
+        clean = clean.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
+        clean = clean.replace(/\*\*(.*?)\*\*/g, "$1").replace(/\*(.*?)\*/g, "$1").replace(/_(.*?)_/g, "$1");
+        clean = clean.replace(/`([^`]+)`/g, "$1");
+        return clean;
+      });
+
+      if (cells.length > 1 && cells.some(c => c.length > 0)) {
+        tableRows.push(cells);
+      }
+    }
+
+    let tableHtml = "";
+    if (tableRows.length > 0) {
+      const headers = tableRows[0];
+      const rows = tableRows.slice(1);
+
+      tableHtml += '<table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse; width:100%; font-family:Calibri,Arial,sans-serif; font-size:10.5pt;">';
+      tableHtml += '<thead><tr style="background-color:#1e3a8a; color:#ffffff; font-weight:bold; height:32pt;">';
+      headers.forEach(h => {
+        tableHtml += `<th style="background-color:#1e3a8a; color:#ffffff; font-weight:bold; padding:8pt 10pt; border:1pt solid #64748b; text-align:left;">${escapeHtml(h)}</th>`;
+      });
+      tableHtml += '</tr></thead><tbody>';
+
+      rows.forEach((r, rIdx) => {
+        const rowBg = rIdx % 2 === 1 ? '#f8fafc' : '#ffffff';
+        tableHtml += `<tr style="background-color:${rowBg};">`;
+        r.forEach((c, cIdx) => {
+          let cellStyle = 'padding:7pt 9pt; border:1pt solid #cbd5e1; font-size:10pt; vertical-align:middle;';
+          if (c.includes("Rp") || c.includes("IDR") || c.includes("$")) {
+            cellStyle += ' font-weight:bold; color:#047857; text-align:right;';
+          } else if (c.includes("★") || c.includes("Rating")) {
+            cellStyle += ' font-weight:bold; color:#d97706; text-align:center;';
+          } else if (cIdx === 0 && /^\d+$/.test(c.trim())) {
+            cellStyle += ' text-align:center; font-weight:bold;';
+          }
+          tableHtml += `<td style="${cellStyle}">${escapeHtml(c)}</td>`;
+        });
+        tableHtml += '</tr>';
+      });
+      tableHtml += '</tbody></table>';
+    } else {
+      tableHtml = parseMarkdown(markdownContent);
+    }
+
+    return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(title)}</title>
+  <!--[if gte mso 9]>
+  <xml>
+    <x:ExcelWorkbook>
+      <x:ExcelWorksheets>
+        <x:ExcelWorksheet>
+          <x:Name>Data Komparasi</x:Name>
+          <x:WorksheetOptions>
+            <x:DisplayGridlines/>
+          </x:WorksheetOptions>
+        </x:ExcelWorksheet>
+      </x:ExcelWorksheets>
+    </x:ExcelWorkbook>
+  </xml>
+  <![endif]-->
+  <style>
+    body { font-family: 'Calibri', 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #1e293b; margin: 15pt; }
+    h1 { font-family: 'Sora', 'Calibri', sans-serif; font-size: 15pt; color: #1e3a8a; margin-bottom: 10pt; }
+  </style>
+</head>
+<body>
+  <h1>📊 ${escapeHtml(title)}</h1>
+  ${tableHtml}
+</body>
+</html>`;
   }
 
   function generateWordDocHtml(markdownContent, title = "Dokumen Pesat AI") {
@@ -616,7 +763,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           </div>
         `;
       } else if (isTable) {
-        const tableTitle = (a.name || "Tabel_Riset_Produk").replace(/\.csv$/, "");
+        const tableTitle = (a.name || "Tabel_Riset_Produk").replace(/\.csv$/, "").replace(/\.xls$/, "");
         contentHtml = `
           <div class="doc-card-container table-card-theme">
             <div class="doc-card-header">
@@ -624,13 +771,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                 <span class="doc-badge-icon table-badge">📊</span>
                 <div class="doc-card-meta">
                   <div class="doc-card-title">${escapeHtml(tableTitle)}</div>
-                  <div class="doc-card-subtitle">Format Data Tabel Riset & Komparasi (.CSV)</div>
+                  <div class="doc-card-subtitle">Format Spreadsheet Excel (.XLS) & Tabel Data (.CSV)</div>
                 </div>
               </div>
               <div class="doc-card-actions">
                 <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh data">📋 Salin Data</button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_csv" title="Unduh file tabel dalam format .CSV Excel">⬇️ Unduh .CSV</button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel ke dokumen atau lembar kerja aktif">⤴️ Tempel ke Docs/Sheet</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_excel" title="Unduh spreadsheet Excel dengan format tabel visual rapi">⬇️ Unduh Excel (.xls)</button>
+                <button class="doc-action-btn" data-artifact-act="download_csv" title="Unduh file tabel dalam format data murni .CSV">⬇️ .CSV</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel ke dokumen atau lembar kerja aktif">⤴️ Tempel ke Sheet</button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -772,10 +920,26 @@ document.addEventListener("DOMContentLoaded", async () => {
               const origText = btn.textContent;
               btn.textContent = "✓ Tersalin!";
               setTimeout(() => { btn.textContent = origText; }, 1800);
+            } else if (act === "download_excel") {
+              const xlsName = (a.name || "Tabel-Riset-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "").replace(/\.csv$/, "") + ".xls";
+              const xlsContent = generateExcelSpreadsheetHtml(contentStr, xlsName.replace(/\.xls$/, ""));
+              const blob = new Blob([xlsContent], { type: "application/vnd.ms-excel;charset=utf-8" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = xlsName;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+              appendLog(`⬇️ Spreadsheet Excel "${xlsName}" berhasil diunduh dengan format tabel visual.`);
+              const origText = btn.textContent;
+              btn.textContent = "✓ Terunduh (.xls)!";
+              setTimeout(() => { btn.textContent = origText; }, 1800);
             } else if (act === "download_csv") {
-              const csvName = (a.name || "Tabel-Riset-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "") + ".csv";
+              const csvName = (a.name || "Tabel-Riset-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "").replace(/\.xls$/, "") + ".csv";
               const csvContent = generateCsvFromMarkdownTable(contentStr);
-              const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
+              const blob = new Blob(["\uFEFF", csvContent], { type: "text/csv;charset=utf-8" });
               const url = URL.createObjectURL(blob);
               const link = document.createElement("a");
               link.href = url;
@@ -786,7 +950,7 @@ document.addEventListener("DOMContentLoaded", async () => {
               setTimeout(() => URL.revokeObjectURL(url), 1000);
               appendLog(`⬇️ Tabel data "${csvName}" berhasil diunduh dalam format .csv.`);
               const origText = btn.textContent;
-              btn.textContent = "✓ Terunduh!";
+              btn.textContent = "✓ Terunduh (.csv)!";
               setTimeout(() => { btn.textContent = origText; }, 1800);
             } else if (act === "download_doc" || act === "download") {
               const docName = (a.name || "Dokumen-Pesat-AI").replace(/\.md$/, "") + ".doc";
@@ -2598,10 +2762,12 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
 
       const aiReply = await callLLM("chat", promptPayload, { isSummarize: true });
 
-      const artType = isSocialThread ? "social" : (isArticle ? "doc" : "text");
+      const artType = isSocialThread ? "social" : (isProductResearch ? "table" : (isArticle ? "doc" : "text"));
       const artTitle = isSocialThread
         ? `Thread-${(userPrompt || "Sosmed").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.txt`
-        : `Draf-${(userPrompt || "Artikel").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`;
+        : (isProductResearch
+            ? `Riset-${(userPrompt || "Produk").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
+            : `Draf-${(userPrompt || "Artikel").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`);
 
       const artifact = {
         artifactType: artType,
@@ -2621,7 +2787,7 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
                            pageUrl.includes("facebook.com") ||
                            pageUrl.includes("threads.net");
 
-      if (isDocsOrEditor && !isSocialThread && (isArticle || /(?:tulis|buatkan|ketik|tempel|masukkan|isi)/i.test(userPrompt))) {
+      if (isDocsOrEditor && !isSocialThread && !isProductResearch && (isArticle || /(?:tulis|buatkan|ketik|tempel|masukkan|isi)/i.test(userPrompt))) {
         showStatusIndicator("Menempelkan teks langsung ke Google Dokumen / editor...");
         appendLog("📄 Menempelkan teks langsung ke Google Dokumen / Lembar kerja aktif...");
         await sendToContentScript({
@@ -2650,7 +2816,11 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
           artifact
         });
       } else {
-        const headerTitle = isSocialThread ? "### 📱 Thread Media Sosial Berhasil Dibuat" : (isArticle ? "### 📝 Artikel Berhasil Dibuat" : "");
+        const headerTitle = isSocialThread
+          ? "### 📱 Thread Media Sosial Berhasil Dibuat"
+          : (isProductResearch
+              ? "### 📊 Laporan Riset Produk & Tabel Data (.CSV)"
+              : (isArticle ? "### 📝 Artikel Berhasil Dibuat" : ""));
         const formattedReply = headerTitle ? `${headerTitle}\n\n${aiReply}` : aiReply;
         addMessageToCurrentSession("assistant", formattedReply, { skipClean: true, artifact });
       }
@@ -3011,16 +3181,21 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
             sendNow: /(?:langsung posting|langsung tweet|auto post|publish)/i.test(activeTask.goal)
           };
         } else if (reply && (reply.length > 100 || isContentTask)) {
-          appendLog(`✍️ Model berhasil menghasilkan draf tulisan/copywriting (${reply.length} karakter).`);
-          const artTitle = `Draf-${(activeTask.goal || "Copywriting").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.md`;
+          const isTable = /\|.*\|[\r\n]+\|[-:\s|]+\|/i.test(reply) || /(?:riset|tabel|laptop|produk|komparasi|harga|spesifikasi|csv)/i.test(activeTask.goal || sub.description);
+          const artType = isTable ? "table" : "text";
+          const artTitle = isTable
+            ? `Riset-${(activeTask.goal || "Produk").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
+            : `Draf-${(activeTask.goal || "Copywriting").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`;
+
+          appendLog(`✍️ Model berhasil menghasilkan ${isTable ? "tabel data riset/komparasi" : "draf tulisan"} (${reply.length} karakter).`);
           const artifact = {
-            artifactType: "text",
+            artifactType: artType,
             name: artTitle,
             content: reply
           };
           activeTask.artifacts.push(artifact);
 
-          addMessageToCurrentSession("assistant", `### 📝 Draf Copywriting Berhasil Dibuat\n\n${reply}`, {
+          addMessageToCurrentSession("assistant", `${isTable ? "### 📊 Laporan Riset Produk & Tabel Data (.CSV)" : "### 📝 Draf Copywriting Berhasil Dibuat"}\n\n${reply}`, {
             skipClean: true,
             artifact
           });
@@ -3185,10 +3360,10 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
 
       // ── Stuck Detection (§ 33 PRD) ──
       const currentPageHash = `${pageData.url}|${pageData.title}|${pageData.elementsCount}`;
-      if (!exec.stateChanged && activeTask.lastPageHash === currentPageHash) {
+      if (!exec.stateChanged && activeTask.lastPageHash === currentPageHash && actionType !== "type_text" && actionType !== "type" && actionType !== "press_key") {
         activeTask.stuckCounter = (activeTask.stuckCounter || 0) + 1;
-        if (activeTask.stuckCounter >= 3) {
-          appendLog("🛑 STUCK DETECTED (§ 33 PRD): Halaman tidak berubah setelah 3 aksi berturut-turut. Mencoba strategi baru.", "WARN");
+        if (activeTask.stuckCounter >= 5) {
+          appendLog("🛑 STUCK DETECTED: Halaman tidak berubah setelah 5 aksi berturut-turut. Mencoba strategi baru.", "WARN");
           activeTask.stuckCounter = 0;
           await tryReplanOrFail(sub, "Stuck detected: kondisi halaman web tidak merespon aksi agen.");
           continue;
