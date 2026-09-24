@@ -917,6 +917,37 @@
   }
 
   // ─────────────────────────────────────────────────────
+  // RICH TEXT & MARKDOWN SANITIZER UNTUK DOKUMEN WEB
+  // ─────────────────────────────────────────────────────
+  function convertMarkdownToRichDoc(md = "") {
+    let raw = String(md);
+
+    // 1. Bersihkan Plain Text yang rapi untuk dokumen (tanpa tanda pagar #, **, dll)
+    let cleanPlain = raw
+      .replace(/^#{1,6}\s+(.*$)/gm, "$1")
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      .replace(/^>\s*/gm, "")
+      .replace(/^\s*[\*\-]\s+/gm, "• ");
+
+    // 2. HTML Rich Text untuk Clipboard
+    let cleanHtml = raw
+      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+      .replace(/\*\*(.*?)\*\*/gim, '<b>$1</b>')
+      .replace(/\*(.*?)\*/gim, '<i>$1</i>')
+      .replace(/^>\s*(.*$)/gim, '<blockquote style="border-left:3px solid #ccc;padding-left:10px;color:#555;">$1</blockquote>')
+      .replace(/^\s*[\*\-]\s+(.*$)/gim, '<li>$1</li>')
+      .replace(/\n\n+/g, '</p><p>')
+      .replace(/\n/g, '<br>');
+
+    cleanHtml = `<p>${cleanHtml}</p>`;
+
+    return { plain: cleanPlain, html: cleanHtml };
+  }
+
+  // ─────────────────────────────────────────────────────
   // REACT / VUE COMPATIBLE VALUE SETTER
   // ─────────────────────────────────────────────────────
   function setNativeInputValue(el, value) {
@@ -1233,6 +1264,8 @@
       const text = String(value ?? actionData.text ?? "");
       if (!text) return { success: false, error: "Teks kosong untuk paste_text.", errorType: "TOOL_INVALID_ARGUMENT" };
 
+      const { plain: cleanPlain, html: cleanHtml } = convertMarkdownToRichDoc(text);
+
       // 1. Penanganan Khusus Google Docs / Google Drive Editor
       const isGoogleDocs = window.location.hostname.includes("docs.google.com");
       if (isGoogleDocs) {
@@ -1248,17 +1281,18 @@
               if (inputTarget) {
                 inputTarget.focus?.();
                 const dt = new DataTransfer();
-                dt.setData("text/plain", text);
+                dt.setData("text/plain", cleanPlain);
+                dt.setData("text/html", cleanHtml);
                 const pasteEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
                 inputTarget.dispatchEvent(pasteEv);
 
                 try {
-                  const beforeInput = new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: text });
+                  const beforeInput = new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: cleanPlain });
                   inputTarget.dispatchEvent(beforeInput);
                 } catch (e) {}
 
                 try {
-                  iDoc.execCommand("insertText", false, text);
+                  iDoc.execCommand("insertText", false, cleanPlain);
                 } catch (e) {}
                 docsInserted = true;
               }
@@ -1270,7 +1304,8 @@
           if (appView) {
             appView.focus?.();
             const dt2 = new DataTransfer();
-            dt2.setData("text/plain", text);
+            dt2.setData("text/plain", cleanPlain);
+            dt2.setData("text/html", cleanHtml);
             const pasteEv2 = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt2 });
             appView.dispatchEvent(pasteEv2);
             document.dispatchEvent(pasteEv2);
@@ -1281,14 +1316,14 @@
 
         // Salin ke clipboard sistem agar pengguna dapat menggunakan Ctrl+V bila diperlukan
         try {
-          navigator.clipboard?.writeText?.(text);
+          navigator.clipboard?.writeText?.(cleanPlain);
         } catch (e) {}
 
-        showReadingHUD(`✓ Teks disisipkan ke Google Dokumen (${text.length} karakter)`, true);
+        showReadingHUD(`✓ Teks disisipkan ke Google Dokumen (${cleanPlain.length} karakter)`, true);
         await new Promise((r) => setTimeout(r, 300));
         return {
           success: true,
-          message: `Berhasil menempelkan copywriting (${text.length} karakter) ke Google Dokumen.`,
+          message: `Berhasil menempelkan copywriting (${cleanPlain.length} karakter) ke Google Dokumen.`,
           stateChanged: true
         };
       }

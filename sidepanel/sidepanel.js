@@ -2291,36 +2291,24 @@ FORMAT STANDAR THREAD VIRAL TWITTER / X:
 ### 💼 FORMAT LINKEDIN (Long-form Post):
 (Format Hook $\\to$ Relevansi Bisnis/Karir $\\to$ 3 Poin Kunci $\\to$ Pertanyaan Diskusi)`;
       } else if (isArticle) {
-        promptPayload = `Buatkan ARTIKEL LENGKAP & PROFESIONAL berstandar publikasi media bisnis/teknologi terkemuka:
+        promptPayload = `Tuliskan ARTIKEL MENDALAM, ELEGAN, DAN SANGAT PROFESIONAL (standar publikasi jurnalisme teknologi/bisnis terkemuka):
 
-Judul Halaman: ${pageTitle}
-URL Halaman: ${pageUrl}
-
-[KONTEN & REFERENSI]:
-${cleanText.substring(0, 7000) || "(Gunakan instruksi pengguna di bawah sebagai referensi utama)"}
-
-[INSTRUKSI KHUSUS PENGGUNA]:
+[INSTRUKSI & TOPIK PENGGUNA]:
 ${userPrompt}
 
-STRUKTUR ARTIKEL PROFESIONAL:
-# [Judul Artikel yang Menarik, Bernas, dan SEO-Friendly]
+[KONTEKS WEB SAAT INI (jika relevan)]:
+Judul: ${pageTitle} | URL: ${pageUrl}
+${cleanText.substring(0, 4000)}
 
-> **Ringkasan Eksekutif**: (1-2 kalimat esensi utama artikel yang memikat pembaca)
-
-## 1. Pendahuluan: Mengapa Topik Ini Krusial Saat Ini
-(Paragraf pembuka yang menguraikan konteks nyata dan urgensi topik)
-
-## 2. Poin-Poin Analisis & Pembahasan Mendalam
-(Uraikan sub-topik utama dengan penjelasan substantif dan contoh konkret)
-- **Poin Kunci 1**: Penjelasan spesifik
-- **Poin Kunci 2**: Penjelasan spesifik
-- **Poin Kunci 3**: Penjelasan spesifik
-
-## 3. Implikasi Praktis & Cara Penerapan
-(Langkah-langkah aplikatif yang dapat langsung diterapkan)
-
-## 4. Kesimpulan & Pandangan Masa Depan
-(Rangkuman prospektif dan penutup yang bernas)`;
+PEDOMAN PENULISAN:
+1. Gaya Bahasa: Otoritatif, mengalir alami, berbobot, berbasis wawasan mendalam (tanpa kalimat pembuka klise seperti "Dalam era digital saat ini...").
+2. Struktur Artikel:
+   - Judul yang kuat dan menarik di baris pertama (# Judul)
+   - Pendahuluan yang langsung menguraikan konteks nyata dan urgensi topik
+   - Sub-judul (## Sub-topik) dengan uraian substantif dan poin-poin bernas
+   - Implikasi praktis atau langkah implementasi nyata
+   - Kesimpulan prospektif yang menginspirasi
+3. Kualitas Tulisan: Buat tulisan lengkap, matang, dan langsung siap dipublikasikan (DILARANG menggunakan teks placeholder seperti tanda kurung siku [Judul...] atau template kosong).`;
       } else if (isSeo) {
         promptPayload = `Lakukan audit SEO profesional dan mendalam untuk halaman web berikut:
 
