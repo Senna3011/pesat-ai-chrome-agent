@@ -75,6 +75,31 @@
     }
   }
 
+  function tryDismissCommonModals() {
+    const closeSelectors = [
+      'button[aria-label*="close" i]',
+      'button[aria-label*="tutup" i]',
+      'button[aria-label*="dismiss" i]',
+      '[class*="close-modal" i]',
+      '[class*="modal-close" i]',
+      '[class*="close-btn" i]',
+      '[data-testid*="close" i]',
+      '[data-testid*="modal-close" i]',
+      '.btn-close',
+      '.modal-header .close'
+    ];
+    for (const sel of closeSelectors) {
+      const btn = document.querySelector(sel);
+      if (btn && isElementVisible(btn)) {
+        try {
+          btn.click();
+          return true;
+        } catch (_) {}
+      }
+    }
+    return false;
+  }
+
   // ─────────────────────────────────────────────────────
   // SEMANTIC HELPERS (ROLE / ACCESSIBLE NAME)
   // ─────────────────────────────────────────────────────
@@ -1393,10 +1418,10 @@
     // ═══ Aksi yang butuh target elemen (click/type/select/press_key) ═══
     let cleanId = String(actionData.elementId || "").replace(/[@#\[\]eE\s]/g, "").trim();
 
-    let targetEl = activeElementsMap.get(Number(cleanId)) || document.querySelector(`[data-pesat-id="${cleanId}"]`);
+    let targetEl = cleanId ? (activeElementsMap.get(Number(cleanId)) || document.querySelector(`[data-pesat-id="${cleanId}"]`)) : null;
 
     // Auto-Waiting: tunggu hingga 3 detik jika elemen belum muncul (SPA render)
-    if (!targetEl) {
+    if (!targetEl && cleanId) {
       const waitStart = Date.now();
       while (Date.now() - waitStart < 3000) {
         await new Promise((r) => setTimeout(r, 150));
@@ -1416,25 +1441,36 @@
 
     let usedFuzzy = false;
     if (!targetEl) {
-      const hint = actionData.fallbackText || value || String(cleanId);
-      targetEl = findElementByFuzzy(hint, action);
-      if (targetEl) {
-        usedFuzzy = true;
+      const hint = actionData.targetText || actionData.fallbackText || value || String(cleanId);
+      if (hint) {
+        targetEl = findElementByFuzzy(hint, action);
+        if (targetEl) {
+          usedFuzzy = true;
+        }
       }
+    }
+
+    // Jika press_key tanpa target spesifik, gunakan activeElement
+    if (!targetEl && (action === "press_key" || action === "press_keyboard" || action === "key_press")) {
+      targetEl = document.activeElement || document.body;
     }
 
     if (!targetEl) {
       return {
         success: false,
-        error: `Elemen [@e${cleanId || "?"}] tidak ditemukan di layar setelah menunggu.`,
+        error: `Elemen [@e${cleanId || actionData.targetText || "?"}] tidak ditemukan di layar.`,
         errorType: "ELEMENT_NOT_FOUND",
         suggestion: "scroll"
       };
     }
 
-    const occlusion = checkOcclusion(targetEl);
+    let occlusion = checkOcclusion(targetEl);
     if (occlusion.covered && !actionData.force) {
-      // Peringatan occlusion tapi tetap coba interaksi jika klik
+      const dismissed = tryDismissCommonModals();
+      if (dismissed) {
+        await new Promise((r) => setTimeout(r, 300));
+        occlusion = checkOcclusion(targetEl);
+      }
     }
 
     const oldOutline = targetEl.style.outline;
@@ -1463,7 +1499,7 @@
     const coveredNote = occlusion.covered ? ` [Peringatan: tertutup ${occlusion.coveredBy}]` : "";
 
     try {
-      if (action === "click") {
+      if (action === "click" || action === "click_element") {
         targetEl.focus();
 
         const rect = targetEl.getBoundingClientRect();
@@ -1509,16 +1545,17 @@
         return { success: true, message: `Klik [@e${cleanId}] berhasil${fuzzyNote}${coveredNote}.`, stateChanged: true };
       }
 
-      if (action === "type" || action === "fill") {
+      if (action === "type" || action === "type_text" || action === "fill") {
         targetEl.focus();
-        setNativeInputValue(targetEl, value || "");
+        const textToFill = actionData.text !== undefined ? actionData.text : (value || "");
+        setNativeInputValue(targetEl, textToFill);
 
         // Deteksi jika elemen adalah input penerima email (Gmail / webmail)
         const isRecipientField = targetEl.getAttribute("role") === "combobox" ||
                                  targetEl.classList.contains("agP") ||
                                  /(?:to|kepada|penerima|recipient)/i.test(targetEl.getAttribute("aria-label") || targetEl.getAttribute("placeholder") || targetEl.name || "");
 
-        if (pressEnter || isRecipientField) {
+        if (pressEnter || actionData.pressEnter || isRecipientField) {
           targetEl.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
           targetEl.dispatchEvent(new KeyboardEvent("keypress", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
           targetEl.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
@@ -1526,7 +1563,7 @@
         }
 
         const isPassword = targetEl instanceof HTMLInputElement && targetEl.type === "password";
-        const displayVal = isPassword ? "••••••••" : value;
+        const displayVal = isPassword ? "••••••••" : textToFill;
         restoreOutline();
         return { success: true, message: `Mengisi "${displayVal}" pada [@e${cleanId}] berhasil${fuzzyNote}.`, stateChanged: true };
       }

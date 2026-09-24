@@ -1,35 +1,31 @@
-# Rencana Pembaruan Dokumentasi `coldstart.md` (Day 5 - Agentic Realignment & QA Evaluation)
+# 🚀 Rencana Eksekusi Final: Hybrid Tool Calling & UX-Grade Agentic System (Target Skor 10/10)
 
-## 📌 Tujuan
-Mencatat seluruh perkembangan, temuan teknis saat pengujian nyata (termasuk kendala otomasi multi-perintah dan pengiriman email di Gmail), serta penyelarasan visi *Agentic vs Generative* sesuai arahan mentor (Pak Nell & Mas Alfu) ke dalam file `coldstart.md`.
-
----
-
-## 📝 Poin-Poin yang Akan Ditambahkan ke `coldstart.md`
-
-### 1. Penambahan Log Harian: `🗓️ Day 5 (Agentic Realignment, PesatRouter Direct Integration, UI/UX Polish, & QA Evaluation)`
-* **Penyelarasan Visi Agentic vs Generative**:
-  * Menyelaraskan arah proyek dari sekadar chatbot teks generatif menjadi **Autonomous Agentic Assistant** yang mengeksekusi aksi fisik di peramban web (Gmail, Google Search Console, Docs, Sosmed, Fix Code Live).
-* **Integrasi BYOK PesatRouter Langsung (`api.pesatrouter.com`)**:
-  * Implementasi modul modular `ai-engine.js`, `context-engine.js`, `file-engine.js`, dan `config.js`.
-  * Dukungan API Key PesatRouter dengan rangkaian model internal: `pesat-flash`, `pesat-pro`, `pesat-lite`.
-* **Refactoring UI/UX & Kepatuhan Standar Mentor (Skor QA: 9.96/10)**:
-  * Tema Obsidian Dark-Glass (`#0a0a14`) dengan *ambient aurora glow*.
-  * Tipografi resmi: **Sora** (Headings) dan **Plus Jakarta Sans** (Body) dengan batas minimum ukuran font 14px.
-  * Slider Quick Action Chips responsif dan Composer Card terintegrasi (`@ Konteks` dan `📎 Lampirkan`).
-* **Penyempurnaan Pipeline Konten & SEO**:
-  * Format rangkuman profesional (Ringkasan Eksekutif, Poin-Poin Kunci, Kesimpulan).
-  * Analytic flow langsung untuk audit SEO dan keamanan web tanpa memicu peringatan log.
-
-### 2. Catatan Evaluasi & Temuan Teknis QA (Current Bottlenecks & Action Items)
-* **Temuan pada Otomasi Web Kompleks (Gmail & Multi-Perintah)**:
-  * *Chip Tokenization*: Kolom penerima Gmail membutuhkan trigger event `Enter` agar teks terdaftar sebagai chip kontak.
-  * *Dialog Render Latency*: Pop-up compose membutuhkan penanganan auto-wait agar tidak gagal mendeteksi elemen input.
-  * *Multi-Intent Decomposition*: Perintah majemuk (misal: "Buka Gmail lalu kirim email ke X...") memerlukan transisi subtask otomatis yang mulus (*anti-stuck / circuit breaker prevention*).
-* **Target Backlog Menuju Full MVP**:
-  * Penguatan handler spesifik untuk alur kerja prioritas tim: Google Search Console (GSC), Email Webmail, Google Docs/Sheets, dan Live Code Fixing.
+## 📌 1. Tujuan Utama
+Mentransformasikan Pesat AI Browser Agent menjadi **Autonomous Agentic Workflow Assistant** berstandar industri dengan:
+1. **Dual-Intent Engine**: Otomatis membedakan Q&A/Analisis teks (respon langsung Markdown elegan) vs Aksi fisik peramban (Tool Calling).
+2. **Native Tool Calling (`tools: [...]`)**: Menggunakan skema resmi OpenAI Tools yang kompatibel penuh dengan PesatRouter (`pesat-flash`, `pesat-pro`).
+3. **Hybrid Multi-Resolver (`@e1` + Fuzzy Text + CSS/XPath)**: Menjamin klik dan ketik 100% tepat sasaran di SPA dinamis (Gmail, Tokopedia, Google Docs, CMS).
+4. **Human-in-the-Loop (`ask_user`)**: Kartu dialog konfirmasi interaktif sebelum melakukan tindakan sensitif (kirim email, publish, checkout).
+5. **Circuit Breaker Anti-Looping**: Limit `MAX_LOOPS = 7` dan *Action Signature Hash* mencegah macet atau hanging.
 
 ---
 
-## 🛠️ File yang Akan Dimodifikasi
-* `coldstart.md` (dan sinkronisasinya ke `extension/` jika diperlukan).
+## 🛠️ 2. Langkah-Langkah Pengerjaan
+
+### Langkah 1: Peningkatan Engine AI (`ai-engine.js`)
+* Menerapkan skema 6 Native Tools: `navigate_to`, `click_element`, `type_text`, `press_key`, `ask_user`, `finish_task`.
+* Mendukung routing otomatis PesatRouter BYOK (`https://api.pesatrouter.com/v1`) dan Cloudflare Worker fallback.
+
+### Langkah 2: Dispatcher ReAct & Kartu UX Interaktif (`sidepanel.js`)
+* Mengintegrasikan eksekusi tool calling berulang (loop ReAct hingga maksimal 7 langkah).
+* Merender kartu interaktif `ask_user` di layar chat dengan tombol opsi cepat (*Quick Option Chips*).
+* Memastikan respon informasional (seperti *"ini platform apa?"*, draf artikel, audit SEO) disajikan langsung dalam Markdown rapi tanpa delay.
+
+### Langkah 3: Multi-Resolver & Event Simulator di Web Page (`content.js`)
+* Penanganan `click_element` dengan koordinat nyata Google Wiz/jsaction + fallback text fuzzy.
+* Penanganan `type_text` & `press_key` untuk tokenisasi input email Gmail (`Enter`) dan editor contenteditable.
+
+### Langkah 4: Sinkronisasi Workspace & QA Verifikasi
+* Menyelaraskan seluruh file antara direktori root dan `/extension`.
+* Menjalankan automated test runner untuk validasi sintaksis, DOM mapping, dan Manifest V3.
+* Memperbarui dokumentasi `coldstart.md`.

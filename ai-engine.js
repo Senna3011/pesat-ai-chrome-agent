@@ -1,59 +1,129 @@
-// ai-engine.js - Agentic Autonomous Browser Engine & PesatRouter Bridge
+// ai-engine.js - Autonomous Agentic Workflow Assistant & Native Tool Calling Engine
 (() => {
   const DEFAULT_CF_WORKER = "https://pesat-ai-chrome-agent.senna-947.workers.dev";
   const DEFAULT_PESATROUTER = "https://api.pesatrouter.com/v1";
 
-  const SYSTEM_CHAT_PROMPT = `Anda adalah Pesat AI - Asisten profesional untuk analisis konten web, audit SEO, riset, dan perangkuman dokumen.
-Berikan respon dalam format Markdown yang rapi, profesional, dan nyaman dibaca:
-- Gunakan struktur judul dan subjudul jelas (###)
-- Buat poin-poin penting (bullet points) yang padat dan informatif
-- Berikan penekanan teks tebal (**bold**) pada kata kunci penting
-- Buat tabel Markdown yang rapi jika menyajikan data metrik/komparasi
-- Sajikan kesimpulan dan rekomendasi konkret di akhir respon.
-JANGAN berikan format JSON untuk obrolan/analisis, berikan langsung teks Markdown lengkap.`;
+  // Skema 6 Native Tools Resmi OpenAI
+  const AGENTIC_TOOLS = [
+    {
+      type: "function",
+      function: {
+        name: "navigate_to",
+        description: "Berpindah atau membuka URL baru pada tab peramban aktif",
+        parameters: {
+          type: "object",
+          properties: {
+            url: { type: "string", description: "URL lengkap target (contoh: 'https://mail.google.com' atau 'https://google.com')" }
+          },
+          required: ["url"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "click_element",
+        description: "Mengklik tombol atau elemen interaktif pada halaman web menggunakan hybrid selector (ID semantik [@e1], teks tombol, atau selector)",
+        parameters: {
+          type: "object",
+          properties: {
+            elementId: { type: "string", description: "ID semantik elemen seperti '@e1', '@e12' (disarankan)" },
+            targetText: { type: "string", description: "Teks pada tombol (contoh: 'Tulis', 'Compose', 'Kirim', 'Submit')" },
+            selector: { type: "string", description: "CSS selector alternatif (opsional)" }
+          }
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "type_text",
+        description: "Mengisikan teks ke dalam elemen input, textarea, form pencarian, atau editor web",
+        parameters: {
+          type: "object",
+          properties: {
+            elementId: { type: "string", description: "ID semantik elemen seperti '@e2', '@e5'" },
+            targetText: { type: "string", description: "Label atau placeholder kolom input (contoh: 'Kepada', 'Subjek', 'Search')" },
+            text: { type: "string", description: "Teks yang akan diisikan" },
+            pressEnter: { type: "boolean", description: "Set true jika perlu menekan tombol Enter setelah mengetik (misal kolom pencarian / tag email)" }
+          },
+          required: ["text"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "press_key",
+        description: "Menekan tombol keyboard khusus seperti Enter, Tab, Escape, atau panah",
+        parameters: {
+          type: "object",
+          properties: {
+            key: { type: "string", description: "Nama tombol (contoh: 'Enter', 'Tab', 'Escape')" },
+            elementId: { type: "string", description: "ID elemen target fokus (opsional)" }
+          },
+          required: ["key"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "ask_user",
+        description: "Meminta konfirmasi atau klarifikasi kepada pengguna jika instruksi ambigu atau akan melakukan aksi penting/sensitif (misal: tombol 'Kirim Email', 'Delete', 'Checkout')",
+        parameters: {
+          type: "object",
+          properties: {
+            question: { type: "string", description: "Pertanyaan atau konfirmasi untuk pengguna" },
+            options: {
+              type: "array",
+              items: { type: "string" },
+              description: "Pilihan jawaban cepat untuk pengguna (contoh: ['Ya, Kirim Sekarang', 'Batal'])"
+            }
+          },
+          required: ["question"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "finish_task",
+        description: "Menandai bahwa seluruh instruksi/tugas pengguna telah selesai dikerjakan secara tuntas di halaman web",
+        parameters: {
+          type: "object",
+          properties: {
+            message: { type: "string", description: "Laporan atau ringkasan hasil kerja untuk pengguna" }
+          },
+          required: ["message"]
+        }
+      }
+    }
+  ];
 
-  const SYSTEM_AGENTIC_PROMPT = `Anda adalah Pesat AI Agent - Asisten otomatisasi browser otonom cerdas (AGENTIC) untuk membantu produktivitas tim dan mempermudah pekerjaan manusia di browser.
-Anda BUKAN sekadar chatbot teks generatif; Anda mengeksekusi aksi nyata fisik di halaman web pengguna secara berurutan sampai tugas selesai tuntas.
+  const SYSTEM_AGENTIC_PROMPT = `Kamu adalah Pesat AI Autonomous Crew Agent - Asisten peramban cerdas, teliti, dan mandiri untuk membantu produktivitas tim dan mempermudah pekerjaan manusia di browser.
 
-ATURAN UTAMA AGENTIC:
-1. Jangan hanya memberikan draf teks di chat jika pengguna meminta melakukan aksi nyata di web.
-2. Jika instruksi pengguna berisi MULTI-PERINTAH (misal: "Buka gmail lalu kirim pesan ke X dengan subjek Y"), PECAH menjadi subtask berurutan pada fase PLAN:
-   - Subtask 1: Buka website tujuan
-   - Subtask 2: Klik tombol aksi utama (Compose/Tulis/Editor)
-   - Subtask 3: Isi input formulir (Penerima, Subjek, Pesan)
-   - Subtask 4: Klik tombol Kirim/Submit
-   - Subtask 5: Verifikasi selesai
-3. Eksekusi aksi fisik pada elemen web menggunakan ID semantik [@e1, @e2, dst] yang terlihat pada daftar DOM terkini.
-4. PANDUAN TUGAS UTAMA:
-   - KIRIM EMAIL (GMAIL):
-     1) Jika belum di Gmail -> aksi: "navigate", url: "https://mail.google.com"
-     2) Klik tombol "Tulis" atau "Compose"
-     3) Ketik email penerima pada kolom "Kepada" / "To"
-     4) Ketik subjek pada kolom "Subjek" / "Subject"
-     5) Ketik pesan pada area editor "Isi pesan" / "Message Body"
-     6) Klik tombol "Kirim" / "Send"
-     7) Setelah terkirim -> aksi: "finish", isFinished: true
-   - GOOGLE SEARCH CONSOLE (GSC):
-     Buka https://search.google.com/search-console, lakukan inspeksi URL, cek sitemap/indeks.
-   - TULIS ARTIKEL (DOCS / CMS):
-     Buka editor web (Google Docs/Medium/Notion), klik area dokumen, ketik paragraf terstruktur.
-   - POSTINGAN SOSMED (TWITTER / LINKEDIN):
-     Buka platform, fokus ke kolom post/tweet, ketik konten & hashtag, klik tombol post.
-   - FIX CODE DI LIVE BROWSER:
-     Baca error console, navigasi ke file/baris editor web (GitHub/StackBlitz/Replit), ketik kode perbaikan.
+PRINSIP & CARA KERJA UTAMA:
+1. DUAL-INTENT CLASSIFIER:
+   - MODE GENERATIF / INFORMASIONAL:
+     Jika pengguna meminta penjelasan, analisis kode, jawaban pertanyaan (contoh: "ini platform apa?", "apa isi halaman ini?"), atau draf tulisan (artikel/email/sosmed), SELALU jawab langsung dengan teks Markdown yang rapi, ramah, dan terstruktur di obrolan Sidepanel. DILARANG memanggil finish_task atau tool lain jika pengguna hanya bertanya atau meminta draf!
+   - MODE OTOMASI AGENTIC (AKSI FISIK):
+     Jika pengguna meminta tindakan nyata di halaman web (contoh: "Buka gmail lalu kirim email ke...", "Isi form...", "Cari produk...", "Fix kode di editor web"):
+     a. Tuliskan pemikiran/langkah singkat di chat.
+     b. Panggil tool yang sesuai untuk eksekusi secara berurutan.
+     c. Untuk tindakan sensitif (kirim email final, hapus data, checkout), gunakan tool \`ask_user\` sebelum menekan tombol eksekusi akhir bila diperlukan.
 
-FORMAT RESPON HARUS SELALU JSON VALID (TANPA TEKS DI LUAR JSON):
-
-Untuk Fase PLAN:
-{"planner":"analisis rencana kerja","plan":["1. Buka website","2. Klik tombol aksi","3. Isi data input","4. Klik kirim"],"requiresApproval":false}
-
-Untuk Fase ACT (Pilih SATU aksi):
-{"thought":"alasan aksi berikutnya","action":"click|type|navigate|scroll|key_combo|paste_text|finish","elementId":"@e1","value":"teks jika type","url":"url jika navigate","isFinished":false,"resultMessage":"pesan akhir jika finish"}
-
-Untuk Fase VALIDATE:
-{"verdict":"SUCCESS|CONTINUE|RETRY","summary":"ringkasan hasil langkah","subtaskComplete":true}`;
+2. ATURAN EXECUTION & ANTI-LOOPING:
+   - Evaluasi struktur elemen DOM setelah setiap aksi.
+   - Pilihlah ID elemen semantik [@e1, @e2, dst] atau nama tombol nyata (targetText) yang terlihat pada snapshot halaman terkini.
+   - Jika tujuan pengguna sudah tercapai di layar web, panggil tool \`finish_task\` dengan ringkasan hasil kerja.
+   - Jika halaman saat ini adalah newtab atau kosong, gunakan \`navigate_to\` untuk membuka situs target.`;
 
   const PesatAIEngine = {
+    getTools() {
+      return AGENTIC_TOOLS;
+    },
+
     async testConnection(cfg = {}) {
       const apiKey = (cfg.apiKey || "").trim();
       const model = (cfg.modelName || "").trim() || "pesat-flash";
@@ -116,35 +186,45 @@ Untuk Fase VALIDATE:
       }
     },
 
-    async callLLMDirect({ phase, prompt, messages = [], taskState = null, image = null, capabilities = {}, config = {}, signal }) {
+    async callLLMDirect({ phase, prompt, messages = [], taskState = null, domTree = "", config = {}, signal, useTools = true }) {
       const promptText = prompt || "";
       const apiKey = (config.apiKey || "").trim();
       const model = (config.modelName || "").trim() || "pesat-flash";
 
-      const isChat = phase === "chat";
-      const phaseInstruction = `\n[FASE EKSEKUSI SAAT INI]: ${phase.toUpperCase()}\n[STATUS STATE TUGAS]: ${typeof taskState === "string" ? taskState : JSON.stringify(taskState || {})}`;
-      const systemInstruction = isChat ? SYSTEM_CHAT_PROMPT : (SYSTEM_AGENTIC_PROMPT + phaseInstruction);
+      const domContext = domTree ? `\n\n[STRUKTUR ELEMEN HALAMAN SAAT INI]:\n${domTree}` : "";
+      const fullSystemPrompt = SYSTEM_AGENTIC_PROMPT + domContext;
 
       const payloadMessages = [
-        { role: "system", content: systemInstruction },
-        ...messages.filter(m => m.role !== "system").slice(-4),
-        { role: "user", content: promptText }
+        { role: "system", content: fullSystemPrompt },
+        ...messages.filter(m => m.role !== "system").slice(-8)
       ];
+
+      if (promptText && (!payloadMessages.length || payloadMessages[payloadMessages.length - 1].content !== promptText)) {
+        payloadMessages.push({ role: "user", content: promptText });
+      }
 
       if (apiKey) {
         const baseUrl = (config.apiBaseUrl || "").trim() || DEFAULT_PESATROUTER;
         const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+
+        const requestBody = {
+          model: model,
+          messages: payloadMessages,
+          temperature: phase === "chat" ? 0.3 : 0.1
+        };
+
+        if (useTools && phase !== "chat") {
+          requestBody.tools = AGENTIC_TOOLS;
+          requestBody.tool_choice = "auto";
+        }
+
         const res = await fetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${apiKey}`
           },
-          body: JSON.stringify({
-            model: model,
-            messages: payloadMessages,
-            temperature: isChat ? 0.3 : 0.1
-          }),
+          body: JSON.stringify(requestBody),
           signal: signal
         });
 
@@ -154,22 +234,25 @@ Untuk Fase VALIDATE:
         }
 
         const data = await res.json();
-        const content = data?.choices?.[0]?.message?.content || "";
+        const choice = data?.choices?.[0] || {};
         return {
-          reply: content,
+          message: choice.message || { role: "assistant", content: "" },
+          reply: choice.message?.content || "",
+          tool_calls: choice.message?.tool_calls || null,
           usage: data.usage || null
         };
       } else {
+        // Fallback Cloudflare Worker
         const workerEndpoint = `${DEFAULT_CF_WORKER}/api/chat`;
         const res = await fetch(workerEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            messages: payloadMessages,
             prompt: promptText,
             phase: phase,
             model: model,
-            taskState: taskState,
-            messages: messages
+            domTree: domTree
           }),
           signal: signal
         });
@@ -180,8 +263,11 @@ Untuk Fase VALIDATE:
         }
 
         const data = await res.json();
+        const choice = data?.choices?.[0] || {};
         return {
-          reply: data.reply || data.response || JSON.stringify(data),
+          message: choice.message || { role: "assistant", content: data.reply || data.response || "" },
+          reply: choice.message?.content || data.reply || data.response || "",
+          tool_calls: choice.message?.tool_calls || null,
           usage: data.usage || null
         };
       }

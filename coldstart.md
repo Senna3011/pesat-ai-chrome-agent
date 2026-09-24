@@ -127,6 +127,11 @@
 	- [x] **Integrasi Direct BYOK PesatRouter (`api.pesatrouter.com`)**:
 	  - Panggilan API langsung ke PesatRouter via `ai-engine.js` dengan opsi model: `pesat-flash` (cepat/umum), `pesat-pro` (penalaran mendalam), dan `pesat-lite`.
 	  - Penanganan transisi fleksibel antara BYOK PesatRouter dan fallback Cloudflare Worker.
+	- [x] **Implementasi Native OpenAI 6-Tool Calling & Hybrid Multi-Resolver**:
+	  - 6 Native Tools resmi: `navigate_to`, `click_element`, `type_text`, `press_key`, `ask_user`, `finish_task`.
+	  - 3 Lapis Penanda Elemen: ID Semantik `[@e1]` + Fuzzy Text Label Matcher + Robust CSS/XPath Selector.
+	  - Circuit Breaker (`MAX_LOOPS = 7`) dan *Action Signature Hash* mencegah infinite loop dan browser hang.
+	  - Human-in-the-Loop (`ask_user`): Dialog konfirmasi interaktif sebelum aksi sensitif (Send Email/Delete/Checkout).
 	- [x] **Penyempurnaan UI/UX & Verifikasi Panduan Desain Pesat.ai (Skor QA: 9.96/10)**:
 	  - Desain Dark-Glass Obsidian (`#0a0a14`) dengan ambient aurora glow violet/indigo.
 	  - Standar tipografi: **Sora** (Headings) dan **Plus Jakarta Sans** (Body) dengan batas minimum ukuran font 14px.
@@ -135,11 +140,21 @@
 	- [x] **Penyempurnaan Analytic Pipeline (SEO & Perangkuman)**:
 	  - Format Markdown profesional pada fitur Rangkum Halaman (Ringkasan Eksekutif, Poin-Poin Kunci, Kesimpulan).
 	  - Jalur analisis langsung untuk audit SEO dan keamanan web tanpa memicu peringatan log action navigator.
-	- [x] **Temuan Teknis & Evaluasi QA Otomasi Email (Gmail)**:
-	  - *Chip Tokenization*: Input penerima email Gmail memerlukan event `Enter` agar terdaftar sebagai chip kontak yang sah.
-	  - *Dialog Timing & Auto-Waiting*: Pop-up form compose Gmail membutuhkan waktu render 300–500ms sebelum input penerima siap diinteraksi.
-	  - *Multi-Intent Decomposition*: Perintah majemuk (navigasi + compose + input + send) memerlukan pemecahan subtask otomatis agar tidak memicu deteksi stuck atau looping.
+		- [x] **Temuan Teknis & Evaluasi QA Otomasi Email (Gmail)**:
+		  - *Chip Tokenization*: Input penerima email Gmail memerlukan event `Enter` agar terdaftar sebagai chip kontak yang sah.
+		  - *Dialog Timing & Auto-Waiting*: Pop-up form compose Gmail membutuhkan waktu render 300–500ms sebelum input penerima siap diinteraksi.
+		  - *Multi-Intent Decomposition*: Perintah majemuk (navigasi + compose + input + send) memerlukan pemecahan subtask otomatis agar tidak memicu deteksi stuck atau looping.
 
-
-
+		### 🗓️ Day 6 (MVP Audit, Dynamic ReAct Step Budget, & Auto-Dismiss Modals)
+		- [x] **Audit & Evaluasi Produk AI Independen (5 Sudut Pandang)**:
+		  - Evaluasi menyeluruh dari perspektif *AI Engineer*, *QA Engineer*, *UX Expert*, *Skeptic User*, dan *Investment & Product Manager*.
+		  - Skor Kesiapan MVP: **8.6 / 10** (Lolos Kriteria MVP Stakeholders).
+		- [x] **Dynamic ReAct Step Budget & Interactive Extension** (`sidepanel.js`, `extension/sidepanel/sidepanel.js`):
+		  - Menghilangkan pembatasan statis `MAX_LOOPS = 7` yang berisiko memutus alur tugas SPA kompleks secara prematur.
+		  - Menerapkan *Dynamic Step Budget* (default 10 langkah) yang memicu dialog interaktif `ask_user` untuk meminta persetujuan penambahan langkah (8 langkah lanjutan) jika tugas belum tuntas.
+		- [x] **Auto-Dismiss Modal & Popup Occlusion** (`content.js`, `extension/content.js`):
+		  - Penambahan helper `tryDismissCommonModals()` yang secara cerdas mendeteksi dan menutup overlay/promo popup (`aria-label="close"`, `.modal-close`, tombol 'Tutup'/'Nanti saja') ketika elemen target terhalang (*occluded*).
+		  - Memastikan aksi klik pada SPA e-commerce atau situs berita tidak terblokir oleh banner/modal asinkron.
+		- [x] **Sinkronisasi Build & Codebase Consistency**:
+		  - Sinkronisasi penuh seluruh file `content.js` dan `sidepanel.js` ke direktori `extension/`.
 

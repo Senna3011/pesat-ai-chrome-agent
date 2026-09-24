@@ -1512,7 +1512,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         recordUsage(res.usage);
       }
 
-      return res.reply || "";
+      const replyStr = res.reply || "";
+      const resultWrapper = new String(replyStr);
+      resultWrapper.tool_calls = res.tool_calls || null;
+      resultWrapper.message = res.message || null;
+      resultWrapper.reply = replyStr;
+      return resultWrapper;
     } catch (err) {
       if (err.name === "AbortError") throw err;
       appendLog(`AI Error (${phase}): ${err.message}`, "ERROR");
@@ -2500,9 +2505,109 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
 
       if (shouldStopAgent) break;
 
-      let resObj = parseActionJSON(reply);
-      if (!resObj || (!resObj.action && !resObj.actions && !resObj.message && !resObj.question)) {
-        resObj = tryParseNaturalLanguageActions(reply, activeTask.goal);
+      let resObj = null;
+
+      // 1. Cek Native Tool Calls (OpenAI standard format)
+      if (reply && reply.tool_calls && Array.isArray(reply.tool_calls) && reply.tool_calls.length > 0) {
+        const tc = reply.tool_calls[0];
+        const fnName = tc.function?.name;
+        let fnArgs = {};
+        try {
+          fnArgs = typeof tc.function?.arguments === "string" ? JSON.parse(tc.function.arguments) : (tc.function?.arguments || {});
+        } catch (e) {
+          fnArgs = {};
+        }
+
+        resObj = {
+          action: fnName,
+          ...fnArgs
+        };
+
+        if (fnName === "navigate_to") {
+          resObj.action = "navigate";
+          resObj.url = fnArgs.url;
+          resObj.value = fnArgs.url;
+        } else if (fnName === "click_element") {
+          resObj.action = "click";
+          resObj.elementId = fnArgs.elementId;
+          resObj.targetText = fnArgs.targetText;
+          resObj.selector = fnArgs.selector;
+        } else if (fnName === "type_text") {
+          resObj.action = "type";
+          resObj.elementId = fnArgs.elementId;
+          resObj.targetText = fnArgs.targetText;
+          resObj.text = fnArgs.text;
+          resObj.value = fnArgs.text;
+          resObj.pressEnter = fnArgs.pressEnter;
+        } else if (fnName === "press_key") {
+          resObj.action = "press_key";
+          resObj.key = fnArgs.key;
+          resObj.elementId = fnArgs.elementId;
+        } else if (fnName === "ask_user") {
+          resObj.action = "ask_user";
+          resObj.question = fnArgs.question;
+          resObj.options = fnArgs.options;
+        } else if (fnName === "finish_task") {
+          resObj.action = "finish";
+          resObj.message = fnArgs.message;
+        }
+      } else {
+        resObj = parseActionJSON(reply);
+        if (!resObj || (!resObj.action && !resObj.actions && !resObj.message && !resObj.question)) {
+          resObj = tryParseNaturalLanguageActions(reply, activeTask.goal);
+        }
+      }
+
+      // 2. Circuit Breaker & Anti-Looping (Dynamic ReAct Step Budget)
+      activeTask.maxReActSteps = activeTask.maxReActSteps || 10;
+      if (stepNum > activeTask.maxReActSteps) {
+        if (stepNum <= 20) {
+          const extendChoice = await requestAskUser(
+            `Tugas telah berjalan ${stepNum - 1} langkah. Apakah Anda ingin mengizinkan 8 langkah lanjutan agar tugas selesai tuntas?`,
+            ["Ya, Lanjutkan 8 Langkah Lagi", "Selesai Sekarang"]
+          );
+          if (extendChoice && extendChoice.includes("Lanjutkan")) {
+            activeTask.maxReActSteps += 8;
+            appendLog(`User mengizinkan penambahan langkah (Batas baru: ${activeTask.maxReActSteps} langkah). Melanjutkan...`);
+          } else {
+            appendLog("Pengguna memilih menyelesaikan tugas pada batas langkah tercapai.", "INFO");
+            await finalizeTask("done", "✅ Tugas telah diproses hingga batas langkah yang disetujui pengguna.");
+            return;
+          }
+        } else {
+          appendLog("⚠️ Mencapai batas maksimum ReAct Loop keseluruhan. Mengakhiri tugas secara aman.", "WARN");
+          await finalizeTask("done", "✅ Tugas telah diproses hingga batas maksimum yang aman.");
+          return;
+        }
+      }
+
+      if (resObj && resObj.action && resObj.action !== "ask_user" && resObj.action !== "finish") {
+        const actionSig = `${resObj.action}:${resObj.elementId || resObj.targetText || resObj.url || resObj.key || ""}:${resObj.text || resObj.value || ""}`;
+        if (activeTask.lastActionSig === actionSig) {
+          activeTask.repeatActionCount = (activeTask.repeatActionCount || 0) + 1;
+        } else {
+          activeTask.lastActionSig = actionSig;
+          activeTask.repeatActionCount = 1;
+        }
+
+        if (activeTask.repeatActionCount >= 2) {
+          appendLog(`⚠️ Deteksi aksi berulang "${resObj.action}" (Anti-Loop Circuit Breaker). Menghentikan loop secara aman.`, "WARN");
+          await finalizeTask("done", `Tindakan telah diselesaikan (guard anti-loop aktif).`);
+          return;
+        }
+      }
+
+      // 3. Human-in-the-Loop (`ask_user`)
+      if (resObj && (resObj.action === "ask_user" || resObj.isAskUser)) {
+        const questionText = resObj.question || "Apakah Anda ingin melanjutkan tindakan ini?";
+        const optionsList = Array.isArray(resObj.options) && resObj.options.length > 0 ? resObj.options : ["Ya, Lanjutkan", "Batalkan"];
+        const userChoice = await requestAskUser(questionText, optionsList);
+        if (shouldStopAgent || !userChoice || userChoice.toLowerCase().includes("batal")) {
+          await finalizeTask("cancelled", "⛔ Tugas dibatalkan oleh pengguna.");
+          return;
+        }
+        appendLog(`User memilih: "${userChoice}". Melanjutkan eksekusi...`);
+        continue;
       }
 
       // Intent recovery: jika model merespon teks namun menyebut tab yang harus dibuka
