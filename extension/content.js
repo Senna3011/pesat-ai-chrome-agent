@@ -37,17 +37,16 @@
     if (
       style.display === "none" ||
       style.visibility === "hidden" ||
-      parseFloat(style.opacity) < 0.1 ||
-      style.pointerEvents === "none"
+      parseFloat(style.opacity) < 0.05
     ) {
       return false;
     }
     const rect = el.getBoundingClientRect();
-    if (rect.width < 3 || rect.height < 3) return false;
+    if (rect.width < 2 || rect.height < 2) return false;
 
     const vh = window.innerHeight || document.documentElement.clientHeight;
     const vw = window.innerWidth || document.documentElement.clientWidth;
-    return rect.top <= vh + 100 && rect.bottom >= -100 && rect.left <= vw + 100 && rect.right >= -100;
+    return rect.top <= vh + 150 && rect.bottom >= -150 && rect.left <= vw + 150 && rect.right >= -150;
   }
 
   function checkOcclusion(el) {
