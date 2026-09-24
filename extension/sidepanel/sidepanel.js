@@ -2344,9 +2344,9 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
 
       if (!currentTab || !/mail\.google\.com/i.test(currentTab.url || "")) {
         appendLog("Navigasi ke Gmail...");
-        showStatusIndicator("Membuka halaman Gmail...");
-        await sendToBackground({ action: "NAVIGATE_TAB", url: "https://mail.google.com" });
-        await new Promise(r => setTimeout(r, 4000));
+        showStatusIndicator("Membuka formulir Tulis Gmail...");
+        await sendToBackground({ action: "NAVIGATE_TAB", url: "https://mail.google.com/mail/u/0/#inbox?compose=new" });
+        await new Promise(r => setTimeout(r, 4500));
         await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
       }
 

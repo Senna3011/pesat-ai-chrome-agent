@@ -1831,7 +1831,7 @@
       } catch (_) {}
     }
 
-    // 1. Cek atau buka popup Compose/Tulis di Gmail
+    // 1. Cek atau buka popup Compose/Tulis di Gmail (Multi-Strategy Resolution)
     let composeBox = document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD');
     if (!composeBox) {
       const composeBtn = await waitForElement([
@@ -1843,11 +1843,35 @@
         '[data-tooltip*="Tulis" i]',
         () => findElementByFuzzy("Tulis", "click"),
         () => findElementByFuzzy("Compose", "click")
-      ], 3500);
+      ], 3000);
 
       if (composeBtn) {
-        composeBtn.click();
-        composeBox = await waitForElement(() => document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD'), 4000);
+        const rect = composeBtn.getBoundingClientRect();
+        const clientX = rect.left + rect.width / 2;
+        const clientY = rect.top + rect.height / 2;
+        const eventInit = { bubbles: true, cancelable: true, composed: true, view: window, clientX, clientY };
+
+        composeBtn.dispatchEvent(new PointerEvent("pointerdown", eventInit));
+        composeBtn.dispatchEvent(new MouseEvent("mousedown", eventInit));
+        composeBtn.dispatchEvent(new PointerEvent("pointerup", eventInit));
+        composeBtn.dispatchEvent(new MouseEvent("mouseup", eventInit));
+        composeBtn.dispatchEvent(new MouseEvent("click", eventInit));
+        try { composeBtn.click(); } catch (_) {}
+      }
+
+      // Fallback 1: Shortcut keyboard 'c' bawaan Gmail
+      composeBox = await waitForElement(() => document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD'), 2000);
+      if (!composeBox) {
+        try {
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", keyCode: 67, which: 67, bubbles: true }));
+        } catch (_) {}
+      }
+
+      // Fallback 2: Direct hash navigation #inbox?compose=new
+      composeBox = await waitForElement(() => document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD'), 2000);
+      if (!composeBox && window.location.hostname.includes("mail.google.com")) {
+        window.location.hash = "#inbox?compose=new";
+        composeBox = await waitForElement(() => document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD'), 3500);
       }
     }
 
