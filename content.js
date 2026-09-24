@@ -1849,48 +1849,44 @@
       } catch (_) {}
     }
 
-    // 1. Cek atau buka popup Compose/Tulis di Gmail (Multi-Strategy Resolution)
+    // 1. Cek atau buka popup Compose/Tulis di Gmail (Multi-Strategy Resolution Instan)
     let composeBox = document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD');
     if (!composeBox) {
-      const composeBtn = await waitForElement([
-        'div[gh="cm"]',
-        'div[role="button"][aria-label*="Tulis" i]',
-        'div[role="button"][aria-label*="Compose" i]',
-        '.T-I.T-I-KE.L3',
-        '[data-tooltip*="Compose" i]',
-        '[data-tooltip*="Tulis" i]',
-        () => findElementByFuzzy("Tulis", "click"),
-        () => findElementByFuzzy("Compose", "click")
-      ], 3000);
-
-      if (composeBtn) {
-        const rect = composeBtn.getBoundingClientRect();
-        const clientX = rect.left + rect.width / 2;
-        const clientY = rect.top + rect.height / 2;
-        const eventInit = { bubbles: true, cancelable: true, composed: true, view: window, clientX, clientY };
-
-        composeBtn.dispatchEvent(new PointerEvent("pointerdown", eventInit));
-        composeBtn.dispatchEvent(new MouseEvent("mousedown", eventInit));
-        composeBtn.dispatchEvent(new PointerEvent("pointerup", eventInit));
-        composeBtn.dispatchEvent(new MouseEvent("mouseup", eventInit));
-        composeBtn.dispatchEvent(new MouseEvent("click", eventInit));
-        try { composeBtn.click(); } catch (_) {}
-      }
-
-      // Fallback 1: Shortcut keyboard 'c' bawaan Gmail
-      composeBox = await waitForElement(() => document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD'), 2000);
-      if (!composeBox) {
+      if (window.location.hostname.includes("mail.google.com")) {
         try {
-          document.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", keyCode: 67, which: 67, bubbles: true }));
+          if (!window.location.hash.includes("compose=new")) {
+            window.location.hash = "#inbox?compose=new";
+          }
         } catch (_) {}
       }
 
-      // Fallback 2: Direct hash navigation #inbox?compose=new
-      composeBox = await waitForElement(() => document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD'), 2000);
-      if (!composeBox && window.location.hostname.includes("mail.google.com")) {
-        window.location.hash = "#inbox?compose=new";
-        composeBox = await waitForElement(() => document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD'), 3500);
+      // Cari dan klik tombol Compose (semua elemen tombol dan anaknya)
+      const composeBtn = document.querySelector('div[gh="cm"]') ||
+                         document.querySelector('div.T-I.T-I-KE.L3') ||
+                         document.querySelector('div[role="button"][aria-label*="Tulis" i]') ||
+                         document.querySelector('div[role="button"][aria-label*="Compose" i]') ||
+                         document.querySelector('[data-tooltip*="Compose" i]') ||
+                         document.querySelector('[data-tooltip*="Tulis" i]') ||
+                         findElementByFuzzy("Tulis", "click") ||
+                         findElementByFuzzy("Compose", "click");
+
+      if (composeBtn) {
+        const elsToClick = [composeBtn, ...Array.from(composeBtn.querySelectorAll('*')), composeBtn.closest('[role="button"]')].filter(Boolean);
+        for (const el of elsToClick) {
+          try {
+            el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+            el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+            el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+            el.click?.();
+          } catch (_) {}
+        }
       }
+
+      try {
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", keyCode: 67, which: 67, bubbles: true }));
+      } catch (_) {}
+
+      composeBox = await waitForElement(() => document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD'), 4000);
     }
 
     await new Promise(r => setTimeout(r, 400));
