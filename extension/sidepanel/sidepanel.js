@@ -2352,13 +2352,13 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         if (tabs && tabs[0]) currentTab = tabs[0];
       } catch (e) {}
 
-      appendLog("Membuka formulir Tulis Gmail...");
-      showStatusIndicator("Membuka formulir Tulis Gmail...");
+      const isAlreadyOnGmail = currentTab && /mail\.google\.com/i.test(currentTab.url || "");
 
-      // Navigasikan atau update tab Gmail ke URL compose resmi
-      if (!currentTab || !currentTab.url || !currentTab.url.includes("compose=new")) {
+      if (!isAlreadyOnGmail) {
+        appendLog("Membuka halaman Gmail...");
+        showStatusIndicator("Membuka formulir Tulis Gmail...");
         await sendToBackground({ action: "NAVIGATE_TAB", url: "https://mail.google.com/mail/u/0/#inbox?compose=new" });
-        await new Promise(r => setTimeout(r, 4000));
+        await new Promise(r => setTimeout(r, 4500));
         await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 3000, stableWindowMs: 600 }, 5000).catch(() => {});
       }
 
