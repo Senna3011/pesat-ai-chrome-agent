@@ -1686,13 +1686,29 @@ document.addEventListener("DOMContentLoaded", async () => {
     const searchMatch = combined.match(searchRegex);
     if (searchMatch) {
       const query = searchMatch[1].trim();
-      const dest = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      let dest = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      let siteName = "Google";
+
+      if (/tokopedia/i.test(combined)) {
+        dest = `https://www.tokopedia.com/search?q=${encodeURIComponent(query)}`;
+        siteName = "Tokopedia";
+      } else if (/shopee/i.test(combined)) {
+        dest = `https://shopee.co.id/search?keyword=${encodeURIComponent(query)}`;
+        siteName = "Shopee";
+      } else if (/amazon/i.test(combined)) {
+        dest = `https://www.amazon.com/s?k=${encodeURIComponent(query)}`;
+        siteName = "Amazon";
+      } else if (/riset|produk|harga|laptop|hp|beli|toko|spek|rekomendasi/i.test(combined) && !/di google/i.test(combined)) {
+        dest = `https://www.tokopedia.com/search?q=${encodeURIComponent(query)}`;
+        siteName = "Tokopedia";
+      }
+
       return {
-        planner: { steps: [`1. Mencari "${query}" di Google`] },
+        planner: { steps: [`1. Membuka dan mencari "${query}" di ${siteName}`, `2. Mengekstrak data produk dan komparasi spesifikasi`] },
         action: "navigate",
         value: dest,
         url: dest,
-        message: `Mencari "${query}" di Google...`
+        message: `Mencari "${query}" di ${siteName}...`
       };
     }
 
@@ -2366,10 +2382,41 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
       const isSecurity = /(?:keamanan|security|audit keamanan|ssl|https)/i.test(userPrompt);
       const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
       const isSocialThread = /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed)/i.test(userPrompt);
-      const isArticle = /(?:artikel|tulis artikel|buatkan artikel|blog post|esai|tulisan ilmiah|tulisan edukasi)/i.test(userPrompt);
+      const isProductResearch = /(?:riset produk|laptop|harga|rekomendasi produk|komparasi|spesifikasi|cari produk|tokopedia|shopee|produk)/i.test(userPrompt);
+      const isArticle = !isSocialThread && !isProductResearch && /(?:artikel|tulis artikel|buatkan artikel|blog post|esai|tulisan ilmiah|tulisan edukasi)/i.test(userPrompt);
 
       let promptPayload = "";
-      if (isSocialThread) {
+      if (isProductResearch) {
+        promptPayload = `Lakukan RISET DAN ANALISIS KOMPARASI PRODUK MENDALAM & PROFESIONAL berdasarkan data katalog produk berikut:
+
+[DATA KATALOG & WEB SAAT INI]:
+Judul Halaman: ${pageTitle}
+URL Halaman: ${pageUrl}
+
+${cleanText.substring(0, 7500) || "(Gunakan instruksi pengguna di bawah sebagai referensi)"}
+
+[INSTRUKSI RISET PENGGUNA]:
+${userPrompt}
+
+FORMAT LAPORAN RISET PRODUK:
+# 📊 Laporan Riset & Rekomendasi Produk: [Nama Kategori / Kueri Produk]
+
+> **Executive Summary**: (Uraikan tren harga rata-rata, rentang spesifikasi utama, dan kriteria terbaik untuk memilih produk ini)
+
+### 🏆 Tabel Komparasi Produk Terpilih (Lengkap & Terstruktur):
+| No | Nama Produk & Seri | Rentang Harga | Rating & Penjualan | Spesifikasi Kunci | Keunggulan Utama |
+|---|---|---|---|---|---|
+(Sajikan 5 hingga 8 produk terbaik dari data katalog dengan detail lengkap dan terverifikasi)
+
+### 💡 Analisis Mendalam & Rekomendasi Terbaik:
+1. **Best Overall (Pilihan Terbaik Keseluruhan)**: (Nama produk + alasan spesifikasi & keandalan)
+2. **Best Value for Money (Paling Sepadan dengan Harga)**: (Nama produk + alasan efisiensi harga)
+3. **Best High-End / Performance**: (Nama produk untuk kebutuhan komputasi berat)
+
+### ⚠️ Panduan Pembelian & Hal yang Perlu Diperhatikan:
+- Poin penting 1
+- Poin penting 2`;
+      } else if (isSocialThread) {
         promptPayload = `Buatkan THREAD TWITTER / X & POSTINGAN MEDIA SOSIAL yang sangat profesional, viral, ringkas, dan memikat pembaca:
 
 Judul Halaman: ${pageTitle}

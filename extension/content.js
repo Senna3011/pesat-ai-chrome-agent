@@ -694,13 +694,97 @@
   }
 
   // ─────────────────────────────────────────────────────
-  // EKSTRAKSI KONTEN UTAMA (READABLE CONTENT)
+  // EKSTRAKSI KONTEN UTAMA & KATALOG E-COMMERCE
   // ─────────────────────────────────────────────────────
+  function extractEcommerceProductListings() {
+    const isEcommerce = /tokopedia\.com|shopee\.co\.id|blibli\.com|amazon\.com|lazada\.co\.id|bukalapak\.com|google\.com\/search.*tbm=shop/i.test(window.location.href);
+    if (!isEcommerce) return null;
+
+    const products = [];
+
+    // 1. Tokopedia Product Card Selectors
+    if (window.location.hostname.includes("tokopedia.com")) {
+      const cardSelectors = [
+        '[data-testid="divProductWrapper"]',
+        '[data-testid="master-product-card"]',
+        '[data-testid="spnSRPProdName"]',
+        '.pcv3__container',
+        '.css-1asz3by'
+      ];
+      const cards = document.querySelectorAll(cardSelectors.join(", "));
+      cards.forEach((card, idx) => {
+        if (products.length >= 15) return;
+        const nameEl = card.querySelector('[data-testid="spnSRPProdName"]') || card.querySelector('.css-20kt3b') || card.querySelector('.css-1b6t4dn') || card;
+        const priceEl = card.querySelector('[data-testid="spnSRPProdPrice"]') || card.querySelector('.css-1ks5fgj') || card.querySelector('[class*="price"]');
+        const ratingEl = card.querySelector('[data-testid="spnSRPProdRating"]') || card.querySelector('.css-153qong') || card.querySelector('[class*="rating"]');
+        const soldEl = card.querySelector('[data-testid="spnSRPProdSold"]') || card.querySelector('.css-15u5b3y') || card.querySelector('[class*="sold"]');
+        const shopEl = card.querySelector('[data-testid="spnSRPProdShopLoc"]') || card.querySelector('.css-1rn0irl') || card.querySelector('[class*="shop"]');
+        const linkEl = card.querySelector('a[href*="tokopedia.com"]') || card.closest('a') || card.querySelector('a');
+
+        const name = (nameEl?.innerText || nameEl?.textContent || "").trim();
+        const price = (priceEl?.innerText || priceEl?.textContent || "").trim();
+        const rating = (ratingEl?.innerText || ratingEl?.textContent || "").trim();
+        const sold = (soldEl?.innerText || soldEl?.textContent || "").trim();
+        const shop = (shopEl?.innerText || shopEl?.textContent || "").trim();
+        const link = linkEl?.href || "";
+
+        if (name && name.length > 5 && (price || rating)) {
+          products.push({
+            no: idx + 1,
+            name,
+            price: price || "Harga tertera di toko",
+            rating: rating ? `★ ${rating}` : "Rating N/A",
+            sold: sold || "Penjualan N/A",
+            shop: shop || "Toko Terverifikasi",
+            url: link
+          });
+        }
+      });
+    }
+
+    // Generic E-Commerce Card fallback
+    if (products.length === 0) {
+      const genericCards = document.querySelectorAll('[class*="product-card"], [class*="productCard"], [data-testid*="product"], [itemtype*="Product"]');
+      genericCards.forEach((c, idx) => {
+        if (products.length >= 12) return;
+        const text = (c.innerText || "").trim().split(/\n/).filter(t => t.trim().length > 0);
+        if (text.length >= 2) {
+          products.push({
+            no: idx + 1,
+            name: text[0] || "Produk",
+            price: text.find(t => /Rp|IDR|\$|\b\d{1,3}(?:\.\d{3})+\b/i.test(t)) || "Harga tertera",
+            rating: text.find(t => /★|\b[3-5]\.\d\b/i.test(t)) || "Rating N/A",
+            details: text.slice(1, 4).join(" | ")
+          });
+        }
+      });
+    }
+
+    if (products.length > 0) {
+      let formatted = `[DATA KATALOG PRODUK E-COMMERCE TERVERIFIKASI (${products.length} Produk Ditemukan)]:\n`;
+      products.forEach((p, i) => {
+        formatted += `${i + 1}. ${p.name}\n   - Harga: ${p.price}\n   - Rating: ${p.rating} | Terjual: ${p.sold || "-"}\n   - Toko: ${p.shop || "-"}\n   - Link: ${p.url || "-"}\n\n`;
+      });
+      return formatted;
+    }
+
+    return null;
+  }
+
   function getReadableContent(showVisual = true) {
     try {
       if (showVisual) {
         showReadingHUD("📖 Pesat AI: Membaca teks artikel...");
         triggerScanningBeam();
+      }
+
+      // Prioritas 1: Jika di situs e-commerce, ekstrak katalog produk terstruktur
+      const ecommerceData = extractEcommerceProductListings();
+      if (ecommerceData && ecommerceData.length > 50) {
+        if (showVisual) {
+          showReadingHUD(`✓ Selesai mengekstrak data katalog produk`, true);
+        }
+        return ecommerceData;
       }
 
       // 1. Cari kontainer artikel terbaik berdasarkan bobot teks terpanjang
