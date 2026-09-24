@@ -341,7 +341,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           });
           return;
         }
-        if (request.payload?.type === "CLEAR_MARKERS" || request.payload?.type === "WAIT_FOR_DOM_STABLE") {
+        if (request.payload?.type === "GET_READABLE_TEXT") {
+          sendResponse({
+            success: true,
+            text: "",
+            title: activeTab.title || "Tab Baru",
+            url: tabUrl || "chrome://newtab"
+          });
+          return;
+        }
+        if (request.payload?.type === "CLEAR_MARKERS" || request.payload?.type === "WAIT_FOR_DOM_STABLE" || request.payload?.type === "UNLOCK_PAGE" || request.payload?.type === "LOCK_PAGE") {
           sendResponse({ success: true, stable: true });
           return;
         }

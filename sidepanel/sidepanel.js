@@ -276,9 +276,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ═══════════════════════════════════════════════════
   // STATUS INDICATOR
   // ═══════════════════════════════════════════════════
-  function showStatusIndicator() {
+  function showStatusIndicator(text = "Sedang mengerjakan...") {
     if (agentStatusIndicator && statusIndicatorText) {
-      statusIndicatorText.textContent = "Sedang mengerjakan...";
+      statusIndicatorText.textContent = text;
       agentStatusIndicator.classList.remove("hidden");
     }
   }
