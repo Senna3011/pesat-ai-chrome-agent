@@ -915,7 +915,20 @@
   // REACT / VUE COMPATIBLE VALUE SETTER
   // ─────────────────────────────────────────────────────
   function setNativeInputValue(el, value) {
-    if (el instanceof HTMLInputElement) {
+    if (el.isContentEditable) {
+      el.focus();
+      let inserted = false;
+      try {
+        inserted = document.execCommand("insertText", false, value);
+      } catch (_) {}
+      if (!inserted) {
+        try {
+          el.innerText = value;
+        } catch (_) {
+          el.textContent = value;
+        }
+      }
+    } else if (el instanceof HTMLInputElement) {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
       if (setter) {
         setter.call(el, value);
@@ -929,8 +942,12 @@
       } else {
         el.value = value;
       }
-    } else if (el.isContentEditable) {
-      el.innerText = value;
+    } else {
+      try {
+        el.value = value;
+      } catch (_) {
+        el.innerText = value;
+      }
     }
 
     el.dispatchEvent(new Event("input", { bubbles: true }));

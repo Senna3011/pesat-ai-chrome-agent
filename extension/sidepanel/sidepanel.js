@@ -187,9 +187,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   function parseMarkdown(text) {
     if (!text) return "";
 
+    let rawString = text;
+    if (typeof text === "object" && text !== null) {
+      rawString = text.text || text.message || text.content || text.reply || JSON.stringify(text);
+    } else {
+      rawString = String(text);
+    }
+
     // 1. Preserve and protect fenced code blocks
     const codeBlocks = [];
-    let s = String(text).replace(/```([a-z0-9_-]*)\n([\s\S]*?)```/gi, (_, lang, code) => {
+    let s = rawString.replace(/```([a-z0-9_-]*)\n([\s\S]*?)```/gi, (_, lang, code) => {
       const idx = codeBlocks.length;
       codeBlocks.push(`<pre><code class="language-${lang}">${escapeHtml(code)}</code></pre>`);
       return `__CODE_BLOCK_${idx}__`;
@@ -472,16 +479,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     msgDiv.className = `message ${isUser ? "user-message" : "assistant-message"}`;
     msgDiv.setAttribute("data-index", index);
 
+    let msgText = msg.content;
+    if (typeof msgText === "object" && msgText !== null) {
+      msgText = msgText.text || msgText.message || msgText.content || msgText.reply || JSON.stringify(msgText);
+    }
+
     let contentHtml = "";
 
     if (isUser) {
-      contentHtml = `<div class="message-bubble">${escapeHtml(msg.content)}</div>`;
+      contentHtml = `<div class="message-bubble">${escapeHtml(msgText)}</div>`;
     } else if (msg.askUser) {
       const { question, options } = msg.askUser;
       let askHtml = `
         <div class="message-bubble">
           <div class="ask-user-container">
-            <div class="ask-user-question">🤔 ${escapeHtml(question || msg.content)}</div>
+            <div class="ask-user-question">🤔 ${escapeHtml(question || msgText)}</div>
       `;
       if (Array.isArray(options) && options.length > 0 && !msg.answered) {
         askHtml += `<div class="ask-user-options">`;
@@ -591,7 +603,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       contentHtml = pipelineHtml;
     } else {
-      contentHtml = `<div class="message-bubble markdown-body">${parseMarkdown(msg.content)}</div>`;
+      contentHtml = `<div class="message-bubble markdown-body">${parseMarkdown(msgText)}</div>`;
     }
 
     msgDiv.innerHTML = `
@@ -714,6 +726,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function cleanAssistantReply(text) {
+    if (typeof text === "object" && text !== null) {
+      text = text.text || text.message || text.content || text.reply || JSON.stringify(text);
+    }
     if (!text || typeof text !== "string") return text || "";
     const trimmed = text.trim();
     if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
@@ -721,6 +736,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const parsed = JSON.parse(trimmed);
         if (parsed.message) return parsed.message;
         if (parsed.answer) return parsed.answer;
+        if (parsed.text) return parsed.text;
       } catch (e) {}
     }
     const jsonBlock = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
@@ -729,6 +745,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const parsed = JSON.parse(jsonBlock[1]);
         if (parsed.message) return parsed.message;
         if (parsed.answer) return parsed.answer;
+        if (parsed.text) return parsed.text;
       } catch (e) {}
     }
     return text;
@@ -739,12 +756,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!session) return -1;
     if (extras.taskCard || extras.multiAgent) return -1;
 
-    const cleanContent = role === "assistant" && !extras.skipClean ? cleanAssistantReply(content) : content;
+    let textContent = content;
+    if (typeof content === "object" && content !== null) {
+      textContent = content.text || content.message || content.content || content.reply || JSON.stringify(content);
+    }
+
+    const cleanContent = role === "assistant" && !extras.skipClean ? cleanAssistantReply(textContent) : textContent;
     const msgObj = { role, content: cleanContent, timestamp: Date.now(), ...extras };
     session.messages.push(msgObj);
 
     if (session.messages.length === 1 && role === "user") {
-      session.title = content.substring(0, 32) + (content.length > 32 ? "..." : "");
+      const titleStr = typeof cleanContent === "string" ? cleanContent : "Percakapan Baru";
+      session.title = titleStr.substring(0, 32) + (titleStr.length > 32 ? "..." : "");
     }
 
     session.timestamp = Date.now();
@@ -752,6 +775,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderMessageBubble(msgObj, session.messages.length - 1);
     chatArea.scrollTop = chatArea.scrollHeight;
     return session.messages.length - 1;
+  }
+
+  function appendMessage(role, content, extras = {}) {
+    return addMessageToCurrentSession(role, content, extras);
   }
 
   function updateMessageInSession(index, patch) {
