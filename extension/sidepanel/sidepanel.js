@@ -2093,6 +2093,41 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       return result;
     }
 
+    // ── Aksi otomatisasi Media Sosial Khusus (Twitter/X, LinkedIn, Threads) ──
+    if (actionType === "post_social" || actionType === "post_twitter" || actionType === "post_x" || actionType === "tweet" || actionType === "social_post") {
+      let currentTab = null;
+      try {
+        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+        if (tabs && tabs[0]) currentTab = tabs[0];
+      } catch (e) {}
+
+      const isAlreadyOnSocial = currentTab && /x\.com|twitter\.com|linkedin\.com|threads\.net/i.test(currentTab.url || "");
+      if (!isAlreadyOnSocial) {
+        appendLog("Navigasi ke X (Twitter)...");
+        showStatusIndicator("Membuka halaman X (Twitter)...");
+        await sendToBackground({ action: "NAVIGATE_TAB", url: "https://x.com/compose/post" });
+        await new Promise(r => setTimeout(r, 4000));
+        await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
+      }
+
+      showStatusIndicator("Menuliskan draf postingan di X / media sosial...");
+      const postText = resObj.text || resObj.body || resObj.message || resObj.value || "";
+      const r = await sendToContentScript({
+        type: "EXECUTE_ACTION",
+        actionData: {
+          action: "post_social",
+          text: postText,
+          sendNow: resObj.sendNow === true || resObj.postNow === true
+        }
+      }, 20000);
+
+      result.success = !!(r && r.success);
+      result.message = (r && (r.message || r.error)) || "Postingan media sosial berhasil diproses.";
+      result.stateChanged = true;
+      result.isFinished = true;
+      return result;
+    }
+
     // ── Aksi via background ──
     if (actionType === "navigate") {
       const r = await sendToBackground({ action: "NAVIGATE_TAB", url: resObj.url });
@@ -2290,21 +2325,18 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     }
     addMessageToCurrentSession("user", displayPrompt);
 
-    // Deteksi cerdas antara Perintah Aksi (Agentic Task) vs Pertanyaan/Analisis/Konten (Q&A/Chat/Writing)
-    const isDirectAnalysis = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks|buatkan artikel|tulis artikel|buat artikel|artikel edukasi|thread|tweet|postingan medsos|postingan twitter|postingan linkedin|caption)/i.test(userPrompt);
+    // Deteksi cerdas antara Perintah Aksi (Agentic Task Fisik di Browser) vs Pertanyaan/Analisis Murni (Q&A/Audit)
+    const hasPhysicalActionVerb = /(?:^(?:buka|kunjungi|open|go to|navigate to|kirim|send|isi|klik|click|select|pilih|hapus|delete|upload|download|login|masuk|daftar|register|pesan|checkout|scroll|jalankan|posting|post)\b)/i.test(userPrompt) ||
+                                  /(?:(?:dan|lalu|kemudian)\s+(?:buka|kirim|isi|klik|pilih|posting|post))/i.test(userPrompt) ||
+                                  /(?:buka tab|buka x\.com|buka twitter|buka gmail|buka docs|buka linkedin|posting ke|post ke|tweet ke)/i.test(userPrompt);
 
-    const isActionCommand = !isDirectAnalysis && (
-      /(?:^(?:buka|kunjungi|open|go to|navigate to|kirim|send|isi|klik|click|select|pilih|hapus|delete|upload|download|login|masuk|daftar|register|pesan|checkout|scroll|jalankan)\b)/i.test(userPrompt) ||
-      /(?:(?:dan|lalu|kemudian)\s+(?:buka|kirim|isi|klik|pilih))/i.test(userPrompt)
-    );
-
-    const isQuestionOrChat = !isActionCommand && (
+    const isDirectAnalysisOnly = !hasPhysicalActionVerb && (
+      /(?:rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt) ||
       /(?:^(?:apa|apakah|siapa|bagaimana|mengapa|kenapa|dimana|berapa|kapan|jelaskan|terangkan|ceritakan|sebutkan|tolong jelaskan|info|informasi|what|who|how|why|where|when|which|is this|explain|tell me|ini apa|ini platform apa|ini website apa|halaman apa ini)\b)/i.test(userPrompt) ||
-      /\?$/.test(userPrompt) ||
-      isDirectAnalysis
+      /\?$/.test(userPrompt)
     );
 
-    if (isQuestionOrChat) {
+    if (isDirectAnalysisOnly) {
       await runAnalysisFlow(userPrompt);
       return;
     }
@@ -2843,9 +2875,11 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
       }
 
       if (!resObj) {
-        // Cek apakah instruksi adalah tindakan nyata pengiriman email di browser
+        // 1. Cek apakah instruksi adalah tindakan nyata pengiriman email di browser
         const isEmailAction = /(?:kirim|tulis|buka|send)\s+(?:ke\s+)?email|gmail/i.test(activeTask.goal || sub.description || "");
-        const isContentTask = !isEmailAction && /(copywriting|tulis artikel|buatkan draf artikel|surat penawaran)/i.test(activeTask.goal || sub.description);
+        // 2. Cek apakah instruksi adalah tindakan nyata posting ke Twitter/X atau medsos di browser
+        const isSocialAction = /(?:posting|post|tweet|thread|x\.com|twitter|medsos|linkedin)\b/i.test(activeTask.goal || sub.description || "");
+        const isContentTask = !isEmailAction && !isSocialAction && /(copywriting|tulis artikel|buatkan draf artikel|surat penawaran)/i.test(activeTask.goal || sub.description);
 
         if (isEmailAction) {
           const emailMatch = (activeTask.goal || "").match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
@@ -2857,6 +2891,13 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
             subject: subMatch ? subMatch[1].trim() : "Pesan Baru",
             body: reply || activeTask.goal,
             sendNow: /(?:kirim sekarang|langsung kirim|auto send)/i.test(activeTask.goal)
+          };
+        } else if (isSocialAction) {
+          appendLog(`📱 Mengonversi draf ke aksi postingan fisik di Twitter/X / Media Sosial...`);
+          resObj = {
+            action: "post_social",
+            text: reply || activeTask.goal,
+            sendNow: /(?:langsung posting|langsung tweet|auto post|publish)/i.test(activeTask.goal)
           };
         } else if (reply && (reply.length > 100 || isContentTask)) {
           appendLog(`✍️ Model berhasil menghasilkan draf tulisan/copywriting (${reply.length} karakter).`);

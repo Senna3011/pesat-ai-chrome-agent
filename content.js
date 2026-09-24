@@ -1833,6 +1833,105 @@
   }
 
   // ─────────────────────────────────────────────────────
+  // AUTOMATION ENGINE KHUSUS MEDIA SOSIAL (X/Twitter, LinkedIn, Facebook)
+  // ─────────────────────────────────────────────────────
+  async function handleSocialPostAutomation(actionData) {
+    const postText = actionData.text || actionData.body || actionData.content || actionData.value || "";
+    const sendNow = !!actionData.sendNow || !!actionData.postNow;
+
+    async function waitForElement(selectorFn, timeoutMs = 4500) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const el = selectorFn();
+        if (el) return el;
+        await new Promise(r => setTimeout(r, 200));
+      }
+      return selectorFn();
+    }
+
+    // 1. Cari kotak postingan Twitter / X / LinkedIn / Facebook / Threads
+    let composeBox = await waitForElement(() => {
+      return document.querySelector('div[data-testid="tweetTextarea_0"]') ||
+             document.querySelector('div[role="textbox"][data-testid*="tweetTextarea"]') ||
+             document.querySelector('div[data-testid="tweetTextarea_0_label"]') ||
+             document.querySelector('.ql-editor') ||
+             document.querySelector('div[role="textbox"][aria-label*="Post text" i]') ||
+             document.querySelector('div[role="textbox"][aria-label*="Tweet text" i]') ||
+             document.querySelector('div[role="textbox"][aria-label*="Teks postingan" i]') ||
+             document.querySelector('div[role="textbox"][aria-label*="Apa yang Anda pikirkan" i]') ||
+             document.querySelector('div[role="textbox"][aria-label*="What do you want to talk about" i]') ||
+             document.querySelector('div[role="textbox"][contenteditable="true"]') ||
+             document.querySelector('div[contenteditable="true"]');
+    }, 4500);
+
+    if (!composeBox) {
+      const startPostBtn = document.querySelector('a[data-testid="SideNav_NewTweet_Button"]') ||
+                           document.querySelector('button[aria-label*="Start a post" i]') ||
+                           document.querySelector('button[aria-label*="Mulai posting" i]') ||
+                           findElementByFuzzy("Post", "click") ||
+                           findElementByFuzzy("Posting", "click");
+      if (startPostBtn) {
+        startPostBtn.click();
+        composeBox = await waitForElement(() => {
+          return document.querySelector('div[data-testid="tweetTextarea_0"]') ||
+                 document.querySelector('div[role="textbox"][data-testid*="tweetTextarea"]') ||
+                 document.querySelector('div[contenteditable="true"]');
+        }, 3500);
+      }
+    }
+
+    if (!composeBox) {
+      return { success: false, error: "Kotak postingan media sosial tidak ditemukan di halaman ini.", errorType: "ELEMENT_NOT_FOUND" };
+    }
+
+    // 2. Tuliskan teks postingan ke dalam composeBox
+    composeBox.focus();
+    let inserted = false;
+    try {
+      inserted = document.execCommand("insertText", false, postText);
+    } catch (_) {}
+
+    if (!inserted) {
+      try {
+        const dt = new DataTransfer();
+        dt.setData("text/plain", postText);
+        const pasteEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+        composeBox.dispatchEvent(pasteEv);
+        inserted = true;
+      } catch (_) {}
+    }
+
+    if (!inserted) {
+      composeBox.innerText = postText;
+      composeBox.dispatchEvent(new Event("input", { bubbles: true }));
+      composeBox.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    await new Promise(r => setTimeout(r, 600));
+
+    // 3. Klik tombol Post/Tweet jika sendNow / postNow aktif
+    if (sendNow) {
+      const postBtn = await waitForElement(() => {
+        return document.querySelector('button[data-testid="tweetButtonInline"]') ||
+               document.querySelector('button[data-testid="tweetButton"]') ||
+               document.querySelector('button[role="button"][data-testid*="tweetButton"]') ||
+               document.querySelector('button[aria-label*="Post" i]') ||
+               document.querySelector('button.share-actions__primary-action') ||
+               findElementByFuzzy("Post", "click") ||
+               findElementByFuzzy("Posting", "click");
+      }, 3000);
+
+      if (postBtn && !postBtn.disabled && postBtn.getAttribute("aria-disabled") !== "true") {
+        postBtn.click();
+        await new Promise(r => setTimeout(r, 800));
+        return { success: true, message: "Postingan media sosial berhasil dipublikasikan!", stateChanged: true };
+      }
+    }
+
+    return { success: true, message: "Teks postingan media sosial berhasil diisikan ke kotak input.", stateChanged: true };
+  }
+
+  // ─────────────────────────────────────────────────────
   // BATCH & SINGLE ACTION DISPATCHER
   // ─────────────────────────────────────────────────────
   async function executeAction(actionData) {
@@ -1840,6 +1939,10 @@
 
     if (actionData.action === "compose_email" || actionData.action === "send_email" || actionData.action === "email_compose") {
       return await handleEmailComposeAutomation(actionData);
+    }
+
+    if (actionData.action === "post_social" || actionData.action === "post_twitter" || actionData.action === "post_x" || actionData.action === "tweet" || actionData.action === "social_post") {
+      return await handleSocialPostAutomation(actionData);
     }
 
     if (Array.isArray(actionData.actions) && actionData.actions.length > 0) {

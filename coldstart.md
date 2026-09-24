@@ -163,6 +163,9 @@
 		- [x] **High-Impact Social Thread (Twitter/X) & Professional Article Standard** (`ai-engine.js`, `sidepanel.js`):
 		  - Format thread Twitter/X modern (Hook statemen kuat + `🧵👇` $\to$ Body poin-poin bernas $\to$ Takeaway & CTA + hashtag relevan).
 		  - Format artikel publikasi profesional (# Judul, Executive Summary, Sub-headings terstruktur, Implikasi Praktis, & Actionable Takeaways).
+		- [x] **Autonomous End-to-End Social Media Posting (`post_social`)** (`sidepanel.js`, `content.js`):
+		  - Otomasi penuh untuk skenario posting media sosial: navigasi otomatis ke `https://x.com/compose/post` (atau tab media sosial aktif), pengisian draf thread ke kotak compose `[data-testid="tweetTextarea_0"]`, dan eksekusi tombol Post / Publish.
+		  - Pemisahan tegas antara tugas analisis murni vs perintah aksi fisik peramban (*hasPhysicalActionVerb*).
 		- [x] **Sinkronisasi Build & Codebase Consistency**:
 		  - Sinkronisasi penuh seluruh file `content.js`, `sidepanel.js`, dan `ai-engine.js` ke direktori `extension/`.
 
