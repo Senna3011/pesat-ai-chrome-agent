@@ -2370,7 +2370,7 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
 
       let promptPayload = "";
       if (isSocialThread) {
-        promptPayload = `Buatkan THREAD TWITTER / X & POSTINGAN MEDIA SOSIAL yang sangat profesional, viral, dan memikat pembaca berdasarkan konteks dan instruksi berikut:
+        promptPayload = `Buatkan THREAD TWITTER / X & POSTINGAN MEDIA SOSIAL yang sangat profesional, viral, bersih, dan memikat pembaca:
 
 Judul Halaman: ${pageTitle}
 URL Halaman: ${pageUrl}
@@ -2381,8 +2381,13 @@ ${cleanText.substring(0, 7000) || "(Gunakan instruksi pengguna di bawah sebagai 
 [INSTRUKSI KHUSUS PENGGUNA]:
 ${userPrompt}
 
+PEDOMAN KHUSUS HASHTAG:
+- DILARANG menggunakan banyak hashtag di setiap tweet atau menumpuk hashtag berwarna biru di akhir postingan!
+- Cukup cantumkan MAKSIMAL 1 atau 2 hashtag yang paling penting di tweet terakhir (contoh: #AI #Productivity).
+- Jangan menyelipkan hashtag di tengah-tengah kalimat.
+
 FORMAT STANDAR THREAD VIRAL TWITTER / X:
-### 🧵 THREAD TWITTER / X (High-Impact & Modern):
+### 🧵 THREAD TWITTER / X (High-Impact & Clean):
 
 **Tweet 1 (The Hook):**
 (Statemen pembuka kuat yang menghentikan scroll, kontras menarik, atau curiosity gap + 🧵👇)
@@ -2394,8 +2399,8 @@ FORMAT STANDAR THREAD VIRAL TWITTER / X:
 (Poin-poin bernas, listicle bersih, spasi rapi antar kalimat, tanpa kalimat klise)
 
 **Tweet Terakhir (Takeaway & CTA):**
-(1 kalimat kesimpulan bernas + ajakan diskusi / repost / bookmark)
-(Sematkan 2-3 hashtag industri yang relevan)
+(1 kalimat kesimpulan bernas + ajakan diskusi / repost)
+(Maksimal 1-2 hashtag singkat saja)
 
 ---
 ### 💼 FORMAT LINKEDIN (Long-form Post):
