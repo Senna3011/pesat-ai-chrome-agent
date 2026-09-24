@@ -473,6 +473,25 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ═══════════════════════════════════════════════════
   // MESSAGE RENDERING (user / askUser / taskCard / confirmation / artifact / multiAgent / normal)
   // ═══════════════════════════════════════════════════
+  function generateCsvFromMarkdownTable(md) {
+    const lines = String(md || "").split(/\r?\n/);
+    const rows = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) continue;
+      if (/^\|[-:\s|]+\|$/.test(trimmed)) continue; // skip markdown header divider
+      const cells = trimmed.slice(1, -1).split("|").map(c => c.trim().replace(/^[\*\_]+|[\*\_]+$/g, ""));
+      rows.push(cells);
+    }
+    if (rows.length === 0) return md;
+    return rows.map(r => r.map(c => {
+      if (c.includes('"') || c.includes(',') || c.includes('\n')) {
+        return '"' + c.replace(/"/g, '""') + '"';
+      }
+      return c;
+    }).join(",")).join("\r\n");
+  }
+
   function generateWordDocHtml(markdownContent, title = "Dokumen Pesat AI") {
     const htmlBody = parseMarkdown(markdownContent);
     return `<!DOCTYPE html>
@@ -572,6 +591,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const contentStr = String(a.content || "");
       const wordCount = contentStr.trim() ? contentStr.trim().split(/\s+/).length : 0;
       const isSocial = a.artifactType === "social" || (a.name && (a.name.startsWith("Thread") || a.name.includes("Sosmed") || a.name.includes("Tweet")));
+      const isTable = a.artifactType === "table" || a.artifactType === "csv" || (a.name && (a.name.endsWith(".csv") || a.name.startsWith("Riset")));
 
       if (isSocial) {
         const postTitle = (a.name || "Draf_Thread_X").replace(/\.txt$/, "").replace(/\.md$/, "");
@@ -588,6 +608,29 @@ document.addEventListener("DOMContentLoaded", async () => {
               <div class="doc-card-actions">
                 <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi thread">📋 Salin Thread</button>
                 <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke kotak postingan X / medsos aktif">⤴️ Tempel ke X / Medsos</button>
+              </div>
+            </div>
+            <div class="doc-card-preview-sheet markdown-body">
+              ${parseMarkdown(contentStr)}
+            </div>
+          </div>
+        `;
+      } else if (isTable) {
+        const tableTitle = (a.name || "Tabel_Riset_Produk").replace(/\.csv$/, "");
+        contentHtml = `
+          <div class="doc-card-container table-card-theme">
+            <div class="doc-card-header">
+              <div class="doc-card-title-group">
+                <span class="doc-badge-icon table-badge">📊</span>
+                <div class="doc-card-meta">
+                  <div class="doc-card-title">${escapeHtml(tableTitle)}</div>
+                  <div class="doc-card-subtitle">Format Data Tabel Riset & Komparasi (.CSV)</div>
+                </div>
+              </div>
+              <div class="doc-card-actions">
+                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh data">📋 Salin Data</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_csv" title="Unduh file tabel dalam format .CSV Excel">⬇️ Unduh .CSV</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel ke dokumen atau lembar kerja aktif">⤴️ Tempel ke Docs/Sheet</button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -725,9 +768,25 @@ document.addEventListener("DOMContentLoaded", async () => {
           try {
             if (act === "copy") {
               await navigator.clipboard.writeText(contentStr);
-              appendLog(`📋 Dokumen "${a.name}" disalin ke clipboard.`);
+              appendLog(`📋 Data/Dokumen "${a.name}" disalin ke clipboard.`);
               const origText = btn.textContent;
               btn.textContent = "✓ Tersalin!";
+              setTimeout(() => { btn.textContent = origText; }, 1800);
+            } else if (act === "download_csv") {
+              const csvName = (a.name || "Tabel-Riset-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "") + ".csv";
+              const csvContent = generateCsvFromMarkdownTable(contentStr);
+              const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = csvName;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+              appendLog(`⬇️ Tabel data "${csvName}" berhasil diunduh dalam format .csv.`);
+              const origText = btn.textContent;
+              btn.textContent = "✓ Terunduh!";
               setTimeout(() => { btn.textContent = origText; }, 1800);
             } else if (act === "download_doc" || act === "download") {
               const docName = (a.name || "Dokumen-Pesat-AI").replace(/\.md$/, "") + ".doc";

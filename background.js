@@ -266,6 +266,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === "DOWNLOAD_FILE") {
+    try {
+      const params = request.params || request;
+      const filename = params.filename || `pesat-export-${Date.now()}.csv`;
+      const content = params.content || "";
+      const mimeType = params.mimeType || "text/csv;charset=utf-8";
+
+      const dataUrl = `data:${mimeType},${encodeURIComponent(content)}`;
+      if (chrome.downloads?.download) {
+        chrome.downloads.download({
+          url: dataUrl,
+          filename: filename,
+          saveAs: false
+        }, (downloadId) => {
+          if (chrome.runtime.lastError) {
+            sendResponse({ success: false, error: chrome.runtime.lastError.message });
+          } else {
+            sendResponse({ success: true, downloadId, filename });
+          }
+        });
+      } else {
+        sendResponse({ success: true, dataUrl, filename });
+      }
+    } catch (err) {
+      sendResponse({ success: false, error: err.message });
+    }
+    return true;
+  }
+
   if (request.action === "GOOGLE_STATUS") {
     chrome.storage.local.get(["googleAuthToken", "googleUserEmail"], (res) => {
       sendResponse({ connected: Boolean(res.googleAuthToken), email: res.googleUserEmail || "" });

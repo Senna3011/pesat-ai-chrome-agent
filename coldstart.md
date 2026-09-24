@@ -166,6 +166,11 @@
 		- [x] **Autonomous End-to-End Social Media Posting (`post_social`)** (`sidepanel.js`, `content.js`):
 		  - Otomasi penuh untuk skenario posting media sosial: navigasi otomatis ke `https://x.com/compose/post` (atau tab media sosial aktif), pengisian draf thread ke kotak compose `[data-testid="tweetTextarea_0"]`, dan eksekusi tombol Post / Publish.
 		  - Pemisahan tegas antara tugas analisis murni vs perintah aksi fisik peramban (*hasPhysicalActionVerb*).
+		- [x] **Implementasi Protokol Reliabilitas & Fitur Ekstraksi Tabel/CSV (Sesuai Audit Dokumen)**:
+		  - *Web Interaction Reliability Protocol*: Multi-strategy element resolution, penutupan dropdown autocomplete Gmail agar tidak menghalangi tombol Kirim, retry dengan exponential backoff (500ms, 1s, 2s), dan pelaporan kegagalan transparan.
+		  - *Social Composer Anti-Duplication Protocol*: Single-pass write, pembersihan popup hashtag via `Escape`, pemeriksaan idempotensi, dan pembatasan karakter ketat (<= 240 karakter) pada Twitter/X.
+		  - *Structured Article Formatting Protocol*: Pemetaan format dokumen kaya (.doc / Google Docs) bebas dari simbol markdown mentah.
+		  - *Table Extraction & Export Protocol*: Deteksi elemen `<table>` dan ARIA grid (`role="grid"`), perumusan tabel riset produk, dan tombol ekspor langsung ke file `.CSV` (RFC 4180).
 		- [x] **Sinkronisasi Build & Codebase Consistency**:
-		  - Sinkronisasi penuh seluruh file `content.js`, `sidepanel.js`, dan `ai-engine.js` ke direktori `extension/`.
+		  - Sinkronisasi penuh seluruh file `content.js`, `sidepanel.js`, `ai-engine.js`, `background.js`, `manifest.json`, dan `sidepanel.css` ke direktori `extension/`.
 

@@ -2114,12 +2114,22 @@ textarea::placeholder {
 		  font-style: italic;
 		}
 
-		/* Social Media & Thread Card Custom Theme */
-		.social-card-theme {
-		  border-color: rgba(56, 189, 248, 0.35);
-		}
+			/* Social Media & Thread Card Custom Theme */
+			.social-card-theme {
+			  border-color: rgba(56, 189, 248, 0.35);
+			}
 
-		.social-badge {
-		  background: rgba(14, 165, 233, 0.18) !important;
-		  border-color: rgba(14, 165, 233, 0.4) !important;
-		}
+			.social-badge {
+			  background: rgba(14, 165, 233, 0.18) !important;
+			  border-color: rgba(14, 165, 233, 0.4) !important;
+			}
+
+			/* Table & Product Research Card Custom Theme */
+			.table-card-theme {
+			  border-color: rgba(16, 185, 129, 0.35);
+			}
+
+			.table-badge {
+			  background: rgba(16, 185, 129, 0.18) !important;
+			  border-color: rgba(16, 185, 129, 0.4) !important;
+			}

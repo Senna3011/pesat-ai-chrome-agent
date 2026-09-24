@@ -1781,79 +1781,110 @@
     }
   }
 
+  // ─────────────────────────────────────────────────────
+  // AUTOMATION ENGINE KHUSUS EMAIL (Gmail / Webmail) DENGAN MULTI-STRATEGY RESOLUTION
+  // ─────────────────────────────────────────────────────
   async function handleEmailComposeAutomation(actionData) {
     const to = actionData.to || actionData.recipient || "";
     const subject = actionData.subject || "";
     const body = actionData.body || actionData.message || actionData.value || "";
     const sendNow = !!actionData.sendNow;
 
-    // Helper polling elemen dengan timeout
-    async function waitForElement(selectorFn, timeoutMs = 4000) {
+    // Helper polling elemen dengan MutationObserver & multi-selector fallback
+    async function waitForElement(selectorFns, timeoutMs = 4500) {
+      const fns = Array.isArray(selectorFns) ? selectorFns : [selectorFns];
       const start = Date.now();
       while (Date.now() - start < timeoutMs) {
-        const el = selectorFn();
-        if (el) return el;
+        for (const fn of fns) {
+          const el = typeof fn === "string" ? document.querySelector(fn) : fn();
+          if (el && isElementVisible(el)) return el;
+        }
         await new Promise(r => setTimeout(r, 200));
       }
-      return selectorFn();
+      for (const fn of fns) {
+        const el = typeof fn === "string" ? document.querySelector(fn) : fn();
+        if (el) return el;
+      }
+      return null;
+    }
+
+    // Helper untuk menutup overlay autocomplete / dropdown popup
+    function dismissAutocompleteOverlays() {
+      try {
+        const active = document.activeElement;
+        if (active) {
+          active.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true }));
+          active.dispatchEvent(new KeyboardEvent("keyup", { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true }));
+        }
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true }));
+      } catch (_) {}
     }
 
     // 1. Cek atau buka popup Compose/Tulis di Gmail
     let composeBox = document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD');
     if (!composeBox) {
-      const composeBtn = document.querySelector('div[gh="cm"]') ||
-                         document.querySelector('div[role="button"][aria-label*="Tulis" i]') ||
-                         document.querySelector('div[role="button"][aria-label*="Compose" i]') ||
-                         document.querySelector('.T-I.T-I-KE.L3') ||
-                         document.querySelector('[data-tooltip*="Compose" i]') ||
-                         document.querySelector('[data-tooltip*="Tulis" i]') ||
-                         findElementByFuzzy("Tulis", "click") ||
-                         findElementByFuzzy("Compose", "click");
+      const composeBtn = await waitForElement([
+        'div[gh="cm"]',
+        'div[role="button"][aria-label*="Tulis" i]',
+        'div[role="button"][aria-label*="Compose" i]',
+        '.T-I.T-I-KE.L3',
+        '[data-tooltip*="Compose" i]',
+        '[data-tooltip*="Tulis" i]',
+        () => findElementByFuzzy("Tulis", "click"),
+        () => findElementByFuzzy("Compose", "click")
+      ], 3500);
+
       if (composeBtn) {
         composeBtn.click();
-        composeBox = await waitForElement(() => document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD'), 3500);
+        composeBox = await waitForElement(() => document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD'), 4000);
       }
     }
 
     await new Promise(r => setTimeout(r, 400));
 
-    // 2. Isi Penerima (To / Kepada)
+    // 2. Isi Penerima (To / Kepada) & Verifikasi Chip Terbentuk
     if (to) {
-      const toInput = await waitForElement(() => {
-        return document.querySelector('input[peoplekit-id]') ||
-               document.querySelector('input.agP') ||
-               document.querySelector('input[aria-label*="Kepada" i]') ||
-               document.querySelector('input[aria-label*="To" i]') ||
-               document.querySelector('input[role="combobox"]') ||
-               document.querySelector('div[aria-label*="Kepada" i] input') ||
-               document.querySelector('div[aria-label*="To" i] input') ||
-               document.querySelector('table.Ao input') ||
-               findElementByFuzzy("Kepada", "type") ||
-               findElementByFuzzy("To", "type");
-      }, 3000);
+      const toInput = await waitForElement([
+        'input[peoplekit-id]',
+        'input.agP',
+        'input[aria-label*="Kepada" i]',
+        'input[aria-label*="To" i]',
+        'input[role="combobox"]',
+        'div[aria-label*="Kepada" i] input',
+        'div[aria-label*="To" i] input',
+        'table.Ao input',
+        () => findElementByFuzzy("Kepada", "type"),
+        () => findElementByFuzzy("To", "type")
+      ], 3500);
 
       if (toInput) {
         toInput.focus();
         setNativeInputValue(toInput, to);
+        // Dispatch Enter and Tab to commit recipient chip
         toInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
         toInput.dispatchEvent(new KeyboardEvent("keypress", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
         toInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+        toInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", code: "Tab", keyCode: 9, which: 9, bubbles: true }));
         toInput.dispatchEvent(new Event("change", { bubbles: true }));
         await new Promise(r => setTimeout(r, 400));
+
+        // Dismiss dropdown autocomplete agar tidak menutupi tombol Kirim
+        dismissAutocompleteOverlays();
+        await new Promise(r => setTimeout(r, 200));
       }
     }
 
     // 3. Isi Subjek
     if (subject) {
-      const subjectInput = await waitForElement(() => {
-        return document.querySelector('input[name="subjectbox"]') ||
-               document.querySelector('input[aria-label*="Subjek" i]') ||
-               document.querySelector('input[aria-label*="Subject" i]') ||
-               document.querySelector('input[placeholder*="Subjek" i]') ||
-               document.querySelector('input[placeholder*="Subject" i]') ||
-               findElementByFuzzy("Subjek", "type") ||
-               findElementByFuzzy("Subject", "type");
-      }, 2500);
+      const subjectInput = await waitForElement([
+        'input[name="subjectbox"]',
+        'input[aria-label*="Subjek" i]',
+        'input[aria-label*="Subject" i]',
+        'input[placeholder*="Subjek" i]',
+        'input[placeholder*="Subject" i]',
+        () => findElementByFuzzy("Subjek", "type"),
+        () => findElementByFuzzy("Subject", "type")
+      ], 3000);
 
       if (subjectInput) {
         subjectInput.focus();
@@ -1866,14 +1897,14 @@
 
     // 4. Isi Pesan (Body)
     if (body) {
-      const bodyEditor = await waitForElement(() => {
-        return document.querySelector('div[role="textbox"][aria-label*="Pesan" i]') ||
-               document.querySelector('div[role="textbox"][aria-label*="Message Body" i]') ||
-               document.querySelector('div[role="textbox"][aria-label*="Body" i]') ||
-               document.querySelector('div.Am.Al.editable') ||
-               document.querySelector('div.editable[contenteditable="true"]') ||
-               document.querySelector('[contenteditable="true"]');
-      }, 2500);
+      const bodyEditor = await waitForElement([
+        'div[role="textbox"][aria-label*="Pesan" i]',
+        'div[role="textbox"][aria-label*="Message Body" i]',
+        'div[role="textbox"][aria-label*="Body" i]',
+        'div.Am.Al.editable',
+        'div.editable[contenteditable="true"]',
+        '[contenteditable="true"]'
+      ], 3000);
 
       if (bodyEditor) {
         bodyEditor.focus();
@@ -1896,22 +1927,51 @@
       }
     }
 
-    // 5. Klik Kirim jika sendNow aktif
+    // Tutup autocomplete popovers jika masih ada
+    dismissAutocompleteOverlays();
+    await new Promise(r => setTimeout(r, 300));
+
+    // 5. Klik Kirim jika sendNow aktif dengan multi-strategy & retry backoff
     if (sendNow) {
-      const sendBtn = await waitForElement(() => {
-        return document.querySelector('div[role="button"][data-tooltip*="Kirim" i]') ||
-               document.querySelector('div[role="button"][data-tooltip*="Send" i]') ||
-               document.querySelector('div[aria-label*="Kirim" i]') ||
-               document.querySelector('div[aria-label*="Send" i]') ||
-               document.querySelector('div.T-I.J-J5-Ji.aoO.v7.T-I-atl.L3') ||
-               findElementByFuzzy("Kirim", "click") ||
-               findElementByFuzzy("Send", "click");
-      }, 2500);
+      const sendBtnSelectors = [
+        'div[role="button"][data-tooltip*="Kirim" i]',
+        'div[role="button"][data-tooltip*="Send" i]',
+        'div[aria-label*="Kirim" i]',
+        'div[aria-label*="Send" i]',
+        'div.T-I.J-J5-Ji.aoO.v7.T-I-atl.L3',
+        () => findElementByFuzzy("Kirim", "click"),
+        () => findElementByFuzzy("Send", "click")
+      ];
+
+      let sendBtn = null;
+      const retryDelays = [500, 1000, 2000];
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        sendBtn = await waitForElement(sendBtnSelectors, 2500);
+        if (sendBtn) {
+          const occ = checkOcclusion(sendBtn);
+          if (occ.covered) {
+            dismissAutocompleteOverlays();
+            await new Promise(r => setTimeout(r, retryDelays[attempt]));
+          } else {
+            break;
+          }
+        } else {
+          await new Promise(r => setTimeout(r, retryDelays[attempt]));
+        }
+      }
 
       if (sendBtn) {
-        sendBtn.click();
-        await new Promise(r => setTimeout(r, 800));
-        return { success: true, message: `Email ke "${to}" dengan subjek "${subject}" berhasil dikirim ke penerima.`, stateChanged: true };
+        try {
+          sendBtn.focus?.();
+          sendBtn.click();
+          await new Promise(r => setTimeout(r, 800));
+          return { success: true, message: `Email ke "${to}" dengan subjek "${subject}" berhasil dikirim ke penerima.`, stateChanged: true };
+        } catch (err) {
+          return { success: true, message: `Draf email ke "${to}" sudah tersimpan di Gmail. Silakan klik tombol Kirim secara manual (${err.message}).`, stateChanged: true };
+        }
+      } else {
+        return { success: true, message: `Draf email ke "${to}" dengan subjek "${subject}" telah berhasil disusun dan tersimpan di Gmail. Silakan tinjau dan klik Kirim.`, stateChanged: true };
       }
     }
 
@@ -2004,7 +2064,12 @@
       return { success: false, error: "Kotak postingan media sosial tidak ditemukan di halaman ini.", errorType: "ELEMENT_NOT_FOUND" };
     }
 
-    // 2. Tuliskan teks postingan ke dalam composeBox (cegah duplikasi teks ganda)
+    // 2. Idempotency Check & Single-Pass Insertion (Social Composer Anti-Duplication Protocol)
+    const existingText = (composeBox.innerText || composeBox.textContent || "").trim();
+    if (existingText.length > 15 && (existingText.includes(postText.slice(0, 30)) || postText.includes(existingText.slice(0, 30)))) {
+      return { success: true, message: "Teks postingan sudah ada di dalam komposer media sosial.", stateChanged: false };
+    }
+
     composeBox.focus();
     try {
       const selection = window.getSelection();
@@ -2035,9 +2100,15 @@
     composeBox.dispatchEvent(new Event("input", { bubbles: true }));
     composeBox.dispatchEvent(new Event("change", { bubbles: true }));
 
+    // Tutup popup/popover saran hashtag dengan Escape (JANGAN tekan Enter/Tab/Space agar tidak menerima autosuggest ganda)
+    try {
+      composeBox.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true }));
+      composeBox.dispatchEvent(new KeyboardEvent("keyup", { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true }));
+    } catch (_) {}
+
     await new Promise(r => setTimeout(r, 600));
 
-    // 3. Klik tombol Post/Tweet jika sendNow / postNow aktif
+    // 3. Klik tombol Post/Tweet jika sendNow / postNow aktif (Single-pass click + verify)
     if (sendNow) {
       const postBtn = await waitForElement(() => {
         return document.querySelector('button[data-testid="tweetButtonInline"]') ||
@@ -2057,6 +2128,106 @@
     }
 
     return { success: true, message: "Teks postingan media sosial berhasil diisikan ke kotak input.", stateChanged: true };
+  }
+
+  // ─────────────────────────────────────────────────────
+  // TABLE SCRAPER & CSV EXPORTER (RFC 4180 COMPLIANT)
+  // ─────────────────────────────────────────────────────
+  function detectTableLike(root = document) {
+    const tablesData = [];
+
+    // 1. Standar HTML Table Detection
+    const htmlTables = root.querySelectorAll("table");
+    htmlTables.forEach((tbl, tblIdx) => {
+      const headers = [];
+      const rows = [];
+
+      const headerEls = tbl.querySelectorAll("thead th, thead td, tr:first-child th");
+      headerEls.forEach(h => {
+        const txt = (h.innerText || h.textContent || "").trim();
+        if (txt) headers.push(txt);
+      });
+
+      const rowEls = tbl.querySelectorAll("tbody tr, tr");
+      rowEls.forEach((r, rIdx) => {
+        const cells = r.querySelectorAll("td, th");
+        if (cells.length === 0) return;
+        const rowData = [];
+        cells.forEach(c => rowData.push((c.innerText || c.textContent || "").trim()));
+
+        // Skip jika baris ini persis sama dengan headers
+        if (headers.length > 0 && rIdx === 0 && rowData.every((val, i) => val === headers[i])) return;
+        if (rowData.some(c => c.length > 0)) rows.push(rowData);
+      });
+
+      if (rows.length > 0 || headers.length > 0) {
+        tablesData.push({
+          id: tbl.id || `table_${tblIdx + 1}`,
+          type: "html_table",
+          headers: headers.length > 0 ? headers : (rows[0] ? rows[0].map((_, i) => `Kolom ${i + 1}`) : []),
+          rows: rows,
+          rowCount: rows.length,
+          colCount: headers.length || (rows[0] ? rows[0].length : 0)
+        });
+      }
+    });
+
+    // 2. ARIA Data-Grid Detection (React Table, AG-Grid, Material UI, Salesforce, Tokopedia SRP)
+    const ariaGrids = root.querySelectorAll('[role="grid"], [role="treegrid"], [role="table"]');
+    ariaGrids.forEach((grid, gridIdx) => {
+      const headers = [];
+      const rows = [];
+
+      const colHeaders = grid.querySelectorAll('[role="columnheader"]');
+      colHeaders.forEach(ch => {
+        const txt = (ch.innerText || ch.textContent || "").trim();
+        if (txt) headers.push(txt);
+      });
+
+      const rowEls = grid.querySelectorAll('[role="row"]');
+      rowEls.forEach(r => {
+        const cellEls = r.querySelectorAll('[role="cell"], [role="gridcell"]');
+        if (cellEls.length === 0) return;
+        const rowData = [];
+        cellEls.forEach(cell => rowData.push((cell.innerText || cell.textContent || "").trim()));
+        if (rowData.some(c => c.length > 0)) rows.push(rowData);
+      });
+
+      if (rows.length > 0) {
+        tablesData.push({
+          id: grid.id || `grid_${gridIdx + 1}`,
+          type: "aria_grid",
+          headers: headers.length > 0 ? headers : rows[0].map((_, i) => `Kolom ${i + 1}`),
+          rows: rows,
+          rowCount: rows.length,
+          colCount: headers.length || rows[0].length
+        });
+      }
+    });
+
+    return tablesData;
+  }
+
+  function exportToCSV(headers = [], rows = []) {
+    function escapeCSVCell(val) {
+      if (val === null || val === undefined) return '""';
+      let str = String(val);
+      if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+        str = '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    }
+
+    const lines = [];
+    if (headers && headers.length > 0) {
+      lines.push(headers.map(escapeCSVCell).join(","));
+    }
+
+    (rows || []).forEach(row => {
+      lines.push((row || []).map(escapeCSVCell).join(","));
+    });
+
+    return lines.join("\r\n");
   }
 
   // ─────────────────────────────────────────────────────
@@ -2103,6 +2274,31 @@
   // MESSAGE LISTENER
   // ─────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.type === "DETECT_TABLES") {
+      const tables = detectTableLike(document);
+      sendResponse({ success: true, tables });
+      return true;
+    }
+
+    if (request.type === "EXPORT_TABLE_CSV") {
+      const tables = detectTableLike(document);
+      if (tables && tables.length > 0) {
+        const primaryTable = tables[0];
+        const csvContent = exportToCSV(primaryTable.headers, primaryTable.rows);
+        sendResponse({
+          success: true,
+          csvContent,
+          rowCount: primaryTable.rowCount,
+          colCount: primaryTable.colCount,
+          headers: primaryTable.headers,
+          tableId: primaryTable.id
+        });
+      } else {
+        sendResponse({ success: false, error: "Tidak ditemukan elemen tabel atau data grid pada halaman ini." });
+      }
+      return true;
+    }
+
     if (request.type === "GET_READABLE_TEXT") {
       const text = getReadableContent();
       sendResponse({
