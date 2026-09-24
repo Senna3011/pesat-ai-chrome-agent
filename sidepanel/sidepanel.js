@@ -2388,7 +2388,37 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
       showStatusIndicator();
 
       const aiReply = await callLLM("chat", promptPayload, { isSummarize: true });
-      addMessageToCurrentSession("assistant", aiReply);
+
+      const artTitle = `Draf-${(userPrompt || "Artikel").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.md`;
+      const artifact = {
+        artifactType: "text",
+        name: artTitle,
+        content: aiReply
+      };
+
+      const isDocsOrEditor = pageUrl.includes("docs.google.com") ||
+                             pageUrl.includes("word.office.com") ||
+                             pageTitle.includes("Google Dokumen") ||
+                             pageTitle.includes("Google Docs") ||
+                             /(?:lembar kerja|dokumen ini|ke dokumen|tulis ke|tempel ke|di dokumen)/i.test(userPrompt);
+
+      if (isDocsOrEditor && (isArticle || /(?:tulis|buatkan|ketik|tempel|masukkan|isi)/i.test(userPrompt))) {
+        showStatusIndicator("Menempelkan teks langsung ke Google Dokumen / editor...");
+        appendLog("📄 Menempelkan teks langsung ke Google Dokumen / Lembar kerja aktif...");
+        await sendToContentScript({
+          type: "EXECUTE_ACTION",
+          actionData: {
+            action: "paste_text",
+            value: aiReply
+          }
+        });
+        addMessageToCurrentSession("assistant", `### 📝 Artikel Berhasil Dibuat & Dituliskan ke Dokumen\n\n${aiReply}`, {
+          skipClean: true,
+          artifact
+        });
+      } else {
+        addMessageToCurrentSession("assistant", aiReply, { artifact });
+      }
       appendLog("✅ Jawaban berhasil disajikan.");
     } catch (err) {
       if (err.name === "AbortError" || shouldStopAgent) {

@@ -155,6 +155,14 @@
 		- [x] **Auto-Dismiss Modal & Popup Occlusion** (`content.js`, `extension/content.js`):
 		  - Penambahan helper `tryDismissCommonModals()` yang secara cerdas mendeteksi dan menutup overlay/promo popup (`aria-label="close"`, `.modal-close`, tombol 'Tutup'/'Nanti saja') ketika elemen target terhalang (*occluded*).
 		  - Memastikan aksi klik pada SPA e-commerce atau situs berita tidak terblokir oleh banner/modal asinkron.
+		- [x] **Direct Google Docs Writing & Canvas Injection** (`sidepanel.js`, `content.js`):
+		  - Deteksi otomatis lembar kerja Google Docs (`docs.google.com`) atau Word Online saat pengguna meminta pembuatan artikel atau draf tulisan.
+		  - Menyisipkan langsung isi artikel ke lembar kerja dokumen web (`paste_text` / input event target) secara otomatis tanpa perlu copy-paste manual.
+		- [x] **Gmail ContentEditable Snapshot & Anti-Looping Fix** (`content.js`, `ai-engine.js`):
+		  - Menangkap nilai teks dari elemen `contenteditable` ke dalam atribut `value` pada snapshot AXTree agar AI mengetahui bahwa bodi email telah terisi dan tidak mengetik ulang secara berulang (*looping*).
+		- [x] **High-Impact Social Thread (Twitter/X) & Professional Article Standard** (`ai-engine.js`, `sidepanel.js`):
+		  - Format thread Twitter/X modern (Hook statemen kuat + `🧵👇` $\to$ Body poin-poin bernas $\to$ Takeaway & CTA + hashtag relevan).
+		  - Format artikel publikasi profesional (# Judul, Executive Summary, Sub-headings terstruktur, Implikasi Praktis, & Actionable Takeaways).
 		- [x] **Sinkronisasi Build & Codebase Consistency**:
-		  - Sinkronisasi penuh seluruh file `content.js` dan `sidepanel.js` ke direktori `extension/`.
+		  - Sinkronisasi penuh seluruh file `content.js`, `sidepanel.js`, dan `ai-engine.js` ke direktori `extension/`.
 
