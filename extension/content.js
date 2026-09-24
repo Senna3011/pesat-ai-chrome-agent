@@ -527,9 +527,11 @@
       "[role='radio']",
       "[role='combobox']",
       "[role='searchbox']",
+      "[role='textbox']",
       "[role='menuitem']",
       "[tabindex='0']",
       "[contenteditable='true']",
+      "[gh='cm']",
       "summary"
     ].join(", ");
 
@@ -1464,12 +1466,44 @@
       if (action === "click") {
         targetEl.focus();
 
-        const eventInit = { bubbles: true, cancelable: true, view: window };
+        const rect = targetEl.getBoundingClientRect();
+        const clientX = Math.round(rect.left + rect.width / 2);
+        const clientY = Math.round(rect.top + rect.height / 2);
+        const screenX = window.screenX + clientX;
+        const screenY = window.screenY + clientY;
+
+        const eventInit = {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window,
+          detail: 1,
+          clientX: clientX,
+          clientY: clientY,
+          screenX: screenX,
+          screenY: screenY,
+          button: 0,
+          buttons: 1
+        };
+
         targetEl.dispatchEvent(new PointerEvent("pointerdown", eventInit));
         targetEl.dispatchEvent(new MouseEvent("mousedown", eventInit));
+        eventInit.buttons = 0;
         targetEl.dispatchEvent(new PointerEvent("pointerup", eventInit));
         targetEl.dispatchEvent(new MouseEvent("mouseup", eventInit));
-        targetEl.click();
+        targetEl.dispatchEvent(new MouseEvent("click", eventInit));
+        try { targetEl.click(); } catch (_) {}
+
+        // Special handling for Google / Gmail jsaction buttons
+        const buttonParent = targetEl.closest('[role="button"], [gh="cm"], button, a');
+        if (buttonParent && buttonParent !== targetEl) {
+          buttonParent.dispatchEvent(new PointerEvent("pointerdown", eventInit));
+          buttonParent.dispatchEvent(new MouseEvent("mousedown", eventInit));
+          buttonParent.dispatchEvent(new PointerEvent("pointerup", eventInit));
+          buttonParent.dispatchEvent(new MouseEvent("mouseup", eventInit));
+          buttonParent.dispatchEvent(new MouseEvent("click", eventInit));
+          try { buttonParent.click(); } catch (_) {}
+        }
 
         restoreOutline();
         return { success: true, message: `Klik [@e${cleanId}] berhasil${fuzzyNote}${coveredNote}.`, stateChanged: true };

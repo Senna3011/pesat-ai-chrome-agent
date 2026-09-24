@@ -776,7 +776,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     containerEl.innerHTML = "";
     modelsList.forEach((m) => {
       const row = document.createElement("div");
-      row.className = `model-item-row ${m.id === activeModelId ? "selected" : ""}`;
+      row.className = `model-item-row ${m.id === activeModelId && m.enabled !== false ? "selected" : ""} ${m.enabled === false ? "disabled" : ""}`;
       row.setAttribute("data-model-id", m.id);
 
       const infoHtml = m.hasInfo ? '<span class="model-info-icon" title="Recommended for complex reasoning">ℹ</span>' : '';
@@ -790,7 +790,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           <button type="button" class="btn-model-action btn-edit-model" title="Ubah Nama Model">✏️</button>
           <button type="button" class="btn-model-action btn-del-model" title="Hapus Model">🗑️</button>
           <label class="toggle-switch small" title="Status Model">
-            <input type="checkbox" class="model-item-toggle" ${m.enabled ? "checked" : ""} />
+            <input type="checkbox" class="model-item-toggle" ${m.enabled !== false ? "checked" : ""} />
             <span class="toggle-slider"></span>
           </label>
         </div>
@@ -799,6 +799,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       // Klik row untuk memilih model aktif
       row.addEventListener("click", (e) => {
         if (e.target.closest(".model-item-actions")) return;
+        if (m.enabled === false) {
+          m.enabled = true;
+        }
         activeModelId = m.id;
         saveModelsConfig();
         renderAllModelLists();
@@ -825,7 +828,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         modelsList = modelsList.filter(x => x.id !== m.id);
         if (activeModelId === m.id) {
-          activeModelId = modelsList[0]?.id || "pesat-flash";
+          const firstEnabled = modelsList.find(x => x.enabled !== false);
+          activeModelId = firstEnabled?.id || modelsList[0]?.id || "pesat-flash";
         }
         saveModelsConfig();
         renderAllModelLists();
@@ -835,7 +839,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       row.querySelector(".model-item-toggle")?.addEventListener("change", (e) => {
         e.stopPropagation();
         m.enabled = e.target.checked;
+        if (!m.enabled && activeModelId === m.id) {
+          const firstEnabled = modelsList.find(x => x.enabled !== false);
+          activeModelId = firstEnabled?.id || modelsList[0]?.id || "pesat-flash";
+        } else if (m.enabled) {
+          activeModelId = m.id;
+        }
         saveModelsConfig();
+        renderAllModelLists();
       });
 
       containerEl.appendChild(row);
@@ -905,10 +916,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       modelsList = [...CFG.DEFAULT_MODELS];
     }
 
-    if (local.modelName && modelsList.some(m => m.id === local.modelName)) {
+    const enabledModels = modelsList.filter(m => m.enabled !== false);
+    if (local.modelName && modelsList.some(m => m.id === local.modelName && m.enabled !== false)) {
       activeModelId = local.modelName;
     } else {
-      activeModelId = modelsList[0]?.id || CFG.DEFAULT_MODEL;
+      activeModelId = enabledModels[0]?.id || modelsList[0]?.id || CFG.DEFAULT_MODEL;
     }
 
     storedSettings = {
@@ -954,7 +966,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function getModelName() {
-    return (storedSettings.modelName && storedSettings.modelName.trim()) || activeModelId || CFG.DEFAULT_MODEL;
+    const enabledModels = modelsList.filter(m => m.enabled !== false);
+    if (activeModelId && modelsList.some(m => m.id === activeModelId && m.enabled !== false)) {
+      return activeModelId;
+    }
+    return enabledModels[0]?.id || (storedSettings.modelName && storedSettings.modelName.trim()) || CFG.DEFAULT_MODEL;
   }
 
   function isConfigured() {
@@ -1046,7 +1062,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           apiBaseUrl: wizardBaseUrl?.value,
           apiFormat: wizardApiFormat?.value,
           apiKey: wizardApiKey?.value,
-          modelName: activeModelId
+          modelName: getModelName()
         },
         wizardTestResult,
         btnWizardTest
@@ -1116,7 +1132,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           apiBaseUrl: apiUrlInput?.value,
           apiFormat: apiFormatSelect?.value,
           apiKey: apiKeyInput?.value,
-          modelName: activeModelId
+          modelName: getModelName()
         },
         settingsTestResult,
         btnSettingsTest
@@ -2162,9 +2178,19 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     }
     addMessageToCurrentSession("user", displayPrompt);
 
-    // Jalur analisis konten langsung (bypass action loop untuk hasil cepat & rapi)
+    // Deteksi cerdas antara Perintah Aksi (Agentic Task) vs Pertanyaan/Analisis (Q&A/Chat)
     const isDirectAnalysis = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt);
-    if (isDirectAnalysis) {
+
+    const isActionCommand = /(?:^(?:buka|kunjungi|open|go to|navigate to|kirim|send|tulis|ketik|isi|klik|click|type|select|pilih|hapus|delete|upload|download|login|masuk|daftar|register|pesan|checkout|scroll|jalankan)\b)/i.test(userPrompt) ||
+                            /(?:(?:dan|lalu|kemudian)\s+(?:buka|kirim|tulis|ketik|isi|klik|pilih))/i.test(userPrompt);
+
+    const isQuestionOrChat = !isActionCommand && (
+      /(?:^(?:apa|apakah|siapa|bagaimana|mengapa|kenapa|dimana|berapa|kapan|jelaskan|terangkan|ceritakan|sebutkan|tolong jelaskan|info|informasi|what|who|how|why|where|when|which|is this|explain|tell me|ini apa|ini platform apa|ini website apa|halaman apa ini)\b)/i.test(userPrompt) ||
+      /\?$/.test(userPrompt) ||
+      isDirectAnalysis
+    );
+
+    if (isQuestionOrChat) {
       await runAnalysisFlow(userPrompt);
       return;
     }
@@ -2176,7 +2202,7 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     try {
       setAgentRunning(true);
       showStatusIndicator();
-      appendLog("Mengambil konten dan metadata halaman web...");
+      appendLog("Mengambil data halaman web untuk menjawab...");
 
       const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
       let cleanText = textRes?.text || "";
@@ -2190,13 +2216,9 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
         pageUrl = scanFallback?.data?.url || pageUrl;
       }
 
-      if (!cleanText || cleanText.length < 20) {
-        addMessageToCurrentSession("assistant", "⚠️ Tidak ditemukan artikel atau konten utama yang memadai pada halaman ini. Pastikan halaman sudah termuat sempurna.");
-        return;
-      }
-
       const isSeo = /(?:seo|meta|kata kunci|keyword)/i.test(userPrompt);
       const isSecurity = /(?:keamanan|security|audit keamanan|ssl|https)/i.test(userPrompt);
+      const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
 
       let promptPayload = "";
       if (isSeo) {
@@ -2227,7 +2249,7 @@ Format laporan dalam Markdown:
 1. ### 🛡️ Status Protokol & Transport Security
 2. ### ⚠️ Temuan Potensi Kerentanan & Resiko
 3. ### 🔒 Rekomendasi Pengamanan Web`;
-      } else {
+      } else if (isSummarize) {
         promptPayload = `Tolong buat ringkasan komprehensif, rapi, dan mudah dipahami dari konten halaman web berikut:
 
 Judul: ${pageTitle}
@@ -2245,19 +2267,35 @@ Format ringkasan dalam Markdown yang elegan:
 
 ### 💡 Kesimpulan & Tindak Lanjut
 (Penjelasan akhir yang aplikatif)`;
+      } else {
+        // Tanya Jawab / Pertanyaan Informasi umum tentang halaman web saat ini
+        promptPayload = `Anda adalah asisten AI pintar. Jawablah pertanyaan pengguna berikut dengan tepat dan informatif berdasarkan halaman web yang sedang dibuka.
+
+[INFORMASI HALAMAN WEB SAAT INI]
+Judul Halaman: ${pageTitle}
+URL Halaman: ${pageUrl}
+
+[ISI KONTEN HALAMAN]:
+${cleanText.substring(0, 7000) || "(Halaman kosong atau tidak memuat artikel teks)"}
+
+[PERTANYAAN PENGGUNA]:
+${userPrompt}
+
+Instruksi:
+Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahasa Indonesia yang baik dalam format Markdown yang rapi.`;
       }
 
       showStatusIndicator();
 
       const aiReply = await callLLM("chat", promptPayload, { isSummarize: true });
       addMessageToCurrentSession("assistant", aiReply);
-      appendLog("✅ Analisis konten berhasil disajikan.");
+      appendLog("✅ Jawaban berhasil disajikan.");
     } catch (err) {
       if (err.name === "AbortError" || shouldStopAgent) {
         appendLog("🛑 Analisis dibatalkan.");
       } else {
-        appendLog(`Error analisis: ${err.message}`, "ERROR");
-        addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat menganalisis: ${err.message}`);
+        appendLog(`Error: ${err.message}`, "ERROR");
+        addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan: ${err.message}`);
       }
     } finally {
       setAgentRunning(false);
