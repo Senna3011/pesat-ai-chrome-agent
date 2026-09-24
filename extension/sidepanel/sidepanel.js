@@ -3154,6 +3154,22 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
       }
 
       if (resObj && resObj.action && resObj.action !== "ask_user" && resObj.action !== "finish") {
+        const isTypingAction = resObj.action === "type" || resObj.action === "type_text" || resObj.action === "fill";
+        const isSocialPage = /x\.com|twitter\.com|linkedin\.com|facebook\.com|threads\.net/i.test(pageData.url || "");
+
+        // Anti-Loop Khusus Komposer Media Sosial / Editor: Cegah pengetikan berulang pada elemen textbox yang sama
+        if (isTypingAction && isSocialPage) {
+          if (activeTask._socialComposerFilled) {
+            appendLog(`📱 Komposer media sosial sudah terisi. Menyelesaikan tugas draf postingan.`, "INFO");
+            (activeTask.plan || []).forEach(p => { p.status = "done"; });
+            refreshTaskCard();
+            await persistTask();
+            await finalizeTask("done", "✅ Draf postingan media sosial telah berhasil disusun dan diisikan ke komposer.");
+            return;
+          }
+          activeTask._socialComposerFilled = true;
+        }
+
         const actionSig = `${resObj.action}:${resObj.elementId || resObj.targetText || resObj.url || resObj.key || ""}:${resObj.text || resObj.value || ""}`;
         if (activeTask.lastActionSig === actionSig) {
           activeTask.repeatActionCount = (activeTask.repeatActionCount || 0) + 1;
