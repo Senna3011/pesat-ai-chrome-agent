@@ -3512,15 +3512,23 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
 
       appendLog(`🎯 Validator: ${verdict.verdict} — ${verdict.reason}`);
 
-      // Subtask selesai HANYA jika validator secara eksplisit menyatakan subtaskComplete, SUCCESS, atau DONE
+      // Evaluasi penyelesaian Subtask (Transisi State yang Deterministik)
       const isSubDone = verdict.subtaskComplete ||
                         verdict.verdict === "DONE" ||
-                        verdict.verdict === "SUCCESS";
+                        verdict.verdict === "SUCCESS" ||
+                        (exec.success && verdict.verdict !== "RETRY" && verdict.verdict !== "REPLAN");
 
       if (isSubDone) {
         markSubtask(sub.id, "done");
         refreshTaskCard();
         await persistTask();
+
+        // Cek apakah seluruh subtask rencana telah rampung
+        const remainingSubs = (activeTask.plan || []).filter(s => s.status !== "done");
+        if (remainingSubs.length === 0) {
+          await finalizeTask("done", "✅ Seluruh langkah tugas telah berhasil diselesaikan secara tuntas.");
+          return;
+        }
       }
 
       if (verdict.verdict === "DONE") {
