@@ -969,18 +969,55 @@ document.addEventListener("DOMContentLoaded", async () => {
               btn.textContent = "✓ Terunduh!";
               setTimeout(() => { btn.textContent = origText; }, 1800);
             } else if (act === "paste") {
-              showStatusIndicator("Menempelkan teks ke editor aktif...");
-              await sendToContentScript({
-                type: "EXECUTE_ACTION",
-                actionData: { action: "paste_text", value: contentStr }
-              });
-              appendLog(`⤴️ Dokumen "${a.name}" ditempel ke editor web aktif.`);
-              const origText = btn.textContent;
-              btn.textContent = "✓ Tertempel!";
-              setTimeout(() => { btn.textContent = origText; }, 1800);
+              const isSocialArt = a.artifactType === "social" || (a.name && (a.name.startsWith("Thread") || a.name.includes("Sosmed") || a.name.includes("Tweet")));
+              setAgentRunning(true);
+              try {
+                if (isSocialArt) {
+                  showStatusIndicator("Membuka Twitter/X & menempelkan thread...");
+                  appendLog("📱 Menyiapkan navigasi ke Twitter/X untuk menempelkan postingan...");
+
+                  let currentTab = null;
+                  try {
+                    const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+                    if (tabs && tabs[0]) currentTab = tabs[0];
+                  } catch (e) {}
+
+                  const isAlreadySocial = currentTab && /x\.com|twitter\.com/i.test(currentTab.url || "");
+                  if (!isAlreadySocial) {
+                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://x.com/compose/post" });
+                    await new Promise(r => setTimeout(r, 4000));
+                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
+                  }
+
+                  const r = await sendToContentScript({
+                    type: "EXECUTE_ACTION",
+                    actionData: { action: "post_social", text: contentStr }
+                  }, 15000);
+
+                  appendLog(`⤴️ Thread "${a.name}" berhasil ditempel ke kotak postingan Twitter/X.`);
+                } else {
+                  showStatusIndicator("Menempelkan teks ke editor aktif...");
+                  await sendToContentScript({
+                    type: "EXECUTE_ACTION",
+                    actionData: { action: "paste_text", value: contentStr }
+                  }, 10000);
+                  appendLog(`⤴️ Dokumen "${a.name}" ditempel ke editor web aktif.`);
+                }
+
+                const origText = btn.textContent;
+                btn.textContent = "✓ Tertempel!";
+                setTimeout(() => { btn.textContent = origText; }, 2000);
+              } catch (pasteErr) {
+                appendLog(`Gagal menempelkan teks: ${pasteErr.message}`, "WARN");
+              } finally {
+                setAgentRunning(false);
+                hideStatusIndicator();
+              }
             }
           } catch (err) {
             appendLog(`Error aksi dokumen: ${err.message}`, "WARN");
+            setAgentRunning(false);
+            hideStatusIndicator();
           }
         });
       });
