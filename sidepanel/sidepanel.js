@@ -2564,16 +2564,19 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     }
     addMessageToCurrentSession("user", displayPrompt);
 
-    // Deteksi cerdas antara Perintah Aksi (Agentic Task Fisik di Browser) vs Pertanyaan/Analisis Murni (Q&A/Audit)
-    const hasPhysicalActionVerb = /(?:^(?:buka|kunjungi|open|go to|navigate to|kirim|send|isi|klik|click|select|pilih|hapus|delete|upload|download|login|masuk|daftar|register|pesan|checkout|scroll|jalankan|posting|post)\b)/i.test(userPrompt) ||
-                                  /(?:(?:dan|lalu|kemudian)\s+(?:buka|kirim|isi|klik|pilih|posting|post))/i.test(userPrompt) ||
-                                  /(?:buka tab|buka x\.com|buka twitter|buka gmail|buka docs|buka linkedin|posting ke|post ke|tweet ke)/i.test(userPrompt);
+    // Deteksi cerdas antara Perintah Aksi Fisik di Web vs Pembuatan Konten/Artikel/Analisis Langsung
+    const isContentOrWriting = /(?:buatkan artikel|tulis artikel|buat artikel|artikel edukasi|buatkan draf|buat draf|tuliskan draf|surat penawaran|rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt);
 
-    const isDirectAnalysisOnly = !hasPhysicalActionVerb && (
-      /(?:rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt) ||
+    const hasPhysicalActionVerb = !isContentOrWriting && (
+      /(?:^(?:buka|kunjungi|open|go to|navigate to|kirim|send|isi|klik|click|select|pilih|hapus|delete|upload|download|login|masuk|daftar|register|pesan|checkout|scroll|jalankan|posting|post)\b)/i.test(userPrompt) ||
+      /(?:(?:dan|lalu|kemudian)\s+(?:buka|kirim|isi|klik|pilih|posting|post))/i.test(userPrompt) ||
+      /(?:buka tab|buka x\.com|buka twitter|buka gmail|buka linkedin|posting ke|post ke|tweet ke)/i.test(userPrompt)
+    );
+
+    const isDirectAnalysisOnly = isContentOrWriting || (!hasPhysicalActionVerb && (
       /(?:^(?:apa|apakah|siapa|bagaimana|mengapa|kenapa|dimana|berapa|kapan|jelaskan|terangkan|ceritakan|sebutkan|tolong jelaskan|info|informasi|what|who|how|why|where|when|which|is this|explain|tell me|ini apa|ini platform apa|ini website apa|halaman apa ini)\b)/i.test(userPrompt) ||
       /\?$/.test(userPrompt)
-    );
+    ));
 
     if (isDirectAnalysisOnly) {
       await runAnalysisFlow(userPrompt);
