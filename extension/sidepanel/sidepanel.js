@@ -2680,41 +2680,40 @@ FORMAT LAPORAN RISET PRODUK:
 - Poin penting 1
 - Poin penting 2`;
       } else if (isSocialThread) {
-        promptPayload = `Buatkan THREAD TWITTER / X & POSTINGAN MEDIA SOSIAL yang sangat profesional, viral, ringkas, dan memikat pembaca:
+        promptPayload = `Tuliskan POSTINGAN TWITTER / X & MEDIA SOSIAL PROFESIONAL (standar thought leadership / tech executive terkemuka):
 
 Judul Halaman: ${pageTitle}
 URL Halaman: ${pageUrl}
 
-[KONTEKS / KONTEN HALAMAN]:
+[KONTEKS & SUMBER REFERENSI]:
 ${cleanText.substring(0, 7000) || "(Gunakan instruksi pengguna di bawah sebagai referensi utama)"}
 
 [INSTRUKSI KHUSUS PENGGUNA]:
 ${userPrompt}
 
-PEDOMAN BATAS PANJANG TWITTER / X (WAJIB KETAT):
-- Twitter/X memiliki batas maksimum 280 karakter per tweet.
-- SETIAP TWEET WAJIB SANGAT RINGKAS (Maksimal 180–220 karakter per butir tweet) agar tidak melebihi kapasitas Twitter/X!
-- Tweet 1 (The Hook): Cukup 1-2 baris kalimat pembuka yang kuat (<200 karakter).
-- DILARANG menumpuk banyak hashtag. Cukup maksimal 1 hashtag singkat saja di tweet terakhir.
+PEDOMAN TULISAN THREAD EKSEKUTIF (KOMPAK & BERBOBOT TINGGI):
+1. Gaya Bahasa: Tajam, berwawasan, mengalir alami, dan otoritatif (gaya penulisan thought leader seperti Naval Ravikant, Sam Altman, atau Paul Graham).
+2. Batas Karakter: Setiap butir tweet WAJIB ringkas (<200 karakter per butir) agar muat sempurna dalam 1 status Twitter/X tanpa terpotong.
+3. Hashtag: Maksimal 1 hashtag esensial saja di akhir (misal: #Productivity). DILARANG menumpuk banyak hashtag!
 
-FORMAT STANDAR THREAD VIRAL TWITTER / X:
-### 🧵 THREAD TWITTER / X (High-Impact & Compact):
+FORMAT STRUKTUR OUTPUT:
+### 🧵 THREAD TWITTER / X (Executive & High-Impact):
 
-**Tweet 1 (The Hook):**
-(Statemen pembuka 1-2 baris yang kuat + 🧵👇)
+**Tweet 1:**
+(Hook pembuka yang tajam dan menggugah wawasan + 🧵👇)
 
-**Tweet 2 (Konteks & Masalah Nyata):**
-(1-2 baris inti masalah secara padat)
+**Tweet 2:**
+(Analisis inti masalah atau transformasi paradigma)
 
-**Tweet 3 - 4 (Wawasan Utama):**
-(Poin-poin bernas, listicle singkat, spasi rapi, tanpa kalimat bertele-tele)
+**Tweet 3:**
+(Poin kunci dan bukti konkret manfaat)
 
-**Tweet Terakhir (Takeaway & CTA):**
-(1 kalimat kesimpulan + ajakan diskusi + 1 hashtag relevan)
+**Tweet 4:**
+(Kalimat penutup reflektif + ajakan diskusi + 1 hashtag relevan)
 
 ---
 ### 💼 FORMAT LINKEDIN (Long-form Post):
-(Format Hook $\\to$ Relevansi Bisnis/Karir $\\to$ 3 Poin Kunci $\\to$ Pertanyaan Diskusi)`;
+(Format Hook Otoritatif $\\to$ Konteks Strategis $\\to$ 3 Key Takeaways $\\to$ Pertanyaan Diskusi)`;
       } else if (isArticle) {
         promptPayload = `Tuliskan ARTIKEL EKSEKUTIF, MENDALAM, ELEGAN, DAN SANGAT PROFESIONAL (standar publikasi Harvard Business Review / MIT Technology Review):
 
@@ -3383,7 +3382,17 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
 
       // 8. Finish langsung
       if (exec.isFinished) {
-        // Cegah finish prematur jika masih banyak subtask yang belum dijalankan
+        // Aksi end-to-end khusus seperti post_social atau send_email langsung menyelesaikan seluruh alur tugas
+        const isEndToEndAction = ["post_social", "post_twitter", "post_x", "send_email", "compose_email"].includes(exec.actionType || actionType);
+        if (isEndToEndAction) {
+          (activeTask.plan || []).forEach(p => { p.status = "done"; });
+          refreshTaskCard();
+          await persistTask();
+          await finalizeTask("done", exec.message);
+          return;
+        }
+
+        // Cegah finish prematur untuk tugas umum jika masih banyak subtask yang belum dijalankan
         const pendingSubs = (activeTask.plan || []).filter(s => s.id !== sub.id && s.status === "pending");
         if (pendingSubs.length > 0 && stepNum <= 2) {
           appendLog(`⚠️ Navigator memanggil 'finish' terlalu dini pada langkah ke-${stepNum} (masih ada ${pendingSubs.length} subtask pending). Melanjutkan subtask.`, "WARN");
