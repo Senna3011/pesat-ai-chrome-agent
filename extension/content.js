@@ -1714,8 +1714,11 @@
         // Khusus tombol Tulis/Compose di Gmail: pastikan form compose terbuka
         const isComposeBtn = /tulis|compose/i.test(targetEl.innerText || targetEl.getAttribute("aria-label") || targetEl.getAttribute("data-tooltip") || "") || targetEl.getAttribute("gh") === "cm" || targetEl.closest('[gh="cm"]');
         if (isComposeBtn && window.location.hostname.includes("mail.google.com")) {
-          window.location.hash = "#inbox?compose=new";
           try {
+            chrome.runtime.sendMessage({ action: "NAVIGATE_TAB", url: "https://mail.google.com/mail/u/0/#inbox?compose=new" });
+          } catch (_) {}
+          try {
+            window.location.hash = "#inbox?compose=new";
             document.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", keyCode: 67, which: 67, bubbles: true }));
           } catch (_) {}
         }

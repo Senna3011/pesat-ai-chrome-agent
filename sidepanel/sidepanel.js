@@ -2352,12 +2352,14 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         if (tabs && tabs[0]) currentTab = tabs[0];
       } catch (e) {}
 
-      if (!currentTab || !/mail\.google\.com/i.test(currentTab.url || "")) {
-        appendLog("Navigasi ke Gmail...");
-        showStatusIndicator("Membuka formulir Tulis Gmail...");
+      appendLog("Membuka formulir Tulis Gmail...");
+      showStatusIndicator("Membuka formulir Tulis Gmail...");
+
+      // Navigasikan atau update tab Gmail ke URL compose resmi
+      if (!currentTab || !currentTab.url || !currentTab.url.includes("compose=new")) {
         await sendToBackground({ action: "NAVIGATE_TAB", url: "https://mail.google.com/mail/u/0/#inbox?compose=new" });
-        await new Promise(r => setTimeout(r, 4500));
-        await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
+        await new Promise(r => setTimeout(r, 4000));
+        await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 3000, stableWindowMs: 600 }, 5000).catch(() => {});
       }
 
       showStatusIndicator("Mengisi formulir email di Gmail...");
@@ -2370,7 +2372,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           body: resObj.body || resObj.message || resObj.value,
           sendNow: resObj.sendNow === true
         }
-      }, 20000);
+      }, 25000);
 
       result.success = !!(r && r.success);
       result.message = (r && (r.message || r.error)) || "Email berhasil diproses.";
