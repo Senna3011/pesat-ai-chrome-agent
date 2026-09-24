@@ -1042,8 +1042,12 @@
   // REACT / VUE COMPATIBLE VALUE SETTER
   // ─────────────────────────────────────────────────────
   function setNativeInputValue(el, value) {
-    if (el.isContentEditable) {
+    if (el.isContentEditable || el.getAttribute("contenteditable") === "true") {
       el.focus();
+      try {
+        document.execCommand("selectAll", false, null);
+        document.execCommand("delete", false, null);
+      } catch (_) {}
       try {
         const selection = window.getSelection();
         const range = document.createRange();
@@ -2072,12 +2076,11 @@
     }
 
     // 2. Idempotency Check & Single-Pass Insertion (Social Composer Anti-Duplication Protocol)
-    const existingText = (composeBox.innerText || composeBox.textContent || "").trim();
-    if (existingText.length > 15 && (existingText.includes(postText.slice(0, 30)) || postText.includes(existingText.slice(0, 30)))) {
-      return { success: true, message: "Teks postingan sudah ada di dalam komposer media sosial.", stateChanged: false };
-    }
-
     composeBox.focus();
+    try {
+      document.execCommand("selectAll", false, null);
+      document.execCommand("delete", false, null);
+    } catch (_) {}
     try {
       const selection = window.getSelection();
       const range = document.createRange();
