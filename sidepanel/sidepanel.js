@@ -571,29 +571,54 @@ document.addEventListener("DOMContentLoaded", async () => {
       const a = msg.artifact;
       const contentStr = String(a.content || "");
       const wordCount = contentStr.trim() ? contentStr.trim().split(/\s+/).length : 0;
-      const docTitle = (a.name || "Draf_Dokumen").replace(/\.md$/, ".doc");
+      const isSocial = a.artifactType === "social" || (a.name && (a.name.startsWith("Thread") || a.name.includes("Sosmed") || a.name.includes("Tweet")));
 
-      contentHtml = `
-        <div class="doc-card-container">
-          <div class="doc-card-header">
-            <div class="doc-card-title-group">
-              <span class="doc-badge-icon">📄</span>
-              <div class="doc-card-meta">
-                <div class="doc-card-title">${escapeHtml(docTitle)}</div>
-                <div class="doc-card-subtitle">Format Dokumen Word / Docs • ${wordCount} kata</div>
+      if (isSocial) {
+        const postTitle = (a.name || "Draf_Thread_X").replace(/\.txt$/, "").replace(/\.md$/, "");
+        contentHtml = `
+          <div class="doc-card-container social-card-theme">
+            <div class="doc-card-header">
+              <div class="doc-card-title-group">
+                <span class="doc-badge-icon social-badge">📱</span>
+                <div class="doc-card-meta">
+                  <div class="doc-card-title">${escapeHtml(postTitle)}</div>
+                  <div class="doc-card-subtitle">Format Thread Twitter/X & Medsos • ${wordCount} kata</div>
+                </div>
+              </div>
+              <div class="doc-card-actions">
+                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi thread">📋 Salin Thread</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke kotak postingan X / medsos aktif">⤴️ Tempel ke X / Medsos</button>
               </div>
             </div>
-            <div class="doc-card-actions">
-              <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi artikel">📋 Salin Teks</button>
-              <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Unduh file siap buka di Word atau Google Docs">⬇️ Unduh .doc</button>
-              <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke lembar kerja dokumen aktif">⤴️ Tempel ke Docs</button>
+            <div class="doc-card-preview-sheet markdown-body">
+              ${parseMarkdown(contentStr)}
             </div>
           </div>
-          <div class="doc-card-preview-sheet markdown-body">
-            ${parseMarkdown(contentStr)}
+        `;
+      } else {
+        const docTitle = (a.name || "Draf_Dokumen").replace(/\.md$/, ".doc");
+        contentHtml = `
+          <div class="doc-card-container">
+            <div class="doc-card-header">
+              <div class="doc-card-title-group">
+                <span class="doc-badge-icon">📄</span>
+                <div class="doc-card-meta">
+                  <div class="doc-card-title">${escapeHtml(docTitle)}</div>
+                  <div class="doc-card-subtitle">Format Dokumen Word / Docs • ${wordCount} kata</div>
+                </div>
+              </div>
+              <div class="doc-card-actions">
+                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi artikel">📋 Salin Teks</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Unduh file siap buka di Word atau Google Docs">⬇️ Unduh .doc</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke lembar kerja dokumen aktif">⤴️ Tempel ke Docs</button>
+              </div>
+            </div>
+            <div class="doc-card-preview-sheet markdown-body">
+              ${parseMarkdown(contentStr)}
+            </div>
           </div>
-        </div>
-      `;
+        `;
+      }
     } else if (msg.multiAgent) {
       const { planner, navigator, validator, finalAnswer } = msg.multiAgent;
       let pipelineHtml = '<div class="agent-pipeline-container">';
@@ -2430,9 +2455,13 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
 
       const aiReply = await callLLM("chat", promptPayload, { isSummarize: true });
 
-      const artTitle = `Draf-${(userPrompt || "Artikel").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.md`;
+      const artType = isSocialThread ? "social" : (isArticle ? "doc" : "text");
+      const artTitle = isSocialThread
+        ? `Thread-${(userPrompt || "Sosmed").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.txt`
+        : `Draf-${(userPrompt || "Artikel").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`;
+
       const artifact = {
-        artifactType: "text",
+        artifactType: artType,
         name: artTitle,
         content: aiReply
       };
@@ -2443,7 +2472,13 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
                              pageTitle.includes("Google Docs") ||
                              /(?:lembar kerja|dokumen ini|ke dokumen|tulis ke|tempel ke|di dokumen)/i.test(userPrompt);
 
-      if (isDocsOrEditor && (isArticle || /(?:tulis|buatkan|ketik|tempel|masukkan|isi)/i.test(userPrompt))) {
+      const isSocialSite = pageUrl.includes("x.com") ||
+                           pageUrl.includes("twitter.com") ||
+                           pageUrl.includes("linkedin.com") ||
+                           pageUrl.includes("facebook.com") ||
+                           pageUrl.includes("threads.net");
+
+      if (isDocsOrEditor && !isSocialThread && (isArticle || /(?:tulis|buatkan|ketik|tempel|masukkan|isi)/i.test(userPrompt))) {
         showStatusIndicator("Menempelkan teks langsung ke Google Dokumen / editor...");
         appendLog("📄 Menempelkan teks langsung ke Google Dokumen / Lembar kerja aktif...");
         await sendToContentScript({
@@ -2457,8 +2492,24 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
           skipClean: true,
           artifact
         });
+      } else if (isSocialSite && isSocialThread) {
+        showStatusIndicator("Menempelkan thread ke postingan media sosial...");
+        appendLog("📱 Menempelkan teks thread ke postingan media sosial aktif...");
+        await sendToContentScript({
+          type: "EXECUTE_ACTION",
+          actionData: {
+            action: "paste_text",
+            value: aiReply
+          }
+        });
+        addMessageToCurrentSession("assistant", `### 📱 Thread Media Sosial Berhasil Dibuat\n\n${aiReply}`, {
+          skipClean: true,
+          artifact
+        });
       } else {
-        addMessageToCurrentSession("assistant", aiReply, { artifact });
+        const headerTitle = isSocialThread ? "### 📱 Thread Media Sosial Berhasil Dibuat" : (isArticle ? "### 📝 Artikel Berhasil Dibuat" : "");
+        const formattedReply = headerTitle ? `${headerTitle}\n\n${aiReply}` : aiReply;
+        addMessageToCurrentSession("assistant", formattedReply, { skipClean: true, artifact });
       }
       appendLog("✅ Jawaban berhasil disajikan.");
     } catch (err) {
