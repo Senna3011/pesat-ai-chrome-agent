@@ -1972,21 +1972,25 @@ document.addEventListener("DOMContentLoaded", async () => {
       };
     }
 
-    // Email intent detection (e.g. kirim email ke X subjek Y pesan Z)
-    const emailToMatch = combined.match(/(?:ke|to)\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+    // Email intent detection (e.g. kirim email ke X subjek Y pesan Z / buka compose di Gmail)
+    const emailToMatch = combined.match(/(?:ke|to)\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i) ||
+                         combined.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
     const emailSubMatch = combined.match(/(?:subjek|subject|judul)\s*[:=]?\s*[`"']?([^`"'\n,]+)[`"']?/i);
-    const emailBodyMatch = combined.match(/(?:pesan|isi|body|pesan email|isi pesan)\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i);
-    const isEmailIntent = /(?:kirim|tulis|buat|draft|send)\s+(?:pesan\s+)?email/i.test(combined);
+    const emailBodyMatch = combined.match(/(?:pesan|isi|body|pesan email|isi pesan|tulis draf email|tulis email|draf email)\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i);
+    const isEmailIntent = /(?:kirim|tulis|buat|draft|send|compose|buka compose)\s+(?:ke\s+|pesan\s+)?email|gmail/i.test(combined);
 
     if (isEmailIntent && emailToMatch) {
+      const recipient = emailToMatch[1];
+      const subject = emailSubMatch ? emailSubMatch[1].trim() : "Laporan & Informasi Penting";
+      const body = emailBodyMatch ? emailBodyMatch[1].trim() : (text.length > 50 ? text : "Halo, berikut terlampir pembaruan terkini.");
       return {
-        planner: { steps: [`1. Membuka Gmail`, `2. Menulis email ke ${emailToMatch[1]}`, `3. Mengisi subjek & pesan`, `4. Mengirim email`] },
+        planner: { steps: [`1. Membuka formulir compose Gmail`, `2. Mengisi penerima (${recipient})`, `3. Mengisi subjek (${subject})`, `4. Menuliskan isi pesan & menyelesaikan pengiriman`] },
         action: "send_email",
-        to: emailToMatch[1],
-        subject: emailSubMatch ? emailSubMatch[1].trim() : "Pesan Baru",
-        body: emailBodyMatch ? emailBodyMatch[1].trim() : "Halo,",
-        sendNow: /(?:kirim|send)/i.test(combined),
-        message: `Mempersiapkan pengiriman email ke ${emailToMatch[1]}...`
+        to: recipient,
+        subject: subject,
+        body: body,
+        sendNow: /(?:kirim sekarang|langsung kirim|auto send|kirimkan|kirim)/i.test(combined),
+        message: `Mempersiapkan pengiriman email ke ${recipient}...`
       };
     }
 

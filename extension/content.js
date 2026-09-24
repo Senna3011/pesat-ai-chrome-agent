@@ -1703,6 +1703,15 @@
           try { buttonParent.click(); } catch (_) {}
         }
 
+        // Khusus tombol Tulis/Compose di Gmail: pastikan form compose terbuka
+        const isComposeBtn = /tulis|compose/i.test(targetEl.innerText || targetEl.getAttribute("aria-label") || targetEl.getAttribute("data-tooltip") || "") || targetEl.getAttribute("gh") === "cm" || targetEl.closest('[gh="cm"]');
+        if (isComposeBtn && window.location.hostname.includes("mail.google.com")) {
+          window.location.hash = "#inbox?compose=new";
+          try {
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", keyCode: 67, which: 67, bubbles: true }));
+          } catch (_) {}
+        }
+
         restoreOutline();
         return { success: true, message: `Klik [@e${cleanId}] berhasil${fuzzyNote}${coveredNote}.`, stateChanged: true };
       }
