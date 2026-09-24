@@ -1959,6 +1959,14 @@
 
       if (bodyEditor) {
         bodyEditor.focus();
+        try {
+          const sel = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(bodyEditor);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        } catch (_) {}
+
         let inserted = false;
         try {
           const htmlContent = body.replace(/\n/g, "<br>");
@@ -1972,7 +1980,7 @@
         if (!inserted) {
           bodyEditor.innerText = body;
         }
-        bodyEditor.dispatchEvent(new Event("input", { bubbles: true }));
+        bodyEditor.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: body }));
         bodyEditor.dispatchEvent(new Event("change", { bubbles: true }));
         await new Promise(r => setTimeout(r, 300));
       }
@@ -2014,8 +2022,15 @@
 
       if (sendBtn) {
         try {
-          sendBtn.focus?.();
-          sendBtn.click();
+          const target = sendBtn.closest('[role="button"]') || sendBtn;
+          target.focus?.();
+          const evt = { bubbles: true, cancelable: true, composed: true, view: window };
+          target.dispatchEvent(new PointerEvent("pointerdown", evt));
+          target.dispatchEvent(new MouseEvent("mousedown", evt));
+          target.dispatchEvent(new PointerEvent("pointerup", evt));
+          target.dispatchEvent(new MouseEvent("mouseup", evt));
+          target.dispatchEvent(new MouseEvent("click", evt));
+          target.click?.();
           await new Promise(r => setTimeout(r, 800));
           return { success: true, message: `Email ke "${to}" dengan subjek "${subject}" berhasil dikirim ke penerima.`, stateChanged: true };
         } catch (err) {
