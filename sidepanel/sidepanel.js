@@ -2370,7 +2370,7 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
 
       let promptPayload = "";
       if (isSocialThread) {
-        promptPayload = `Buatkan THREAD TWITTER / X & POSTINGAN MEDIA SOSIAL yang sangat profesional, viral, bersih, dan memikat pembaca:
+        promptPayload = `Buatkan THREAD TWITTER / X & POSTINGAN MEDIA SOSIAL yang sangat profesional, viral, ringkas, dan memikat pembaca:
 
 Judul Halaman: ${pageTitle}
 URL Halaman: ${pageUrl}
@@ -2381,26 +2381,26 @@ ${cleanText.substring(0, 7000) || "(Gunakan instruksi pengguna di bawah sebagai 
 [INSTRUKSI KHUSUS PENGGUNA]:
 ${userPrompt}
 
-PEDOMAN KHUSUS HASHTAG:
-- DILARANG menggunakan banyak hashtag di setiap tweet atau menumpuk hashtag berwarna biru di akhir postingan!
-- Cukup cantumkan MAKSIMAL 1 atau 2 hashtag yang paling penting di tweet terakhir (contoh: #AI #Productivity).
-- Jangan menyelipkan hashtag di tengah-tengah kalimat.
+PEDOMAN BATAS PANJANG TWITTER / X (WAJIB KETAT):
+- Twitter/X memiliki batas maksimum 280 karakter per tweet.
+- SETIAP TWEET WAJIB SANGAT RINGKAS (Maksimal 180–220 karakter per butir tweet) agar tidak melebihi kapasitas Twitter/X!
+- Tweet 1 (The Hook): Cukup 1-2 baris kalimat pembuka yang kuat (<200 karakter).
+- DILARANG menumpuk banyak hashtag. Cukup maksimal 1 hashtag singkat saja di tweet terakhir.
 
 FORMAT STANDAR THREAD VIRAL TWITTER / X:
-### 🧵 THREAD TWITTER / X (High-Impact & Clean):
+### 🧵 THREAD TWITTER / X (High-Impact & Compact):
 
 **Tweet 1 (The Hook):**
-(Statemen pembuka kuat yang menghentikan scroll, kontras menarik, atau curiosity gap + 🧵👇)
+(Statemen pembuka 1-2 baris yang kuat + 🧵👇)
 
 **Tweet 2 (Konteks & Masalah Nyata):**
-(Uraikan problem atau latar belakang secara singkat dan padat)
+(1-2 baris inti masalah secara padat)
 
-**Tweet 3 - 5 (Breakdown Wawasan Utama):**
-(Poin-poin bernas, listicle bersih, spasi rapi antar kalimat, tanpa kalimat klise)
+**Tweet 3 - 4 (Wawasan Utama):**
+(Poin-poin bernas, listicle singkat, spasi rapi, tanpa kalimat bertele-tele)
 
 **Tweet Terakhir (Takeaway & CTA):**
-(1 kalimat kesimpulan bernas + ajakan diskusi / repost)
-(Maksimal 1-2 hashtag singkat saja)
+(1 kalimat kesimpulan + ajakan diskusi + 1 hashtag relevan)
 
 ---
 ### 💼 FORMAT LINKEDIN (Long-form Post):

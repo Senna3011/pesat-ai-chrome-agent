@@ -1837,8 +1837,42 @@
   // ─────────────────────────────────────────────────────
   // AUTOMATION ENGINE KHUSUS MEDIA SOSIAL (X/Twitter, LinkedIn, Facebook)
   // ─────────────────────────────────────────────────────
+  function sanitizeSocialPostForPlatform(rawText) {
+    let clean = String(rawText || "")
+      .replace(/^###\s+.*$/gim, "")
+      .replace(/^#\s+.*$/gim, "")
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      .replace(/^>\s*/gm, "")
+      .trim();
+
+    const isTwitter = /x\.com|twitter\.com/i.test(window.location.hostname);
+    if (isTwitter) {
+      // Cek apakah teks berbentuk multi-tweet thread (misal "Tweet 1 ... Tweet 2 ...")
+      const tweet1Match = clean.match(/(?:Tweet\s*1\s*\(?[^\)]*\)?\s*:?|1\/\d+)\s*([\s\S]*?)(?=(?:Tweet\s*2|2\/\d+|$))/i);
+      if (tweet1Match && tweet1Match[1].trim().length > 10) {
+        clean = tweet1Match[1].trim();
+      } else {
+        const paragraphs = clean.split(/\n\n+/).map(p => p.trim()).filter(p => p.length > 10 && !p.startsWith("---"));
+        if (paragraphs.length > 0) {
+          clean = paragraphs[0];
+        }
+      }
+
+      clean = clean.replace(/^(?:Tweet\s*\d+|The\s*Hook)\s*:?\s*/i, "").trim();
+
+      // Batasi ketat maksimal 245 karakter agar muat sempurna dalam batas 280 karakter Twitter/X
+      if (clean.length > 245) {
+        clean = clean.slice(0, 240).trim() + "...";
+      }
+    }
+
+    return clean;
+  }
+
   async function handleSocialPostAutomation(actionData) {
-    const postText = actionData.text || actionData.body || actionData.content || actionData.value || "";
+    const rawPostText = actionData.text || actionData.body || actionData.content || actionData.value || "";
+    const postText = sanitizeSocialPostForPlatform(rawPostText);
     const sendNow = !!actionData.sendNow || !!actionData.postNow;
 
     async function waitForElement(selectorFn, timeoutMs = 4500) {
