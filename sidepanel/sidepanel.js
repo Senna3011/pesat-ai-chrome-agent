@@ -473,6 +473,33 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ═══════════════════════════════════════════════════
   // MESSAGE RENDERING (user / askUser / taskCard / confirmation / artifact / multiAgent / normal)
   // ═══════════════════════════════════════════════════
+  function generateWordDocHtml(markdownContent, title = "Dokumen Pesat AI") {
+    const htmlBody = parseMarkdown(markdownContent);
+    return `<!DOCTYPE html>
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+  <meta charset='utf-8'>
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body { font-family: 'Plus Jakarta Sans', 'Calibri', 'Arial', sans-serif; font-size: 11pt; line-height: 1.65; color: #1e293b; margin: 1in; }
+    h1 { font-size: 20pt; color: #1e3a8a; margin-top: 18pt; margin-bottom: 8pt; font-family: 'Sora', 'Calibri Light', sans-serif; font-weight: 700; border-bottom: 1.5pt solid #e2e8f0; padding-bottom: 6pt; }
+    h2 { font-size: 14pt; color: #1e40af; margin-top: 14pt; margin-bottom: 6pt; font-family: 'Sora', 'Calibri Light', sans-serif; font-weight: 600; }
+    h3 { font-size: 12pt; color: #374151; margin-top: 10pt; margin-bottom: 4pt; }
+    p { margin-bottom: 8pt; text-align: justify; }
+    ul, ol { margin-top: 4pt; margin-bottom: 8pt; padding-left: 24pt; }
+    li { margin-bottom: 4pt; }
+    blockquote { border-left: 3.5pt solid #3b82f6; background: #f8fafc; padding: 8pt 12pt; margin: 10pt 0; color: #475569; font-style: italic; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10pt; margin-bottom: 10pt; }
+    th, td { border: 1px solid #cbd5e1; padding: 6pt 8pt; font-size: 10pt; }
+    th { background-color: #f1f5f9; font-weight: bold; }
+  </style>
+</head>
+<body>
+  ${htmlBody}
+</body>
+</html>`;
+  }
+
   function buildMessageNode(msg, index) {
     const isUser = msg.role === "user";
     const msgDiv = document.createElement("div");
@@ -542,17 +569,29 @@ document.addEventListener("DOMContentLoaded", async () => {
       contentHtml = renderTaskCardHtml(msg.taskCard);
     } else if (msg.artifact) {
       const a = msg.artifact;
+      const contentStr = String(a.content || "");
+      const wordCount = contentStr.trim() ? contentStr.trim().split(/\s+/).length : 0;
+      const docTitle = (a.name || "Draf_Dokumen").replace(/\.md$/, ".doc");
+
       contentHtml = `
-        <div class="artifact-card">
-          <div class="artifact-header">
-            <span class="artifact-name">${a.artifactType === "code" ? "💻" : a.artifactType === "table" ? "📊" : "📄"} ${escapeHtml(a.name || "artifact")}</span>
-            <div class="artifact-actions">
-              <button class="artifact-btn" data-artifact-act="copy">📋 Copy</button>
-              <button class="artifact-btn" data-artifact-act="download">⬇️ Unduh</button>
-              <button class="artifact-btn" data-artifact-act="paste" title="Tempel ke editor yang sedang fokus">⤴️ Tulis ke Editor</button>
+        <div class="doc-card-container">
+          <div class="doc-card-header">
+            <div class="doc-card-title-group">
+              <span class="doc-badge-icon">📄</span>
+              <div class="doc-card-meta">
+                <div class="doc-card-title">${escapeHtml(docTitle)}</div>
+                <div class="doc-card-subtitle">Format Dokumen Word / Docs • ${wordCount} kata</div>
+              </div>
+            </div>
+            <div class="doc-card-actions">
+              <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi artikel">📋 Salin Teks</button>
+              <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Unduh file siap buka di Word atau Google Docs">⬇️ Unduh .doc</button>
+              <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke lembar kerja dokumen aktif">⤴️ Tempel ke Docs</button>
             </div>
           </div>
-          <pre class="artifact-body">${escapeHtml(String(a.content || "").substring(0, 5000))}</pre>
+          <div class="doc-card-preview-sheet markdown-body">
+            ${parseMarkdown(contentStr)}
+          </div>
         </div>
       `;
     } else if (msg.multiAgent) {
@@ -652,34 +691,48 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
       });
     } else if (msg.artifact) {
-      const actBtns = msgDiv.querySelectorAll(".artifact-btn");
+      const actBtns = msgDiv.querySelectorAll(".doc-action-btn, .artifact-btn");
       actBtns.forEach((btn) => {
         btn.addEventListener("click", async () => {
           const act = btn.getAttribute("data-artifact-act");
           const a = msg.artifact;
+          const contentStr = a.content || "";
           try {
             if (act === "copy") {
-              await navigator.clipboard.writeText(a.content || "");
-              appendLog(`📋 Artefak "${a.name}" disalin ke clipboard.`);
-            } else if (act === "download") {
-              await sendToBackground({
-                action: "DOWNLOAD_FILE",
-                params: {
-                  filename: a.name || "artifact.txt",
-                  content: a.content || "",
-                  mimeType: a.artifactType === "code" ? "text/plain" : "text/plain"
-                }
-              });
-              appendLog(`⬇️ Artefak "${a.name}" diunduh.`);
+              await navigator.clipboard.writeText(contentStr);
+              appendLog(`📋 Dokumen "${a.name}" disalin ke clipboard.`);
+              const origText = btn.textContent;
+              btn.textContent = "✓ Tersalin!";
+              setTimeout(() => { btn.textContent = origText; }, 1800);
+            } else if (act === "download_doc" || act === "download") {
+              const docName = (a.name || "Dokumen-Pesat-AI").replace(/\.md$/, "") + ".doc";
+              const docHtml = generateWordDocHtml(contentStr, docName);
+              const blob = new Blob([docHtml], { type: "application/msword;charset=utf-8" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = docName;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+              appendLog(`⬇️ Dokumen "${docName}" berhasil diunduh dalam format .doc.`);
+              const origText = btn.textContent;
+              btn.textContent = "✓ Terunduh!";
+              setTimeout(() => { btn.textContent = origText; }, 1800);
             } else if (act === "paste") {
+              showStatusIndicator("Menempelkan teks ke editor aktif...");
               await sendToContentScript({
                 type: "EXECUTE_ACTION",
-                actionData: { action: "paste_text", value: a.content || "" }
+                actionData: { action: "paste_text", value: contentStr }
               });
-              appendLog(`⤴️ Artefak "${a.name}" ditempel ke editor aktif.`);
+              appendLog(`⤴️ Dokumen "${a.name}" ditempel ke editor web aktif.`);
+              const origText = btn.textContent;
+              btn.textContent = "✓ Tertempel!";
+              setTimeout(() => { btn.textContent = origText; }, 1800);
             }
           } catch (err) {
-            appendLog(`Error aksi artefak: ${err.message}`, "WARN");
+            appendLog(`Error aksi dokumen: ${err.message}`, "WARN");
           }
         });
       });
