@@ -1602,9 +1602,15 @@
       const tsvText = rows.map(r => r.join("\t")).join("\n");
       const htmlTable = `<table>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</table>`;
 
-      // 1. Google Sheets Integration (Grid Paste Injection)
+      // 1. Google Sheets Integration (Grid Paste & Active Cell Target)
       if (isGoogleSheets) {
-        const gridContainer = document.querySelector(".grid-scrollable") ||
+        const waffleClip = document.querySelector("textarea.clip-target") ||
+                           document.querySelector(".waffle-clipboard-target") ||
+                           document.querySelector("textarea.cell-input") ||
+                           document.querySelector("#waffle-rich-text-editor");
+
+        const gridContainer = waffleClip ||
+                              document.querySelector(".grid-scrollable") ||
                               document.querySelector("#waffle-grid-tab") ||
                               document.querySelector(".cell-input") ||
                               document.querySelector("[role='grid']") ||
@@ -1612,10 +1618,12 @@
                               document.activeElement;
 
         if (gridContainer) {
-          gridContainer.focus?.();
-          gridContainer.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
-          gridContainer.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
-          gridContainer.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+          try {
+            gridContainer.focus?.();
+            gridContainer.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+            gridContainer.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+            gridContainer.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+          } catch (_) {}
         }
 
         try {
@@ -1634,22 +1642,28 @@
           bubbles: true,
           cancelable: true
         });
+
+        if (waffleClip) waffleClip.dispatchEvent(pasteKeyEvent);
         (gridContainer || document).dispatchEvent(pasteKeyEvent);
+        document.dispatchEvent(pasteKeyEvent);
 
         const dt = new DataTransfer();
         dt.setData("text/plain", tsvText);
         dt.setData("text/html", htmlTable);
         const pasteClipboardEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+
+        if (waffleClip) waffleClip.dispatchEvent(pasteClipboardEv);
         (gridContainer || document).dispatchEvent(pasteClipboardEv);
         document.dispatchEvent(pasteClipboardEv);
+        window.dispatchEvent(pasteClipboardEv);
 
         try { document.execCommand("paste"); } catch (_) {}
 
-        showReadingHUD(`✓ Data spreadsheet berhasil diisikan (${rows.length} baris, ${rows[0]?.length || 0} kolom)`, true);
-        await new Promise(r => setTimeout(r, 400));
+        showReadingHUD(`✓ Data tabel (${rows.length} baris x ${rows[0]?.length || 0} kolom) berhasil disiapkan di Google Sheets! (Salinan clipboard aktif — jika belum muncul otomatis, tekan Ctrl+V / Cmd+V)`, true);
+        await new Promise(r => setTimeout(r, 600));
         return {
           success: true,
-          message: `Berhasil mengisikan ${rows.length} baris x ${rows[0]?.length || 0} kolom ke Google Sheets.`,
+          message: `Berhasil menyiapkan ${rows.length} baris x ${rows[0]?.length || 0} kolom ke Google Sheets (Clipboard sinkron).`,
           stateChanged: true
         };
       }

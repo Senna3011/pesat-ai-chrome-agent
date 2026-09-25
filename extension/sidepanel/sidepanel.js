@@ -1015,14 +1015,21 @@ document.addEventListener("DOMContentLoaded", async () => {
                   }, 15000);
 
                   appendLog(`⤴️ Thread "${a.name}" berhasil ditempel ke kotak postingan Twitter/X.`);
-                } else {
-                  showStatusIndicator("Menempelkan teks ke editor aktif...");
-                  await sendToContentScript({
-                    type: "EXECUTE_ACTION",
-                    actionData: { action: "paste_text", value: contentStr }
-                  }, 10000);
-                  appendLog(`⤴️ Dokumen "${a.name}" ditempel ke editor web aktif.`);
-                }
+	                } else if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.includes("Spreadsheet") || a.name?.includes("Tabel")) {
+	                  showStatusIndicator("Mengisikan tabel data ke spreadsheet...");
+	                  await sendToContentScript({
+	                    type: "EXECUTE_ACTION",
+	                    actionData: { action: "fill_spreadsheet_grid", value: contentStr }
+	                  }, 10000);
+	                  appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet aktif.`);
+	                } else {
+	                  showStatusIndicator("Menempelkan teks ke editor aktif...");
+	                  await sendToContentScript({
+	                    type: "EXECUTE_ACTION",
+	                    actionData: { action: "paste_text", value: contentStr }
+	                  }, 10000);
+	                  appendLog(`⤴️ Dokumen "${a.name}" ditempel ke editor web aktif.`);
+	                }
 
                 const origText = btn.textContent;
                 btn.textContent = "✓ Tertempel!";
@@ -1479,24 +1486,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const actionLogs = activeTask?.scratchpad || [];
     const lastErr = activeTask?.scratchpad?.slice(-1)?.[0]?.observation || null;
-
-    // Catat juga via sendRemoteLog langsung dari sidepanel
-    try {
-      if (typeof sendRemoteLog === "function") {
-        sendRemoteLog({
-          level: "WARN",
-          source: "USER_BUG_REPORT",
-          type: "BUG_REPORT",
-          message: `[BUG REPORT] ${desc}`,
-          details: {
-            userDescription: desc,
-            actionLogs: bugIncludeLogs?.checked ? actionLogs : [],
-            lastError: lastErr,
-            domSnapshot: domSnap
-          }
-        });
-      }
-    } catch (_) {}
 
     chrome.runtime.sendMessage({
       action: "SUBMIT_BUG_REPORT",
@@ -2840,15 +2829,41 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
         pageUrl = activeTabInfo?.url || scanFallback?.data?.url || pageUrl;
       }
 
-      const isSeo = /(?:seo|meta|kata kunci|keyword)/i.test(userPrompt);
-      const isSecurity = /(?:keamanan|security|audit keamanan|ssl|https)/i.test(userPrompt);
-      const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
-      const isSocialThread = /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed)/i.test(userPrompt);
-      const isProductResearch = /(?:riset produk|laptop|harga|rekomendasi produk|komparasi|spesifikasi|cari produk|tokopedia|shopee|produk)/i.test(userPrompt);
-      const isArticle = !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt);
+      const isSheetsSite = pageUrl.includes("/spreadsheets") ||
+                           pageTitle.includes("Google Spreadsheet") ||
+                           pageTitle.includes("Google Sheets") ||
+                           pageTitle.includes("Excel") ||
+                           pageUrl.includes("excel.office.com");
+
+      const isSpreadsheetTask = isSheetsSite ||
+                                /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi)/i.test(userPrompt);
+
+      const isSeo = !isSpreadsheetTask && /(?:seo|meta|kata kunci|keyword)/i.test(userPrompt);
+      const isSecurity = !isSpreadsheetTask && /(?:keamanan|security|audit keamanan|ssl|https)/i.test(userPrompt);
+      const isSummarize = !isSpreadsheetTask && /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
+      const isSocialThread = !isSpreadsheetTask && /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed)/i.test(userPrompt);
+      const isProductResearch = !isSpreadsheetTask && !isSocialThread && /(?:riset produk|laptop|harga|rekomendasi produk|komparasi|spesifikasi|cari produk|tokopedia|shopee|produk)/i.test(userPrompt);
+      const isArticle = !isSpreadsheetTask && !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt);
 
       let promptPayload = "";
-      if (isProductResearch) {
+      if (isSpreadsheetTask) {
+        promptPayload = `Bertindaklah sebagai MASTER SPREADSHEET & FINANCIAL DATA SCIENTIST EXPERT (Standar Senior Modeler & Excel Specialist).
+
+[PERINTAH & KEBUTUHAN DATA SPREADSHEET]:
+${userPrompt}
+
+[KONTEKS WEB SAAT INI (jika ada)]:
+Judul: ${pageTitle} | URL: ${pageUrl}
+${cleanText.substring(0, 4000)}
+
+PEDOMAN KETAT OUTPUT SPREADSHEET:
+1. SAJIKAN TABEL DATA LENGKAP DALAM FORMAT MARKDOWN TABLE (WAJIB):
+   - Kolom-kolom harus rapi, terisi penuh, dan presisi sesuai yang diminta pengguna (contoh: | No | Nama Laptop | Prosesor | Layar | Estimasi Harga |).
+   - Tuliskan data riil, akurat, dan bersih tanpa placeholder [...].
+   - Jika terdapat kolom harga atau nilai numerik, sertakan baris FORMULA / TOTAL / AVERAGE di baris paling bawah jika relevan (misal: | | Rata-rata Harga | | | =AVERAGE(E2:E4) |).
+2. Pastikan tabel Markdown menggunakan format standar (| baris | baris |) yang mudah di-parse dan di-paste langsung ke Google Sheets atau Excel.
+3. Sertakan 1 paragraf ringkasan singkat analisis di bawah tabel.`;
+      } else if (isProductResearch) {
         promptPayload = `Lakukan RISET DAN ANALISIS KOMPARASI PRODUK MENDALAM & PROFESIONAL berdasarkan data katalog produk berikut:
 
 [DATA KATALOG & WEB SAAT INI]:
@@ -3004,11 +3019,11 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
 
       const aiReply = await callLLM("chat", promptPayload, { isSummarize: true });
 
-      const artType = isSocialThread ? "social" : (isProductResearch ? "table" : (isArticle ? "doc" : "text"));
-      const artTitle = isSocialThread
-        ? `Thread-${(userPrompt || "Sosmed").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.txt`
-        : (isProductResearch
-            ? `Riset-${(userPrompt || "Produk").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
+      const artType = (isSpreadsheetTask || isProductResearch) ? "table" : (isSocialThread ? "social" : (isArticle ? "doc" : "text"));
+      const artTitle = (isSpreadsheetTask || isProductResearch)
+        ? `Spreadsheet-${(userPrompt || "Data").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
+        : (isSocialThread
+            ? `Thread-${(userPrompt || "Sosmed").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.txt`
             : `Draf-${(userPrompt || "Artikel").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`);
 
       const artifact = {
@@ -3017,7 +3032,7 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
         content: aiReply
       };
 
-      const isDocsOrEditor = pageUrl.includes("docs.google.com") ||
+      const isDocsOrEditor = (pageUrl.includes("docs.google.com") && !pageUrl.includes("/spreadsheets")) ||
                              pageUrl.includes("word.office.com") ||
                              pageTitle.includes("Google Dokumen") ||
                              pageTitle.includes("Google Docs") ||
@@ -3029,7 +3044,21 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
                            pageUrl.includes("facebook.com") ||
                            pageUrl.includes("threads.net");
 
-      if (isDocsOrEditor && !isSocialThread && !isProductResearch && (isArticle || /(?:tulis|buatkan|ketik|tempel|masukkan|isi|paragraf|artikel)/i.test(userPrompt))) {
+      if (isSheetsSite || (isSpreadsheetTask && (pageUrl.includes("docs.google.com") || pageUrl.includes("sheets")))) {
+        showStatusIndicator("Mengisikan data tabel langsung ke Google Sheets...");
+        appendLog("📊 Mengisikan baris & kolom data langsung ke Google Sheets...");
+        await sendToContentScript({
+          type: "EXECUTE_ACTION",
+          actionData: {
+            action: "fill_spreadsheet_grid",
+            value: aiReply
+          }
+        });
+        addMessageToCurrentSession("assistant", `### 📊 Data Berhasil Dibuat & Diisikan ke Google Sheets\n\n${aiReply}`, {
+          skipClean: true,
+          artifact
+        });
+      } else if (isDocsOrEditor && !isSocialThread && !isProductResearch && !isSpreadsheetTask && (isArticle || /(?:tulis|buatkan|ketik|tempel|masukkan|isi|paragraf|artikel)/i.test(userPrompt))) {
         showStatusIndicator("Menuliskan teks langsung ke Google Dokumen / editor...");
         appendLog("📄 Menuliskan teks langsung ke Google Dokumen / Lembar kerja aktif...");
         await sendToContentScript({

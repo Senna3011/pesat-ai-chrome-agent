@@ -290,27 +290,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           reportedAt: new Date().toISOString()
         };
 
-        // 1. Log telemetry via logger.js
-        if (typeof sendRemoteLog === "function") {
-          sendRemoteLog({
-            level: "WARN",
-            source: "USER_BUG_REPORT",
-            type: "BUG_REPORT",
-            message: `[BUG REPORT] ${reportPayload.userDescription}`,
-            details: reportPayload,
-            tabId: activeTabId,
-            url: reportPayload.url
-          });
-        }
-
-        // 2. Simpan backup lokal di chrome.storage.local
-        chrome.storage.local.get(["pesat_bug_reports"], (res) => {
-          const reports = res.pesat_bug_reports || [];
-          reports.unshift({ ...reportPayload, timestamp: Date.now() });
-          chrome.storage.local.set({ pesat_bug_reports: reports.slice(0, 50) });
-        });
-
-        // 3. Kirim ke remote endpoint /api/logs dan /api/chat
+        // 1. Kirim single telemetry log ke Cloudflare Worker
         const reportLogEntry = {
           level: "WARN",
           source: "USER_BUG_REPORT",
@@ -330,17 +310,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           }).catch(() => {});
         } catch (_) {}
 
-        try {
-          await fetch("https://pesat-ai-chrome-agent.senna-947.workers.dev/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "SUBMIT_BUG_REPORT",
-              isBugReport: true,
-              ...reportPayload
-            })
-          }).catch(() => {});
-        } catch (_) {}
+        // 2. Simpan backup lokal di chrome.storage.local
+        chrome.storage.local.get(["pesat_bug_reports"], (res) => {
+          const reports = res.pesat_bug_reports || [];
+          reports.unshift({ ...reportPayload, timestamp: Date.now() });
+          chrome.storage.local.set({ pesat_bug_reports: reports.slice(0, 50) });
+        });
 
         sendResponse({ success: true, message: "Laporan bug berhasil dikirim dan dicatat!" });
       } catch (err) {

@@ -553,6 +553,47 @@ function renderLogsPage(env) {
     </div>
   </div>
 
+
+    <!-- Dedicated Bug Report Details Modal (Persistent against auto-refresh) -->
+    <div id="bugModalOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.78); z-index:9999; align-items:center; justify-content:center; backdrop-filter:blur(6px); padding:20px;">
+      <div style="background:#0f172a; border:1px solid rgba(56,189,248,0.35); border-radius:14px; max-width:850px; width:100%; max-height:88vh; display:flex; flex-direction:column; box-shadow:0 24px 60px rgba(0,0,0,0.85); overflow:hidden;">
+        <div style="padding:16px 20px; border-bottom:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center; background:#161f36;">
+          <div style="font-size:16px; font-weight:700; color:#38bdf8; display:flex; align-items:center; gap:8px;">
+            <span>🐞</span>
+            <span>Detail Laporan Kendala Pengguna</span>
+          </div>
+          <button onclick="closeBugModal()" style="background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer; padding:4px 8px;" title="Tutup">✕</button>
+        </div>
+        <div style="padding:20px; overflow-y:auto; display:flex; flex-direction:column; gap:14px; font-size:13px; color:#e2e8f0;">
+          <div>
+            <div style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; margin-bottom:4px;">Deskripsi Pengguna:</div>
+            <div id="bugModalDesc" style="font-size:14px; font-weight:600; color:#f8fafc; background:rgba(255,255,255,0.04); padding:12px 14px; border-radius:8px; border-left:3px solid #38bdf8;"></div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div>
+              <div style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; margin-bottom:4px;">Halaman Web / URL:</div>
+              <div id="bugModalUrl" style="font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#38bdf8; word-break:break-all; background:rgba(255,255,255,0.04); padding:10px 12px; border-radius:8px;"></div>
+            </div>
+            <div>
+              <div style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; margin-bottom:4px;">Waktu Laporan:</div>
+              <div id="bugModalTime" style="font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#cbd5e1; background:rgba(255,255,255,0.04); padding:10px 12px; border-radius:8px;"></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px; font-weight:700; color:#f87171; text-transform:uppercase; margin-bottom:4px;">Error Terakhir:</div>
+            <div id="bugModalError" style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#fca5a5; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); padding:10px 12px; border-radius:8px; word-break:break-word;"></div>
+          </div>
+          <div>
+            <div style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; margin-bottom:4px;">Payload Log Aksi & DOM Snapshot:</div>
+            <pre id="bugModalRaw" style="background:#020617; border:1px solid rgba(255,255,255,0.08); padding:14px; border-radius:8px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#38bdf8; overflow-x:auto; max-height:260px; white-space:pre-wrap; word-break:break-all;"></pre>
+          </div>
+        </div>
+        <div style="padding:12px 20px; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:flex-end; background:#161f36;">
+          <button onclick="closeBugModal()" class="btn" style="padding:6px 18px;">Tutup</button>
+        </div>
+      </div>
+    </div>
+
   <script>
     let allLogs = [];
     let activeTab = "logs";
@@ -727,7 +768,6 @@ function renderLogsPage(env) {
         const url = log.details?.url || log.url || "-";
         const tabTitle = log.details?.tabTitle || "";
         const lastErr = log.details?.lastError || "-";
-        const logDetailStr = escapeHtml(JSON.stringify(log.details || {}, null, 2));
 
         return \`
           <tr>
@@ -741,25 +781,37 @@ function renderLogsPage(env) {
               \${escapeHtml(lastErr)}
             </td>
             <td style="text-align: center;">
-              <button class="bug-btn-view" onclick="toggleBugDetails('bug-detail-\${idx}')">🔍 Lihat</button>
-            </td>
-          </tr>
-          <tr id="bug-detail-\${idx}" style="display: none; background: #060911;">
-            <td colspan="5" style="padding: 12px 16px;">
-              <div style="font-size: 12px; font-weight: 700; color: #38bdf8; margin-bottom: 6px;">Detail Log & Payload Laporan Bug:</div>
-              <pre style="background: #020617; padding: 12px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #cbd5e1; overflow-x: auto; max-height: 250px;">\${logDetailStr}</pre>
+              <button class="bug-btn-view" onclick="openBugModal(\${idx})">🔍 Lihat</button>
             </td>
           </tr>
         \`;
       }).join('');
     }
 
-    function toggleBugDetails(id) {
-      const row = document.getElementById(id);
-      if (row) {
-        row.style.display = row.style.display === "none" ? "table-row" : "none";
-      }
+    let currentOpenBug = null;
+    function openBugModal(idx) {
+      const bugReports = allLogs.filter(isBugReport).slice().reverse();
+      const log = bugReports[idx];
+      if (!log) return;
+      currentOpenBug = log;
+      document.getElementById("bugModalDesc").textContent = log.details?.userDescription || log.message || "-";
+      document.getElementById("bugModalUrl").textContent = log.details?.url || log.url || "-";
+      document.getElementById("bugModalTime").textContent = log.timestamp ? new Date(log.timestamp).toLocaleString("id-ID") : "-";
+      document.getElementById("bugModalError").textContent = log.details?.lastError || "Tidak ada error JS tercatat";
+      document.getElementById("bugModalRaw").textContent = JSON.stringify(log.details || log, null, 2);
+      const overlay = document.getElementById("bugModalOverlay");
+      if (overlay) overlay.style.display = "flex";
     }
+
+    function closeBugModal() {
+      const overlay = document.getElementById("bugModalOverlay");
+      if (overlay) overlay.style.display = "none";
+      currentOpenBug = null;
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeBugModal();
+    });
 
     function escapeHtml(str) {
       if (!str) return '';
