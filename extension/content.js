@@ -1439,74 +1439,115 @@
       return { success: true, message: `Menekan kombinasi keyboard "${comboStr}" berhasil.`, stateChanged: true };
     }
 
+    // ── Dedicated Google Docs Typing & Clipboard Injection Handler ──
+    async function handleGoogleDocsTyping(text) {
+      const cleanText = String(text || "").trim();
+      if (!cleanText) {
+        return { success: false, error: "Teks pengetikan kosong.", errorType: "TOOL_INVALID_ARGUMENT" };
+      }
+
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+
+      // 1. Focus target iframe / editor Google Docs
+      const iframe = document.querySelector(".docs-texteventtarget-iframe") ||
+                     document.querySelector("iframe[class*='texteventtarget']");
+
+      let targetElement = document.activeElement;
+
+      if (iframe) {
+        try {
+          iframe.focus?.();
+          const iDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (iDoc) {
+            const inputEl = iDoc.querySelector("textarea, [contenteditable='true']") || iDoc.body;
+            if (inputEl) {
+              inputEl.focus?.();
+              targetElement = inputEl;
+            }
+          }
+        } catch (e) {
+          iframe.focus?.();
+          targetElement = iframe;
+        }
+      } else {
+        const appView = document.querySelector(".kix-appview-editor") ||
+                        document.querySelector(".docs-editor") ||
+                        document.querySelector("[role='textbox']") ||
+                        document.body;
+        if (appView) {
+          appView.focus?.();
+          targetElement = appView;
+        }
+      }
+
+      let writeSuccess = false;
+
+      // 2. Clipboard API + Paste Event Simulation (Ctrl+V / Cmd+V)
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(cleanText);
+        }
+
+        const pasteEvent = new KeyboardEvent("keydown", {
+          key: "v",
+          code: "KeyV",
+          keyCode: 86,
+          which: 86,
+          ctrlKey: !isMac,
+          metaKey: isMac,
+          bubbles: true,
+          cancelable: true
+        });
+
+        (targetElement || document).dispatchEvent(pasteEvent);
+
+        const dt = new DataTransfer();
+        dt.setData("text/plain", cleanText);
+        const pasteClipboardEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+        (targetElement || document).dispatchEvent(pasteClipboardEv);
+
+        try {
+          document.execCommand("paste");
+        } catch (_) {}
+
+        writeSuccess = true;
+      } catch (clipboardErr) {
+        console.warn("[Pesat Docs] Clipboard paste simulation:", clipboardErr);
+      }
+
+      // 3. Fallback beforeinput & insertText
+      try {
+        const beforeInput = new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          inputType: "insertText",
+          data: cleanText
+        });
+        (targetElement || document).dispatchEvent(beforeInput);
+        document.execCommand("insertText", false, cleanText);
+        writeSuccess = true;
+      } catch (_) {}
+
+      showReadingHUD(`✓ Teks berhasil ditulis ke Google Docs (${cleanText.length} karakter)`, true);
+      await new Promise((r) => setTimeout(r, 400));
+      return {
+        success: true,
+        message: `Berhasil menulis ${cleanText.length} karakter ke lembar kerja Google Docs.`,
+        stateChanged: true
+      };
+    }
+
     // ── paste_text: insert teks pada posisi kursor (Google Docs, Canvas, & Rich Editor friendly) ──
     if (action === "paste_text") {
       const text = String(value ?? actionData.text ?? "");
       if (!text) return { success: false, error: "Teks kosong untuk paste_text.", errorType: "TOOL_INVALID_ARGUMENT" };
 
-      const { plain: cleanPlain, html: cleanHtml } = convertMarkdownToRichDoc(text);
-
-      // 1. Penanganan Khusus Google Docs / Google Drive Editor
       const isGoogleDocs = window.location.hostname.includes("docs.google.com");
       if (isGoogleDocs) {
-        let docsInserted = false;
-        try {
-          // Cari iframe text event target Google Docs
-          const docIframe = document.querySelector(".docs-texteventtarget-iframe") ||
-            document.querySelector("iframe[class*='texteventtarget']");
-          if (docIframe) {
-            const iDoc = docIframe.contentDocument || docIframe.contentWindow?.document;
-            if (iDoc) {
-              const inputTarget = iDoc.querySelector("textarea, [contenteditable='true']") || iDoc.body;
-              if (inputTarget) {
-                inputTarget.focus?.();
-                const dt = new DataTransfer();
-                dt.setData("text/plain", cleanPlain);
-                dt.setData("text/html", cleanHtml);
-                const pasteEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
-                inputTarget.dispatchEvent(pasteEv);
-
-                try {
-                  const beforeInput = new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: cleanPlain });
-                  inputTarget.dispatchEvent(beforeInput);
-                } catch (e) {}
-
-                try {
-                  iDoc.execCommand("insertText", false, cleanPlain);
-                } catch (e) {}
-                docsInserted = true;
-              }
-            }
-          }
-
-          // Juga coba tempel pada editor canvas / appview
-          const appView = document.querySelector(".kix-appview-editor") || document.querySelector(".docs-editor") || document.body;
-          if (appView) {
-            appView.focus?.();
-            const dt2 = new DataTransfer();
-            dt2.setData("text/plain", cleanPlain);
-            dt2.setData("text/html", cleanHtml);
-            const pasteEv2 = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt2 });
-            appView.dispatchEvent(pasteEv2);
-            document.dispatchEvent(pasteEv2);
-          }
-        } catch (e) {
-          console.warn("[Pesat] Google Docs injection warning:", e);
-        }
-
-        // Salin ke clipboard sistem agar pengguna dapat menggunakan Ctrl+V bila diperlukan
-        try {
-          navigator.clipboard?.writeText?.(cleanPlain);
-        } catch (e) {}
-
-        showReadingHUD(`✓ Teks disisipkan ke Google Dokumen (${cleanPlain.length} karakter)`, true);
-        await new Promise((r) => setTimeout(r, 300));
-        return {
-          success: true,
-          message: `Berhasil menempelkan copywriting (${cleanPlain.length} karakter) ke Google Dokumen.`,
-          stateChanged: true
-        };
+        return await handleGoogleDocsTyping(text);
       }
+
+      const { plain: cleanPlain, html: cleanHtml } = convertMarkdownToRichDoc(text);
 
       // 2. Penanganan Standar Form & ContentEditable
       let target = null;
@@ -1803,8 +1844,15 @@
       }
 
       if (action === "type" || action === "type_text" || action === "fill") {
-        targetEl.focus();
         const textToFill = actionData.text !== undefined ? actionData.text : (value || "");
+
+        // Khusus Google Docs: alihkan ke dedicated Google Docs Typing Handler
+        if (window.location.hostname.includes("docs.google.com")) {
+          restoreOutline();
+          return await handleGoogleDocsTyping(textToFill);
+        }
+
+        targetEl.focus();
         setNativeInputValue(targetEl, textToFill);
 
         // Deteksi jika elemen adalah input penerima email (Gmail / webmail)

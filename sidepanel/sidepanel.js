@@ -2535,13 +2535,13 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
 
     // Auto-wait setelah aksi penting
     if (result.success && (actionType === "navigate" || actionType === "click" || isBatch)) {
-      const waitMs = actionType === "navigate" ? 3500 : 1200;
+      const waitMs = actionType === "navigate" ? 2000 : 600;
       showStatusIndicator();
-      await new Promise(r2 => setTimeout(r2, actionType === "navigate" ? 1500 : 300));
+      await new Promise(r2 => setTimeout(r2, actionType === "navigate" ? 800 : 150));
       await sendToContentScript({
         type: "WAIT_FOR_DOM_STABLE",
         maxWaitMs: waitMs,
-        stableWindowMs: actionType === "navigate" ? 700 : 500
+        stableWindowMs: actionType === "navigate" ? 400 : 250
       });
     }
 
@@ -2553,18 +2553,29 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
   // ═══════════════════════════════════════════════════
   async function runValidator(lastAction, lastResult, pageAfter) {
     const sub = currentSubtaskObj();
+    const safeActionType = lastAction?.actionType || lastAction?.action || lastAction?.type || "unknown";
+
+    // Jika eksekusi aksi gagal, validator langsung kembalikan RETRY tanpa meloloskan ke DONE
+    if (lastResult !== "success") {
+      return {
+        verdict: "RETRY",
+        subtaskComplete: false,
+        reason: `Aksi '${safeActionType}' mengalami kegagalan eksekusi: ${lastAction?.message || "Error interaksi DOM"}`
+      };
+    }
+
     const prompt = `
 [AKSI TERAKHIR]
-Subtask aktif: ${sub ? `#${sub.id} — ${sub.description}` : "(tidik ada)"}
-Aksi: ${lastAction.actionType}
-Hasil: ${lastResult === "success" ? "BERHASIL" : "GAGAL"} — ${lastAction.message || ""}
+Subtask aktif: ${sub ? `#${sub.id} — ${sub.description}` : "(tidak ada)"}
+Aksi: ${safeActionType}
+Hasil: BERHASIL — ${lastAction?.message || ""}
 
 [KONDISI HALAMAN SEKARANG]
-Judul: ${pageAfter.title}
-URL: ${pageAfter.url}
-Elemen interaktif: ${pageAfter.elementsCount}
+Judul: ${pageAfter?.title || ""}
+URL: ${pageAfter?.url || ""}
+Elemen interaktif: ${pageAfter?.elementsCount || 0}
 Ringkasan elemen (8 baris pertama):
-${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
+${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
 `.trim();
 
     try {
@@ -2580,7 +2591,7 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     } catch (err) {
       appendLog(`Validator error: ${err.message}`, "WARN");
     }
-    return { verdict: "CONTINUE", subtaskComplete: false, reason: "Validator tidak merespon — lanjut default." };
+    return { verdict: "CONTINUE", subtaskComplete: false, reason: "Validator tidak merespon — lanjut ke langkah berikutnya." };
   }
 
   // ═══════════════════════════════════════════════════
@@ -2621,11 +2632,15 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
 
     // Deteksi cerdas antara Perintah Aksi Fisik di Web vs Pembuatan Konten/Artikel/Analisis Langsung
     const isEmailAction = /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt);
-    const isContentOrWriting = !isEmailAction && /(?:buatkan artikel|tulis artikel|buat artikel|artikel edukasi|buatkan draf artikel|buat draf artikel|surat penawaran|rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt);
+    const isContentOrWriting = !isEmailAction && (
+      /(?:buatkan|tuliskan|tulis|buat|draft|ketik|isi|generate)\s+(?:(?:\d+\s+)?(?:paragraf|kalimat|artikel|surat|konten|esai|tulisan|laporan|draf|copywriting|catatan)|tentang|mengenai)/i.test(userPrompt) ||
+      /(?:buatkan artikel|tulis artikel|buat artikel|artikel edukasi|buatkan draf artikel|buat draf artikel|surat penawaran|rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt) ||
+      /(?:tulis|ketik|isi|buat).*di\s+(?:google\s+docs|docs|dokumen|lembar\s+kerja)/i.test(userPrompt)
+    );
 
     const hasPhysicalActionVerb = isEmailAction || (!isContentOrWriting && (
-      /(?:^(?:buka|kunjungi|open|go to|navigate to|kirim|send|isi|klik|click|select|pilih|hapus|delete|upload|download|login|masuk|daftar|register|pesan|checkout|scroll|jalankan|posting|post)\b)/i.test(userPrompt) ||
-      /(?:(?:dan|lalu|kemudian)\s+(?:buka|kirim|isi|klik|pilih|posting|post))/i.test(userPrompt) ||
+      /(?:^(?:buka|kunjungi|open|go to|navigate to|kirim|send|klik|click|select|pilih|hapus|delete|upload|download|login|masuk|daftar|register|pesan|checkout|scroll|jalankan|posting|post)\b)/i.test(userPrompt) ||
+      /(?:(?:dan|lalu|kemudian)\s+(?:buka|kirim|klik|pilih|posting|post))/i.test(userPrompt) ||
       /(?:buka tab|buka x\.com|buka twitter|buka gmail|buka linkedin|posting ke|post ke|tweet ke)/i.test(userPrompt)
     ));
 
@@ -2665,7 +2680,7 @@ ${(pageAfter.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
       const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
       const isSocialThread = /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed)/i.test(userPrompt);
       const isProductResearch = /(?:riset produk|laptop|harga|rekomendasi produk|komparasi|spesifikasi|cari produk|tokopedia|shopee|produk)/i.test(userPrompt);
-      const isArticle = !isSocialThread && !isProductResearch && /(?:artikel|tulis artikel|buatkan artikel|blog post|esai|tulisan ilmiah|tulisan edukasi)/i.test(userPrompt);
+      const isArticle = !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt);
 
       let promptPayload = "";
       if (isProductResearch) {
@@ -2928,7 +2943,8 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
       }
 
       // 2. Cek tab aktif saat ini & tentukan apakah perlu switch tab
-      const isCopywritingTask = /(copywriting|buatkan\s+(tulisan|artikel|konten|copy|penawaran)|tulis\s+(copywriting|artikel|surat|penawaran|email)|draft\s+|buat\s+(artikel|surat|email|copy))/i.test(goal);
+      const isCopywritingTask = /(copywriting|buatkan\s+(tulisan|artikel|konten|copy|penawaran|paragraf)|tulis\s+(copywriting|artikel|surat|penawaran|email|paragraf)|draft\s+|buat\s+(artikel|surat|email|copy|paragraf))/i.test(goal) ||
+                                /(?:tulis|ketik|buat|isi)\s+(?:\d+\s+)?paragraf/i.test(goal);
       let activeTabInfo = null;
       try {
         const at = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -2947,7 +2963,29 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
       const targetOtherSource = (contextSources || []).find(s => s.type === "BrowserTab" && s.metadata?.tabId);
 
       if (isCopywritingTask && isEditorTab(activeTabInfo)) {
-        appendLog(`📝 Tab editor dokumen (${activeTabInfo.title}) sudah aktif. Referensi konten dibaca langsung di latar belakang.`);
+        appendLog(`📝 Tab editor dokumen (${activeTabInfo.title}) aktif. Menyusun draf dan menulis langsung ke dokumen...`);
+        showStatusIndicator("Menyusun teks & menulis ke Google Docs...");
+        const aiText = await callLLM("chat", `Tolong tuliskan konten/teks berikut secara lengkap, mendalam, dan rapi sesuai instruksi:\n\n[PERINTAH]\n${goal}\n\n[KONTEKS DOKUMEN]\nJudul: ${activeTabInfo.title || ""}\nURL: ${activeTabInfo.url || ""}`);
+        if (aiText) {
+          await sendToContentScript({
+            type: "EXECUTE_ACTION",
+            actionData: {
+              action: "paste_text",
+              value: aiText
+            }
+          });
+          const artifact = {
+            artifactType: "doc",
+            name: `Draf-${(goal || "Dokumen").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`,
+            content: aiText
+          };
+          addMessageToCurrentSession("assistant", `### 📝 Teks Berhasil Dituliskan ke Dokumen\n\n${aiText}`, {
+            skipClean: true,
+            artifact
+          });
+          await finalizeTask("done", "✅ Teks berhasil dituliskan langsung ke lembar kerja dokumen.");
+          return;
+        }
       } else if (targetEditorSource && targetEditorSource.metadata?.tabId) {
         showStatusIndicator();
         appendLog(`🔄 Berpindah ke tab editor: ${targetEditorSource.name} (tabId: ${targetEditorSource.metadata.tabId})`);
@@ -3420,32 +3458,35 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
 
       // 5. Eksekusi aksi
       showStatusIndicator();
-      appendLog(`▶ [Step ${stepNum}] ${(Array.isArray(resObj.actions) ? `batch(${resObj.actions.length})` : resObj.action)} ${resObj.elementId ? `[${resObj.elementId}]` : ""} ${resObj.url ? resObj.url : ""}`);
+      const currentActionType = resObj?.action || resObj?.type || (Array.isArray(resObj?.actions) ? "batch" : "unknown");
+      appendLog(`▶ [Step ${stepNum}] ${(Array.isArray(resObj.actions) ? `batch(${resObj.actions.length})` : currentActionType)} ${resObj.elementId ? `[${resObj.elementId}]` : ""} ${resObj.url ? resObj.url : ""}`);
 
       let exec;
       try {
         exec = await executeAgentAction(resObj);
       } catch (err) {
-        exec = { success: false, actionType: resObj.action, message: err.message };
+        exec = { success: false, actionType: currentActionType, message: err.message };
       }
+
+      const execActionType = exec?.actionType || currentActionType;
 
       // 6. Catat scratchpad
       activeTask.scratchpad.push({
         step: stepNum,
         subtask: sub.id,
-        observation: `${exec.actionType}: ${exec.message || (exec.success ? "OK" : "gagal")}`.substring(0, 300),
-        action: exec.actionType,
+        observation: `${execActionType}: ${exec.message || (exec.success ? "OK" : "gagal")}`.substring(0, 300),
+        action: execActionType,
         result: exec.success ? "success" : "failed"
       });
       await persistTask();
 
       // 7. Kartu Navigator + bukti visual
       let thumbDataUrl = null;
-      if (exec.success && ["navigate", "click", "batch"].includes(exec.actionType) && visionEnabled) {
+      if (exec.success && ["navigate", "click", "batch"].includes(execActionType) && visionEnabled) {
         thumbDataUrl = await captureScreenshot();
         if (thumbDataUrl) activeTask._pendingScreenshot = thumbDataUrl;
       }
-      if (exec.actionType === "screenshot" && exec.screenshotDataUrl) {
+      if (execActionType === "screenshot" && exec.screenshotDataUrl) {
         thumbDataUrl = exec.screenshotDataUrl;
         activeTask._pendingScreenshot = exec.screenshotDataUrl;
       }
@@ -3455,9 +3496,9 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
         multiAgent: {
           planner: resObj.planner ? resObj.planner : null,
           navigator: {
-            action: exec.actionType,
+            action: execActionType,
             elementId: resObj.elementId || (Array.isArray(resObj.actions) ? resObj.actions.map(a => a.elementId).join(",") : ""),
-            description: resObj.message || exec.message || `Mengeksekusi ${exec.actionType}`,
+            description: resObj.message || exec.message || `Mengeksekusi ${execActionType}`,
             status: exec.success ? "Selesai" : "Gagal",
             screenshot: thumbDataUrl
           },
@@ -3465,14 +3506,14 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
         }
       });
 
-      if (exec.actionType === "navigate" && exec.success) {
+      if (execActionType === "navigate" && exec.success) {
         lastNavigationWasRecent = true;
       }
 
       // 8. Finish langsung
       if (exec.isFinished) {
         // Aksi end-to-end khusus seperti post_social atau send_email langsung menyelesaikan seluruh alur tugas
-        const isEndToEndAction = ["post_social", "post_twitter", "post_x", "send_email", "compose_email"].includes(exec.actionType || actionType);
+        const isEndToEndAction = ["post_social", "post_twitter", "post_x", "send_email", "compose_email"].includes(execActionType);
         if (isEndToEndAction) {
           (activeTask.plan || []).forEach(p => { p.status = "done"; });
           refreshTaskCard();
@@ -3501,7 +3542,7 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
 
       // ── Stuck Detection (§ 33 PRD) ──
       const currentPageHash = `${pageData.url}|${pageData.title}|${pageData.elementsCount}`;
-      if (!exec.stateChanged && activeTask.lastPageHash === currentPageHash && actionType !== "type_text" && actionType !== "type" && actionType !== "press_key") {
+      if (!exec.stateChanged && activeTask.lastPageHash === currentPageHash && execActionType !== "type_text" && execActionType !== "type" && execActionType !== "press_key") {
         activeTask.stuckCounter = (activeTask.stuckCounter || 0) + 1;
         if (activeTask.stuckCounter >= 5) {
           appendLog("🛑 STUCK DETECTED: Halaman tidak berubah setelah 5 aksi berturut-turut. Mencoba strategi baru.", "WARN");
@@ -3526,7 +3567,7 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
         }
 
         if (activeTask.retries[retryKey] >= CFG.MAX_RETRIES_PER_SUBTASK) {
-          await tryReplanOrFail(sub, `Subtask #${sub.id} gagal ${activeTask.retries[retryKey]}x berturut-turut.`);
+          await tryReplanOrFail(sub, `Subtask #${sub.id} gagal: ${exec.message || 'Eksekusi DOM tidak berhasil'}`);
           continue;
         }
         appendLog(`⚠️ Step ${stepNum} gagal (${activeTask.retries[retryKey]}/${CFG.MAX_RETRIES_PER_SUBTASK}): ${exec.message || ""}`, "WARN");
@@ -3546,7 +3587,7 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
         const lastMsg = session.messages[session.messages.length - 1];
         if (lastMsg.multiAgent) {
           lastMsg.multiAgent.validator = {
-            success: verdict.verdict !== "REPLAN" && verdict.verdict !== "ASK_USER",
+            success: verdict.verdict !== "REPLAN" && verdict.verdict !== "ASK_USER" && verdict.verdict !== "RETRY",
             message: `${verdict.verdict}: ${verdict.reason}`
           };
           updateMessageInSession(session.messages.length - 1, { multiAgent: lastMsg.multiAgent });
@@ -3555,11 +3596,12 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
 
       appendLog(`🎯 Validator: ${verdict.verdict} — ${verdict.reason}`);
 
-      // Evaluasi penyelesaian Subtask (Transisi State yang Deterministik)
-      const isSubDone = verdict.subtaskComplete ||
-                        verdict.verdict === "DONE" ||
-                        verdict.verdict === "SUCCESS" ||
-                        (exec.success && verdict.verdict !== "RETRY" && verdict.verdict !== "REPLAN");
+      // Evaluasi penyelesaian Subtask (Transisi State yang Deterministik & Anti False-Positive)
+      const isSubDone = exec.success && (
+        verdict.subtaskComplete ||
+        verdict.verdict === "DONE" ||
+        verdict.verdict === "SUCCESS"
+      );
 
       if (isSubDone) {
         markSubtask(sub.id, "done");
@@ -3574,7 +3616,7 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
         }
       }
 
-      if (verdict.verdict === "DONE") {
+      if (verdict.verdict === "DONE" && exec.success) {
         await finalizeTask("done", "✅ Validator menilai seluruh tujuan pengguna telah tercapai.");
         return;
       }
