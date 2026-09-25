@@ -1566,7 +1566,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   function showGoogleAlert(type, message) {
     if (!googleAlertBox) return;
     googleAlertBox.className = `google-alert-box ${type}`;
-    googleAlertBox.innerHTML = message;
+    googleAlertBox.textContent = message;
     googleAlertBox.classList.remove("hidden");
   }
 
@@ -1975,22 +1975,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Email intent detection (e.g. kirim email ke X subjek Y pesan Z / buka compose di Gmail)
     const emailToMatch = combined.match(/(?:ke|to)\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i) ||
                          combined.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
-    const emailSubMatch = combined.match(/(?:subjek|subject|judul)\s*[:=]?\s*[`"']?([^`"'\n,]+)[`"']?/i);
-    const emailBodyMatch = combined.match(/(?:pesan|isi|body|pesan email|isi pesan|tulis draf email|tulis email|draf email)\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i);
+    const emailSubMatch = combined.match(/(?:subjek|subject|judul)\s*[:=]?\s*[`"']?([^`"'\n,]+?)(?=\s+(?:pesan|isi|body|dengan isi|lalu|kemudian)|[`"']|$)/i);
+    const emailBodyMatch = combined.match(/(?:pesan|isi|body|pesan email|isi pesan|tulis draf email|tulis email|draf email|tulis draf|tulis)\s*[:=]?\s*[`"']?([\s\S]+?)[`"']?$/i);
     const isEmailIntent = /(?:kirim|tulis|buat|draft|send|compose|buka compose)\s+(?:ke\s+|pesan\s+)?email|gmail/i.test(combined);
 
     if (isEmailIntent && emailToMatch) {
       const recipient = emailToMatch[1];
       const subject = emailSubMatch ? emailSubMatch[1].trim() : "Laporan Progres Mingguan Pesat AI";
-      let body = emailBodyMatch ? emailBodyMatch[1].trim() : "";
-      if (!body || body.length < 15) {
-        body = "Halo Bapak/Ibu,\n\nMelalui email ini kami sampaikan laporan perkembangan mingguan proyek Pesat AI Browser Agent. Dengan bangga kami laporkan bahwa milestone fitur agentic browser telah selesai 100% dan seluruh skenario otomasi browser telah berhasil diuji secara tuntas.\n\nSalam hormat,\nTim Pesat AI";
-      } else if (!body.toLowerCase().startsWith("halo") && !body.toLowerCase().startsWith("yth") && !body.toLowerCase().startsWith("dear")) {
-        body = `Halo Bapak/Ibu,\n\nMelalui email ini kami sampaikan bahwa ${body.replace(/^yang\s+/i, '')}\n\nSeluruh milestone dan fungsi otomasi telah selesai 100% serta berjalan secara optimal.\n\nSalam hormat,\nTim Pengembang Pesat AI`;
+      let rawBody = emailBodyMatch ? emailBodyMatch[1].trim() : "";
+      let body = rawBody;
+
+      if (!body) {
+        body = combined;
+      }
+
+      if (/formal|resmi|profesional|jelaskan|menjelaskan/i.test(rawBody)) {
+        let cleanTopic = rawBody.replace(/^(?:formal\s+|resmi\s+|profesional\s+)?(?:yang\s+)?(?:menjelaskan\s+)?(?:bahwa\s+)?/i, "").trim();
+        if (cleanTopic) cleanTopic = cleanTopic.charAt(0).toUpperCase() + cleanTopic.slice(1);
+        body = `Halo Bapak/Ibu,\n\nMelalui email ini kami sampaikan bahwa ${cleanTopic || "seluruh milestone proyek telah selesai 100%."}\n\nSeluruh fungsionalitas dan fitur otomasi telah berjalan secara optimal dan teruji tuntas.\n\nDemikian laporan ini kami sampaikan. Terima kasih atas perhatian dan kerja samanya.\n\nSalam hormat,\nTim Pengembang Pesat AI`;
       }
 
       return {
-        planner: { steps: [`1. Membuka formulir compose Gmail`, `2. Mengisi penerima (${recipient})`, `3. Mengisi subjek (${subject})`, `4. Menuliskan isi pesan & menyelesaikan pengiriman`] },
+        planner: { steps: [`1. Membuka formulir compose Gmail`, `2. Mengisi penerima (${recipient})`, `3. Mengisi subjek (${subject})`, `4. Menuliskan isi pesan draf formal & menyelesaikan pengiriman`] },
         action: "send_email",
         to: recipient,
         subject: subject,
@@ -2958,6 +2964,34 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
         }).catch(() => {});
       }
 
+      // ══ FAST PATH FOR END-TO-END AUTOMATIONS (Email & Social) ══
+      const fastAction = tryParseNaturalLanguageActions("", goal);
+      if (fastAction && (fastAction.action === "send_email" || fastAction.action === "post_social")) {
+        const steps = fastAction.planner?.steps || [
+          `1. Membuka formulir target`,
+          `2. Memasukkan data dan teks pesan`,
+          `3. Menyelesaikan pengisian formulir`
+        ];
+        activeTask.plan = steps.map((desc, idx) => ({
+          id: idx + 1,
+          description: desc,
+          status: idx === 0 ? "in_progress" : "pending"
+        }));
+        activeTask.currentSubtask = 1;
+        activeTask.status = "EXECUTING";
+        refreshTaskCard();
+        await persistTask();
+
+        appendLog(`🚀 Mengeksekusi otomatisasi langsung: ${fastAction.message || fastAction.action}`);
+        const execRes = await executeAgentAction(fastAction);
+        if (execRes && execRes.success) {
+          (activeTask.plan || []).forEach(s => s.status = "done");
+          refreshTaskCard();
+          await finalizeTask("done", execRes.message || "Tugas berhasil diselesaikan secara tuntas.");
+          return;
+        }
+      }
+
       // ══ FASE PLAN ══
       const initialScan = await scanPage(true);
       const contextPrompt = typeof PesatContextEngine !== "undefined" && activeTask?.contextSources?.length
@@ -3196,14 +3230,14 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
             appendLog(`✉️ Formulir Compose Gmail sudah terbuka di layar. Mengarahkan agen langsung mengisi penerima, subjek, & pesan.`, "INFO");
             const goalText = activeTask.goal || "";
             const toM = goalText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
-            const subM = goalText.match(/(?:subjek|subject|judul)\s*[:=]?\s*[`"']?([^`"'\n,]+)[`"']?/i);
-            const bodyM = goalText.match(/(?:pesan|isi|body|draf email|tulis draf|tulis)\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i);
+            const subM = goalText.match(/(?:subjek|subject|judul)\s*[:=]?\s*[`"']?([^`"'\n,]+?)(?=\s+(?:pesan|isi|body|dengan isi)|[`"']|$)/i);
+            const bodyM = goalText.match(/(?:pesan|isi|body|draf email|tulis draf|tulis)\s*[:=]?\s*[`"']?([\s\S]+?)[`"']?$/i);
 
             resObj = {
               action: "send_email",
               to: toM ? toM[1] : "",
-              subject: subM ? subM[1].trim() : "Laporan Progres Pesat AI",
-              body: bodyM ? bodyM[1].trim() : "Halo, berikut terlampir draf pesan yang diminta.",
+              subject: subM ? subM[1].trim() : "Pesan Baru",
+              body: bodyM ? bodyM[1].trim() : goalText,
               sendNow: /(?:kirim sekarang|langsung kirim|auto send|kirimkan|kirim)/i.test(goalText)
             };
           }

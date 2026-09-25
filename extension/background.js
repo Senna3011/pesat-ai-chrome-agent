@@ -33,6 +33,29 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log("[Pesat AI Agent] Background Service Worker installed successfully.");
 });
 
+// Safe Tab Message Dispatcher with Auto-Injection Fallback & SW lifecycle resilience
+async function sendTabMessageSafe(tabId, payload) {
+  if (!tabId) {
+    throw new Error("Tab ID tidak ditemukan.");
+  }
+  try {
+    return await chrome.tabs.sendMessage(tabId, payload);
+  } catch (err) {
+    try {
+      // Jika content script belum aktif / tertidur, inject ulang
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["content.js"]
+      });
+      // Delay singkat memastikan content script siap mendengarkan listener
+      await new Promise((r) => setTimeout(r, 120));
+      return await chrome.tabs.sendMessage(tabId, payload);
+    } catch (injectErr) {
+      throw new Error(`Komunikasi tab gagal (${tabId}): ${injectErr.message || err.message}`);
+    }
+  }
+}
+
 // Helper: Cek apakah prompt atau instruksi adalah perangkuman halaman
 function isSummarizePrompt(text = "") {
   const t = String(text).toLowerCase();
@@ -48,36 +71,18 @@ function isSummarizePrompt(text = "") {
 
 // Helper: Ambil teks artikel bersih (readable text) dari content.js pada tab aktif
 async function getReadableTextFromTab(tabId) {
-  return new Promise((resolve, reject) => {
-    chrome.tabs.sendMessage(tabId, { type: "GET_READABLE_TEXT" }, (response) => {
-      if (chrome.runtime.lastError) {
-        // Coba inject content.js jika belum dimuat
-        chrome.scripting
-          .executeScript({
-            target: { tabId },
-            files: ["content.js"]
-          })
-          .then(() => {
-            chrome.tabs.sendMessage(tabId, { type: "GET_READABLE_TEXT" }, (retryRes) => {
-              if (chrome.runtime.lastError) {
-                resolve({ success: false, text: "", error: chrome.runtime.lastError.message });
-              } else {
-                resolve(retryRes || { success: false, text: "" });
-              }
-            });
-          })
-          .catch((err) => resolve({ success: false, text: "", error: err.message }));
-      } else {
-        resolve(response || { success: false, text: "" });
-      }
-    });
-  });
+  try {
+    const res = await sendTabMessageSafe(tabId, { type: "GET_READABLE_TEXT" });
+    return res || { success: false, text: "" };
+  } catch (err) {
+    return { success: false, text: "", error: err.message };
+  }
 }
 
 // Helper: Kirim teks artikel ke Cloudflare Pages Function (chat.js)
 async function requestSummaryFromAI({ text, title, url, userPrompt, apiUrl, apiKey }) {
   const targetUrl = apiUrl || "https://pesat-ai-chrome-agent.senna-947.workers.dev/";
-  
+
   const promptPayload = `[TEKS UTAMA ARTIKEL / HALAMAN WEB]
 Judul: ${title || "Halaman Web"}
 URL: ${url || ""}
@@ -115,8 +120,21 @@ ${userPrompt || "Tolong buat ringkasan poin-poin penting (bullet points) dari is
 
 // Listener komunikasi pesan dari Side Panel atau Content Script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "PING") {
-    sendResponse({ status: "OK", message: "Background service worker active" });
+  if (request.action === "PING" || request.type === "PING") {
+    sendResponse({ status: "OK", message: "Background service worker active", timestamp: Date.now() });
+    return true;
+  }
+
+  // Safe Action executor
+  if (request.type === "EXECUTE_SAFE_ACTION") {
+    (async () => {
+      try {
+        const res = await sendTabMessageSafe(request.tabId, request.payload);
+        sendResponse({ success: true, data: res });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
     return true;
   }
 
@@ -342,7 +360,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  // Meneruskan perintah dari Side Panel ke Content Script di Tab Aktif dengan Anti-Looping Protection
+  // Meneruskan perintah dari Side Panel ke Content Script di Tab Aktif dengan Anti-Looping Protection & Safe Sender
   if (request.action === "EXECUTE_IN_CONTENT") {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       if (!tabs || tabs.length === 0 || !tabs[0].id) {
@@ -454,31 +472,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         bgLog("ACTION", "EXEC_ACTION", `Mengeksekusi aksi: ${actionName}`, actData, activeTabId);
       }
 
-      // 3. Kirim pesan ke tab aktif
-      const sendMessageToTab = () => {
-        chrome.tabs.sendMessage(activeTabId, request.payload, (response) => {
-          if (chrome.runtime.lastError) {
-            chrome.scripting.executeScript({
-              target: { tabId: activeTabId },
-              files: ["content.js"]
-            }).then(() => {
-              chrome.tabs.sendMessage(activeTabId, request.payload, (retryRes) => {
-                if (chrome.runtime.lastError) {
-                  sendResponse({ success: false, error: chrome.runtime.lastError.message });
-                } else {
-                  sendResponse({ success: true, data: retryRes });
-                }
-              });
-            }).catch((err) => {
-              sendResponse({ success: false, error: err.message });
-            });
-          } else {
-            sendResponse({ success: true, data: response });
-          }
-        });
-      };
-
-      sendMessageToTab();
+      // 3. Kirim pesan ke tab aktif menggunakan sendTabMessageSafe
+      try {
+        const response = await sendTabMessageSafe(activeTabId, request.payload);
+        sendResponse({ success: true, data: response });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
     });
 
     return true; // Asynchronous sendResponse

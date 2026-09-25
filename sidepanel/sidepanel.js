@@ -1566,7 +1566,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   function showGoogleAlert(type, message) {
     if (!googleAlertBox) return;
     googleAlertBox.className = `google-alert-box ${type}`;
-    googleAlertBox.innerHTML = message;
+    googleAlertBox.textContent = message;
     googleAlertBox.classList.remove("hidden");
   }
 

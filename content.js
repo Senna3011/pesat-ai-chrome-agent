@@ -186,13 +186,46 @@
   }
 
   // ─────────────────────────────────────────────────────
-  // SMOOTH VISUAL PERCEPTION STYLES & HUD (Realtime Observable Reading)
+  // SHADOW DOM ISOLATED HOST & STYLES (Zero CSS Collision)
   // ─────────────────────────────────────────────────────
-  function ensurePesatStyles() {
-    if (document.getElementById("pesat-reading-visual-styles")) return;
+  let pesatHostElement = null;
+  let pesatShadowRoot = null;
+
+  function getOrCreatePesatShadowRoot() {
+    if (pesatShadowRoot && pesatHostElement && (document.documentElement.contains(pesatHostElement) || document.body?.contains(pesatHostElement))) {
+      return pesatShadowRoot;
+    }
+
+    if (pesatHostElement) {
+      try { pesatHostElement.remove(); } catch (_) {}
+    }
+
+    pesatHostElement = document.createElement("pesat-ai-agent-host");
+    pesatHostElement.id = "pesat-ai-agent-host-root";
+    pesatHostElement.style.cssText = `
+      all: initial !important;
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 0 !important;
+      z-index: 2147483647 !important;
+      pointer-events: none !important;
+    `;
+
+    pesatShadowRoot = pesatHostElement.attachShadow({ mode: "open" });
+    ensurePesatStylesInShadow(pesatShadowRoot);
+
+    (document.documentElement || document.body).appendChild(pesatHostElement);
+    return pesatShadowRoot;
+  }
+
+  function ensurePesatStylesInShadow(root) {
+    if (!root || root.querySelector("#pesat-reading-visual-styles")) return;
     const style = document.createElement("style");
     style.id = "pesat-reading-visual-styles";
     style.textContent = `
+      * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
       @keyframes pesatSweepLaser {
         0% { top: 0; opacity: 0; }
         12% { opacity: 1; }
@@ -238,12 +271,12 @@
         100% { transform: scale(1.015); }
       }
     `;
-    (document.head || document.documentElement).appendChild(style);
+    root.appendChild(style);
   }
 
   function triggerScanningBeam() {
-    ensurePesatStyles();
-    const existing = document.getElementById("pesat-scanning-beam");
+    const root = getOrCreatePesatShadowRoot();
+    const existing = root.querySelector("#pesat-scanning-beam");
     if (existing) existing.remove();
 
     const beam = document.createElement("div");
@@ -260,18 +293,18 @@
       z-index: 2147483647;
       animation: pesatSweepLaser 0.9s cubic-bezier(0.25, 1, 0.5, 1) forwards;
     `;
-    document.documentElement.appendChild(beam);
+    root.appendChild(beam);
     setTimeout(() => { if (beam.parentNode) beam.remove(); }, 1000);
   }
 
   let pesatHudTimer = null;
   function showReadingHUD(text, isComplete = false) {
-    ensurePesatStyles();
-    let hud = document.getElementById("pesat-reading-hud");
+    const root = getOrCreatePesatShadowRoot();
+    let hud = root.querySelector("#pesat-reading-hud");
     if (!hud) {
       hud = document.createElement("div");
       hud.id = "pesat-reading-hud";
-      document.documentElement.appendChild(hud);
+      root.appendChild(hud);
     }
     if (pesatHudTimer) clearTimeout(pesatHudTimer);
 
@@ -300,10 +333,16 @@
     `;
 
     const dotColor = isComplete ? "#10b981" : "#38bdf8";
-    hud.innerHTML = `
-      <span style="width: 7px; height: 7px; border-radius: 50%; background: ${dotColor}; box-shadow: 0 0 8px ${dotColor}; animation: pesatRadarPulse 1.2s infinite; flex-shrink: 0;"></span>
-      <span>${text}</span>
-    `;
+    hud.replaceChildren();
+
+    const dot = document.createElement("span");
+    dot.style.cssText = `width: 7px; height: 7px; border-radius: 50%; background: ${dotColor}; box-shadow: 0 0 8px ${dotColor}; animation: pesatRadarPulse 1.2s infinite; flex-shrink: 0;`;
+
+    const textSpan = document.createElement("span");
+    textSpan.textContent = text;
+
+    hud.appendChild(dot);
+    hud.appendChild(textSpan);
 
     if (isComplete) {
       pesatHudTimer = setTimeout(() => {
@@ -320,8 +359,8 @@
   // VISUAL MARKERS (OVERLAY + LEGEND)
   // ─────────────────────────────────────────────────────
   function renderFloatingLegend() {
-    ensurePesatStyles();
-    const existing = document.getElementById("pesat-markers-legend");
+    const root = getOrCreatePesatShadowRoot();
+    const existing = root.querySelector("#pesat-markers-legend");
     if (existing) existing.remove();
 
     const legend = document.createElement("div");
@@ -345,47 +384,66 @@
       animation: pesatLegendEntrance 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     `;
 
-    legend.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <span style="font-size:12px; font-weight:700; color:#38bdf8; display:flex; align-items:center; gap:5px;">
-          ⚡ Petunjuk Marker AI (#ID)
-        </span>
-        <button id="pesat-btn-close-legend" style="background:none; border:none; color:#94a3b8; font-size:14px; cursor:pointer; padding:0 4px;" title="Tutup">✕</button>
-      </div>
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:11px; color:#cbd5e1;">
-        <div style="display:flex; align-items:center; gap:5px;">
-          <span style="width:10px; height:10px; border-radius:2px; background:#1d4ed8; display:inline-block;"></span>
-          <span>📝 Input / Form</span>
-        </div>
-        <div style="display:flex; align-items:center; gap:5px;">
-          <span style="width:10px; height:10px; border-radius:2px; background:#b91c1c; display:inline-block;"></span>
-          <span>🔘 Tombol</span>
-        </div>
-        <div style="display:flex; align-items:center; gap:5px;">
-          <span style="width:10px; height:10px; border-radius:2px; background:#047857; display:inline-block;"></span>
-          <span>🔗 Menu / Link</span>
-        </div>
-        <div style="display:flex; align-items:center; gap:5px;">
-          <span style="width:10px; height:10px; border-radius:2px; background:#b45309; display:inline-block;"></span>
-          <span>📋 Dropdown</span>
-        </div>
-      </div>
-      <div style="font-size:10px; color:#94a3b8; margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:6px; line-height:1.3;">
-        💡 Nomor (#1, #2...) adalah ID tombol/input yang sedang dibaca dan dikontrol AI.
-      </div>
-    `;
+    const header = document.createElement("div");
+    header.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;";
 
-    document.body.appendChild(legend);
+    const titleSpan = document.createElement("span");
+    titleSpan.style.cssText = "font-size:12px; font-weight:700; color:#38bdf8; display:flex; align-items:center; gap:5px;";
+    titleSpan.textContent = "⚡ Petunjuk Marker AI (#ID)";
 
-    document.getElementById("pesat-btn-close-legend")?.addEventListener("click", () => {
+    const closeBtn = document.createElement("button");
+    closeBtn.id = "pesat-btn-close-legend";
+    closeBtn.style.cssText = "background:none; border:none; color:#94a3b8; font-size:14px; cursor:pointer; padding:0 4px;";
+    closeBtn.title = "Tutup";
+    closeBtn.textContent = "✕";
+    closeBtn.addEventListener("click", () => {
       legend.style.transition = "opacity 0.2s ease, transform 0.2s ease";
       legend.style.opacity = "0";
       legend.style.transform = "translateY(8px)";
       setTimeout(() => legend.remove(), 220);
     });
+
+    header.appendChild(titleSpan);
+    header.appendChild(closeBtn);
+    legend.appendChild(header);
+
+    const grid = document.createElement("div");
+    grid.style.cssText = "display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:11px; color:#cbd5e1;";
+
+    const legendItems = [
+      { color: "#1d4ed8", text: "📝 Input / Form" },
+      { color: "#b91c1c", text: "🔘 Tombol" },
+      { color: "#047857", text: "🔗 Menu / Link" },
+      { color: "#b45309", text: "📋 Dropdown" }
+    ];
+
+    legendItems.forEach(item => {
+      const itemDiv = document.createElement("div");
+      itemDiv.style.cssText = "display:flex; align-items:center; gap:5px;";
+
+      const colorBox = document.createElement("span");
+      colorBox.style.cssText = `width:10px; height:10px; border-radius:2px; background:${item.color}; display:inline-block; flex-shrink:0;`;
+
+      const labelSpan = document.createElement("span");
+      labelSpan.textContent = item.text;
+
+      itemDiv.appendChild(colorBox);
+      itemDiv.appendChild(labelSpan);
+      grid.appendChild(itemDiv);
+    });
+
+    legend.appendChild(grid);
+
+    const footer = document.createElement("div");
+    footer.style.cssText = "font-size:10px; color:#94a3b8; margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:6px; line-height:1.3;";
+    footer.textContent = "💡 Nomor (#1, #2...) adalah ID tombol/input yang sedang dibaca dan dikontrol AI.";
+    legend.appendChild(footer);
+
+    root.appendChild(legend);
   }
 
   function clearVisualMarkers() {
+    const root = getOrCreatePesatShadowRoot();
     if (markersOverlay) {
       const mo = markersOverlay;
       markersOverlay = null;
@@ -393,14 +451,14 @@
       mo.style.opacity = "0";
       setTimeout(() => { if (mo.parentNode) mo.remove(); }, 260);
     }
-    const legend = document.getElementById("pesat-markers-legend");
+    const legend = root.querySelector("#pesat-markers-legend");
     if (legend) {
       legend.style.transition = "opacity 0.25s ease, transform 0.25s ease";
       legend.style.opacity = "0";
       legend.style.transform = "translateY(8px)";
       setTimeout(() => { if (legend.parentNode) legend.remove(); }, 260);
     }
-    const hud = document.getElementById("pesat-reading-hud");
+    const hud = root.querySelector("#pesat-reading-hud");
     if (hud) {
       hud.style.transition = "opacity 0.25s ease, transform 0.25s ease";
       hud.style.opacity = "0";
@@ -420,7 +478,11 @@
   let pageLockShield = null;
 
   function blockUserInteractionEvent(e) {
-    if (e.target && (e.target.id === "pesat-shield-unlock-btn" || e.target.closest("#pesat-shield-unlock-btn"))) {
+    const path = typeof e.composedPath === "function" ? e.composedPath() : [];
+    if (path.some(el => el && el.id === "pesat-shield-unlock-btn")) {
+      return;
+    }
+    if (e.target && (e.target.id === "pesat-shield-unlock-btn" || e.target.closest?.("#pesat-shield-unlock-btn"))) {
       return;
     }
     e.stopPropagation();
@@ -438,8 +500,8 @@
   ];
 
   function lockPageShield(message = "Tab ini sedang dikontrol oleh Pesat AI Agent... (Halaman dikunci agar AI fokus)") {
-    ensurePesatStyles();
-    const existing = document.getElementById("pesat-page-lock-shield");
+    const root = getOrCreatePesatShadowRoot();
+    const existing = root.querySelector("#pesat-page-lock-shield");
     if (existing) {
       const msgEl = existing.querySelector("#pesat-shield-msg");
       if (msgEl) msgEl.textContent = message;
@@ -471,35 +533,46 @@
       opacity: 1 !important;
     `;
 
-    pageLockShield.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 10px; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(99, 102, 241, 0.45); box-shadow: 0 12px 32px rgba(0,0,0,0.65), 0 0 16px rgba(99, 102, 241, 0.2); padding: 8px 16px; border-radius: 9999px; color: #f8fafc; font-size: 12px; font-weight: 500; pointer-events: auto; cursor: default; animation: pesatShieldPulse 1.8s infinite alternate;">
-        <span style="width: 8px; height: 8px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 8px #6366f1; flex-shrink: 0;"></span>
-        <span id="pesat-shield-msg" style="color: #f1f5f9;">${message}</span>
-        <button id="pesat-shield-unlock-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; margin-left: 4px; transition: background 0.15s;" title="Buka kunci halaman manual">Buka Kunci</button>
-      </div>
-    `;
+    const badgeContainer = document.createElement("div");
+    badgeContainer.style.cssText = "display: flex; align-items: center; gap: 10px; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(99, 102, 241, 0.45); box-shadow: 0 12px 32px rgba(0,0,0,0.65), 0 0 16px rgba(99, 102, 241, 0.2); padding: 8px 16px; border-radius: 9999px; color: #f8fafc; font-size: 12px; font-weight: 500; pointer-events: auto; cursor: default; animation: pesatShieldPulse 1.8s infinite alternate;";
 
-    (document.body || document.documentElement).appendChild(pageLockShield);
+    const dot = document.createElement("span");
+    dot.style.cssText = "width: 8px; height: 8px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 8px #6366f1; flex-shrink: 0;";
+
+    const msgSpan = document.createElement("span");
+    msgSpan.id = "pesat-shield-msg";
+    msgSpan.style.cssText = "color: #f1f5f9;";
+    msgSpan.textContent = message;
+
+    const unlockBtn = document.createElement("button");
+    unlockBtn.id = "pesat-shield-unlock-btn";
+    unlockBtn.style.cssText = "background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; margin-left: 4px; transition: background 0.15s;";
+    unlockBtn.title = "Buka kunci halaman manual";
+    unlockBtn.textContent = "Buka Kunci";
+
+    unlockBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      unlockPageShield();
+    });
+    unlockBtn.addEventListener("mouseenter", () => {
+      unlockBtn.style.background = "rgba(239, 68, 68, 0.3)";
+      unlockBtn.style.color = "#fff";
+    });
+    unlockBtn.addEventListener("mouseleave", () => {
+      unlockBtn.style.background = "rgba(255,255,255,0.1)";
+      unlockBtn.style.color = "#cbd5e1";
+    });
+
+    badgeContainer.appendChild(dot);
+    badgeContainer.appendChild(msgSpan);
+    badgeContainer.appendChild(unlockBtn);
+    pageLockShield.appendChild(badgeContainer);
+
+    root.appendChild(pageLockShield);
 
     BLOCK_EVENT_TYPES.forEach(type => {
       window.addEventListener(type, blockUserInteractionEvent, { capture: true, passive: false });
     });
-
-    const unlockBtn = pageLockShield.querySelector("#pesat-shield-unlock-btn");
-    if (unlockBtn) {
-      unlockBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        unlockPageShield();
-      });
-      unlockBtn.addEventListener("mouseenter", () => {
-        unlockBtn.style.background = "rgba(239, 68, 68, 0.3)";
-        unlockBtn.style.color = "#fff";
-      });
-      unlockBtn.addEventListener("mouseleave", () => {
-        unlockBtn.style.background = "rgba(255,255,255,0.1)";
-        unlockBtn.style.color = "#cbd5e1";
-      });
-    }
   }
 
   function unlockPageShield() {
@@ -507,7 +580,8 @@
       window.removeEventListener(type, blockUserInteractionEvent, { capture: true, passive: false });
     });
 
-    const shield = document.getElementById("pesat-page-lock-shield") || pageLockShield;
+    const root = getOrCreatePesatShadowRoot();
+    const shield = root.querySelector("#pesat-page-lock-shield") || pageLockShield;
     if (shield) {
       shield.style.opacity = "0";
       setTimeout(() => { if (shield.parentNode) shield.remove(); }, 200);
@@ -574,6 +648,7 @@
     if (!showOverlay) {
       clearVisualMarkers();
     } else if (visibleElements.length > 0) {
+      const root = getOrCreatePesatShadowRoot();
       markersOverlay = document.createElement("div");
       markersOverlay.id = "pesat-markers-overlay";
       markersOverlay.style.cssText = `
@@ -581,12 +656,12 @@
         top: 0;
         left: 0;
         width: 100%;
-        height: ${Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)}px;
+        height: ${Math.max(document.body ? document.body.scrollHeight : 0, document.documentElement.scrollHeight)}px;
         pointer-events: none;
         z-index: 2147483640;
         overflow: hidden;
       `;
-      document.body.appendChild(markersOverlay);
+      root.appendChild(markersOverlay);
       renderFloatingLegend();
     }
 
@@ -2010,7 +2085,12 @@
           } catch (_) {}
         }
         if (!inserted || !bodyEditor.innerText?.trim()) {
-          bodyEditor.innerHTML = body.replace(/\n/g, "<br>");
+          bodyEditor.replaceChildren();
+          const lines = String(body).split("\n");
+          lines.forEach((line, idx) => {
+            if (idx > 0) bodyEditor.appendChild(document.createElement("br"));
+            if (line) bodyEditor.appendChild(document.createTextNode(line));
+          });
         }
         bodyEditor.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: body }));
         bodyEditor.dispatchEvent(new Event("input", { bubbles: true }));

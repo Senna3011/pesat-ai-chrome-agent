@@ -245,7 +245,8 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
           requestBody.tool_choice = "auto";
         }
 
-        const res = await fetch(endpoint, {
+        const safeFetch = typeof globalThis.apiFetchWithRetry === "function" ? globalThis.apiFetchWithRetry : fetch;
+        const res = await safeFetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -255,12 +256,7 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
           signal: signal
         });
 
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`API PesatRouter [${res.status}]: ${errText.substring(0, 200)}`);
-        }
-
-        const data = await res.json();
+        const data = (typeof res === "object" && res !== null && !(res instanceof Response)) ? res : await res.json();
         const choice = data?.choices?.[0] || {};
         return {
           message: choice.message || { role: "assistant", content: "" },
@@ -271,7 +267,8 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
       } else {
         // Fallback Cloudflare Worker
         const workerEndpoint = `${DEFAULT_CF_WORKER}/api/chat`;
-        const res = await fetch(workerEndpoint, {
+        const safeFetch = typeof globalThis.apiFetchWithRetry === "function" ? globalThis.apiFetchWithRetry : fetch;
+        const res = await safeFetch(workerEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -284,12 +281,7 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
           signal: signal
         });
 
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`Server Worker [${res.status}]: ${errText.substring(0, 200)}`);
-        }
-
-        const data = await res.json();
+        const data = (typeof res === "object" && res !== null && !(res instanceof Response)) ? res : await res.json();
         const choice = data?.choices?.[0] || {};
         return {
           message: choice.message || { role: "assistant", content: data.reply || data.response || "" },

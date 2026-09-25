@@ -186,13 +186,46 @@
   }
 
   // ─────────────────────────────────────────────────────
-  // SMOOTH VISUAL PERCEPTION STYLES & HUD (Realtime Observable Reading)
+  // SHADOW DOM ISOLATED HOST & STYLES (Zero CSS Collision)
   // ─────────────────────────────────────────────────────
-  function ensurePesatStyles() {
-    if (document.getElementById("pesat-reading-visual-styles")) return;
+  let pesatHostElement = null;
+  let pesatShadowRoot = null;
+
+  function getOrCreatePesatShadowRoot() {
+    if (pesatShadowRoot && pesatHostElement && (document.documentElement.contains(pesatHostElement) || document.body?.contains(pesatHostElement))) {
+      return pesatShadowRoot;
+    }
+
+    if (pesatHostElement) {
+      try { pesatHostElement.remove(); } catch (_) {}
+    }
+
+    pesatHostElement = document.createElement("pesat-ai-agent-host");
+    pesatHostElement.id = "pesat-ai-agent-host-root";
+    pesatHostElement.style.cssText = `
+      all: initial !important;
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 0 !important;
+      z-index: 2147483647 !important;
+      pointer-events: none !important;
+    `;
+
+    pesatShadowRoot = pesatHostElement.attachShadow({ mode: "open" });
+    ensurePesatStylesInShadow(pesatShadowRoot);
+
+    (document.documentElement || document.body).appendChild(pesatHostElement);
+    return pesatShadowRoot;
+  }
+
+  function ensurePesatStylesInShadow(root) {
+    if (!root || root.querySelector("#pesat-reading-visual-styles")) return;
     const style = document.createElement("style");
     style.id = "pesat-reading-visual-styles";
     style.textContent = `
+      * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
       @keyframes pesatSweepLaser {
         0% { top: 0; opacity: 0; }
         12% { opacity: 1; }
@@ -238,12 +271,12 @@
         100% { transform: scale(1.015); }
       }
     `;
-    (document.head || document.documentElement).appendChild(style);
+    root.appendChild(style);
   }
 
   function triggerScanningBeam() {
-    ensurePesatStyles();
-    const existing = document.getElementById("pesat-scanning-beam");
+    const root = getOrCreatePesatShadowRoot();
+    const existing = root.querySelector("#pesat-scanning-beam");
     if (existing) existing.remove();
 
     const beam = document.createElement("div");
@@ -260,18 +293,18 @@
       z-index: 2147483647;
       animation: pesatSweepLaser 0.9s cubic-bezier(0.25, 1, 0.5, 1) forwards;
     `;
-    document.documentElement.appendChild(beam);
+    root.appendChild(beam);
     setTimeout(() => { if (beam.parentNode) beam.remove(); }, 1000);
   }
 
   let pesatHudTimer = null;
   function showReadingHUD(text, isComplete = false) {
-    ensurePesatStyles();
-    let hud = document.getElementById("pesat-reading-hud");
+    const root = getOrCreatePesatShadowRoot();
+    let hud = root.querySelector("#pesat-reading-hud");
     if (!hud) {
       hud = document.createElement("div");
       hud.id = "pesat-reading-hud";
-      document.documentElement.appendChild(hud);
+      root.appendChild(hud);
     }
     if (pesatHudTimer) clearTimeout(pesatHudTimer);
 
@@ -300,10 +333,16 @@
     `;
 
     const dotColor = isComplete ? "#10b981" : "#38bdf8";
-    hud.innerHTML = `
-      <span style="width: 7px; height: 7px; border-radius: 50%; background: ${dotColor}; box-shadow: 0 0 8px ${dotColor}; animation: pesatRadarPulse 1.2s infinite; flex-shrink: 0;"></span>
-      <span>${text}</span>
-    `;
+    hud.replaceChildren();
+
+    const dot = document.createElement("span");
+    dot.style.cssText = `width: 7px; height: 7px; border-radius: 50%; background: ${dotColor}; box-shadow: 0 0 8px ${dotColor}; animation: pesatRadarPulse 1.2s infinite; flex-shrink: 0;`;
+
+    const textSpan = document.createElement("span");
+    textSpan.textContent = text;
+
+    hud.appendChild(dot);
+    hud.appendChild(textSpan);
 
     if (isComplete) {
       pesatHudTimer = setTimeout(() => {
@@ -320,8 +359,8 @@
   // VISUAL MARKERS (OVERLAY + LEGEND)
   // ─────────────────────────────────────────────────────
   function renderFloatingLegend() {
-    ensurePesatStyles();
-    const existing = document.getElementById("pesat-markers-legend");
+    const root = getOrCreatePesatShadowRoot();
+    const existing = root.querySelector("#pesat-markers-legend");
     if (existing) existing.remove();
 
     const legend = document.createElement("div");
@@ -345,47 +384,66 @@
       animation: pesatLegendEntrance 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     `;
 
-    legend.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <span style="font-size:12px; font-weight:700; color:#38bdf8; display:flex; align-items:center; gap:5px;">
-          ⚡ Petunjuk Marker AI (#ID)
-        </span>
-        <button id="pesat-btn-close-legend" style="background:none; border:none; color:#94a3b8; font-size:14px; cursor:pointer; padding:0 4px;" title="Tutup">✕</button>
-      </div>
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:11px; color:#cbd5e1;">
-        <div style="display:flex; align-items:center; gap:5px;">
-          <span style="width:10px; height:10px; border-radius:2px; background:#1d4ed8; display:inline-block;"></span>
-          <span>📝 Input / Form</span>
-        </div>
-        <div style="display:flex; align-items:center; gap:5px;">
-          <span style="width:10px; height:10px; border-radius:2px; background:#b91c1c; display:inline-block;"></span>
-          <span>🔘 Tombol</span>
-        </div>
-        <div style="display:flex; align-items:center; gap:5px;">
-          <span style="width:10px; height:10px; border-radius:2px; background:#047857; display:inline-block;"></span>
-          <span>🔗 Menu / Link</span>
-        </div>
-        <div style="display:flex; align-items:center; gap:5px;">
-          <span style="width:10px; height:10px; border-radius:2px; background:#b45309; display:inline-block;"></span>
-          <span>📋 Dropdown</span>
-        </div>
-      </div>
-      <div style="font-size:10px; color:#94a3b8; margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:6px; line-height:1.3;">
-        💡 Nomor (#1, #2...) adalah ID tombol/input yang sedang dibaca dan dikontrol AI.
-      </div>
-    `;
+    const header = document.createElement("div");
+    header.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;";
 
-    document.body.appendChild(legend);
+    const titleSpan = document.createElement("span");
+    titleSpan.style.cssText = "font-size:12px; font-weight:700; color:#38bdf8; display:flex; align-items:center; gap:5px;";
+    titleSpan.textContent = "⚡ Petunjuk Marker AI (#ID)";
 
-    document.getElementById("pesat-btn-close-legend")?.addEventListener("click", () => {
+    const closeBtn = document.createElement("button");
+    closeBtn.id = "pesat-btn-close-legend";
+    closeBtn.style.cssText = "background:none; border:none; color:#94a3b8; font-size:14px; cursor:pointer; padding:0 4px;";
+    closeBtn.title = "Tutup";
+    closeBtn.textContent = "✕";
+    closeBtn.addEventListener("click", () => {
       legend.style.transition = "opacity 0.2s ease, transform 0.2s ease";
       legend.style.opacity = "0";
       legend.style.transform = "translateY(8px)";
       setTimeout(() => legend.remove(), 220);
     });
+
+    header.appendChild(titleSpan);
+    header.appendChild(closeBtn);
+    legend.appendChild(header);
+
+    const grid = document.createElement("div");
+    grid.style.cssText = "display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:11px; color:#cbd5e1;";
+
+    const legendItems = [
+      { color: "#1d4ed8", text: "📝 Input / Form" },
+      { color: "#b91c1c", text: "🔘 Tombol" },
+      { color: "#047857", text: "🔗 Menu / Link" },
+      { color: "#b45309", text: "📋 Dropdown" }
+    ];
+
+    legendItems.forEach(item => {
+      const itemDiv = document.createElement("div");
+      itemDiv.style.cssText = "display:flex; align-items:center; gap:5px;";
+
+      const colorBox = document.createElement("span");
+      colorBox.style.cssText = `width:10px; height:10px; border-radius:2px; background:${item.color}; display:inline-block; flex-shrink:0;`;
+
+      const labelSpan = document.createElement("span");
+      labelSpan.textContent = item.text;
+
+      itemDiv.appendChild(colorBox);
+      itemDiv.appendChild(labelSpan);
+      grid.appendChild(itemDiv);
+    });
+
+    legend.appendChild(grid);
+
+    const footer = document.createElement("div");
+    footer.style.cssText = "font-size:10px; color:#94a3b8; margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:6px; line-height:1.3;";
+    footer.textContent = "💡 Nomor (#1, #2...) adalah ID tombol/input yang sedang dibaca dan dikontrol AI.";
+    legend.appendChild(footer);
+
+    root.appendChild(legend);
   }
 
   function clearVisualMarkers() {
+    const root = getOrCreatePesatShadowRoot();
     if (markersOverlay) {
       const mo = markersOverlay;
       markersOverlay = null;
@@ -393,14 +451,14 @@
       mo.style.opacity = "0";
       setTimeout(() => { if (mo.parentNode) mo.remove(); }, 260);
     }
-    const legend = document.getElementById("pesat-markers-legend");
+    const legend = root.querySelector("#pesat-markers-legend");
     if (legend) {
       legend.style.transition = "opacity 0.25s ease, transform 0.25s ease";
       legend.style.opacity = "0";
       legend.style.transform = "translateY(8px)";
       setTimeout(() => { if (legend.parentNode) legend.remove(); }, 260);
     }
-    const hud = document.getElementById("pesat-reading-hud");
+    const hud = root.querySelector("#pesat-reading-hud");
     if (hud) {
       hud.style.transition = "opacity 0.25s ease, transform 0.25s ease";
       hud.style.opacity = "0";
@@ -420,7 +478,11 @@
   let pageLockShield = null;
 
   function blockUserInteractionEvent(e) {
-    if (e.target && (e.target.id === "pesat-shield-unlock-btn" || e.target.closest("#pesat-shield-unlock-btn"))) {
+    const path = typeof e.composedPath === "function" ? e.composedPath() : [];
+    if (path.some(el => el && el.id === "pesat-shield-unlock-btn")) {
+      return;
+    }
+    if (e.target && (e.target.id === "pesat-shield-unlock-btn" || e.target.closest?.("#pesat-shield-unlock-btn"))) {
       return;
     }
     e.stopPropagation();
@@ -438,8 +500,8 @@
   ];
 
   function lockPageShield(message = "Tab ini sedang dikontrol oleh Pesat AI Agent... (Halaman dikunci agar AI fokus)") {
-    ensurePesatStyles();
-    const existing = document.getElementById("pesat-page-lock-shield");
+    const root = getOrCreatePesatShadowRoot();
+    const existing = root.querySelector("#pesat-page-lock-shield");
     if (existing) {
       const msgEl = existing.querySelector("#pesat-shield-msg");
       if (msgEl) msgEl.textContent = message;
@@ -471,35 +533,46 @@
       opacity: 1 !important;
     `;
 
-    pageLockShield.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 10px; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(99, 102, 241, 0.45); box-shadow: 0 12px 32px rgba(0,0,0,0.65), 0 0 16px rgba(99, 102, 241, 0.2); padding: 8px 16px; border-radius: 9999px; color: #f8fafc; font-size: 12px; font-weight: 500; pointer-events: auto; cursor: default; animation: pesatShieldPulse 1.8s infinite alternate;">
-        <span style="width: 8px; height: 8px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 8px #6366f1; flex-shrink: 0;"></span>
-        <span id="pesat-shield-msg" style="color: #f1f5f9;">${message}</span>
-        <button id="pesat-shield-unlock-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; margin-left: 4px; transition: background 0.15s;" title="Buka kunci halaman manual">Buka Kunci</button>
-      </div>
-    `;
+    const badgeContainer = document.createElement("div");
+    badgeContainer.style.cssText = "display: flex; align-items: center; gap: 10px; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(99, 102, 241, 0.45); box-shadow: 0 12px 32px rgba(0,0,0,0.65), 0 0 16px rgba(99, 102, 241, 0.2); padding: 8px 16px; border-radius: 9999px; color: #f8fafc; font-size: 12px; font-weight: 500; pointer-events: auto; cursor: default; animation: pesatShieldPulse 1.8s infinite alternate;";
 
-    (document.body || document.documentElement).appendChild(pageLockShield);
+    const dot = document.createElement("span");
+    dot.style.cssText = "width: 8px; height: 8px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 8px #6366f1; flex-shrink: 0;";
+
+    const msgSpan = document.createElement("span");
+    msgSpan.id = "pesat-shield-msg";
+    msgSpan.style.cssText = "color: #f1f5f9;";
+    msgSpan.textContent = message;
+
+    const unlockBtn = document.createElement("button");
+    unlockBtn.id = "pesat-shield-unlock-btn";
+    unlockBtn.style.cssText = "background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; margin-left: 4px; transition: background 0.15s;";
+    unlockBtn.title = "Buka kunci halaman manual";
+    unlockBtn.textContent = "Buka Kunci";
+
+    unlockBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      unlockPageShield();
+    });
+    unlockBtn.addEventListener("mouseenter", () => {
+      unlockBtn.style.background = "rgba(239, 68, 68, 0.3)";
+      unlockBtn.style.color = "#fff";
+    });
+    unlockBtn.addEventListener("mouseleave", () => {
+      unlockBtn.style.background = "rgba(255,255,255,0.1)";
+      unlockBtn.style.color = "#cbd5e1";
+    });
+
+    badgeContainer.appendChild(dot);
+    badgeContainer.appendChild(msgSpan);
+    badgeContainer.appendChild(unlockBtn);
+    pageLockShield.appendChild(badgeContainer);
+
+    root.appendChild(pageLockShield);
 
     BLOCK_EVENT_TYPES.forEach(type => {
       window.addEventListener(type, blockUserInteractionEvent, { capture: true, passive: false });
     });
-
-    const unlockBtn = pageLockShield.querySelector("#pesat-shield-unlock-btn");
-    if (unlockBtn) {
-      unlockBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        unlockPageShield();
-      });
-      unlockBtn.addEventListener("mouseenter", () => {
-        unlockBtn.style.background = "rgba(239, 68, 68, 0.3)";
-        unlockBtn.style.color = "#fff";
-      });
-      unlockBtn.addEventListener("mouseleave", () => {
-        unlockBtn.style.background = "rgba(255,255,255,0.1)";
-        unlockBtn.style.color = "#cbd5e1";
-      });
-    }
   }
 
   function unlockPageShield() {
@@ -507,7 +580,8 @@
       window.removeEventListener(type, blockUserInteractionEvent, { capture: true, passive: false });
     });
 
-    const shield = document.getElementById("pesat-page-lock-shield") || pageLockShield;
+    const root = getOrCreatePesatShadowRoot();
+    const shield = root.querySelector("#pesat-page-lock-shield") || pageLockShield;
     if (shield) {
       shield.style.opacity = "0";
       setTimeout(() => { if (shield.parentNode) shield.remove(); }, 200);
@@ -574,6 +648,7 @@
     if (!showOverlay) {
       clearVisualMarkers();
     } else if (visibleElements.length > 0) {
+      const root = getOrCreatePesatShadowRoot();
       markersOverlay = document.createElement("div");
       markersOverlay.id = "pesat-markers-overlay";
       markersOverlay.style.cssText = `
@@ -581,12 +656,12 @@
         top: 0;
         left: 0;
         width: 100%;
-        height: ${Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)}px;
+        height: ${Math.max(document.body ? document.body.scrollHeight : 0, document.documentElement.scrollHeight)}px;
         pointer-events: none;
         z-index: 2147483640;
         overflow: hidden;
       `;
-      document.body.appendChild(markersOverlay);
+      root.appendChild(markersOverlay);
       renderFloatingLegend();
     }
 
@@ -1821,20 +1896,18 @@
     const body = actionData.body || actionData.message || actionData.value || "";
     const sendNow = !!actionData.sendNow;
 
-    // Helper polling elemen dengan MutationObserver & multi-selector fallback
-    async function waitForElement(selectorFns, timeoutMs = 4500) {
+    // Helper polling elemen dengan fallback toleran
+    async function waitForElement(selectorFns, timeoutMs = 5000) {
       const fns = Array.isArray(selectorFns) ? selectorFns : [selectorFns];
       const start = Date.now();
       while (Date.now() - start < timeoutMs) {
         for (const fn of fns) {
-          const el = typeof fn === "string" ? document.querySelector(fn) : fn();
-          if (el && isElementVisible(el)) return el;
+          try {
+            const el = typeof fn === "string" ? document.querySelector(fn) : fn();
+            if (el) return el;
+          } catch (_) {}
         }
         await new Promise(r => setTimeout(r, 200));
-      }
-      for (const fn of fns) {
-        const el = typeof fn === "string" ? document.querySelector(fn) : fn();
-        if (el) return el;
       }
       return null;
     }
@@ -1851,8 +1924,14 @@
       } catch (_) {}
     }
 
-    // 1. Cek atau buka popup Compose/Tulis di Gmail (Multi-Strategy Resolution Instan)
-    let composeBox = document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD');
+    // 1. Cek atau buka popup Compose/Tulis di Gmail (Multi-Strategy Resolution)
+    let composeBox = document.querySelector('div[role="dialog"]') ||
+                     document.querySelector('div.nH.Hd[role="dialog"]') ||
+                     document.querySelector('table.Ao.Il') ||
+                     document.querySelector('div.AD') ||
+                     document.querySelector('input[name="subjectbox"]') ||
+                     document.querySelector('div.Am.Al.editable');
+
     if (!composeBox) {
       if (window.location.hostname.includes("mail.google.com")) {
         try {
@@ -1862,7 +1941,7 @@
         } catch (_) {}
       }
 
-      // Cari dan klik tombol Compose (semua elemen tombol dan anaknya)
+      // Cari dan klik tombol Compose
       const composeBtn = document.querySelector('div[gh="cm"]') ||
                          document.querySelector('div.T-I.T-I-KE.L3') ||
                          document.querySelector('div[role="button"][aria-label*="Tulis" i]') ||
@@ -1873,53 +1952,72 @@
                          findElementByFuzzy("Compose", "click");
 
       if (composeBtn) {
-        const elsToClick = [composeBtn, ...Array.from(composeBtn.querySelectorAll('*')), composeBtn.closest('[role="button"]')].filter(Boolean);
-        for (const el of elsToClick) {
-          try {
-            el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
-            el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
-            el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
-            el.click?.();
-          } catch (_) {}
-        }
+        const targetBtn = composeBtn.closest('[role="button"]') || composeBtn;
+        targetBtn.focus?.();
+        const evt = { bubbles: true, cancelable: true, composed: true, view: window };
+        targetBtn.dispatchEvent(new PointerEvent("pointerdown", evt));
+        targetBtn.dispatchEvent(new MouseEvent("mousedown", evt));
+        targetBtn.dispatchEvent(new PointerEvent("pointerup", evt));
+        targetBtn.dispatchEvent(new MouseEvent("mouseup", evt));
+        targetBtn.dispatchEvent(new MouseEvent("click", evt));
+        targetBtn.click?.();
       }
 
       try {
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", keyCode: 67, which: 67, bubbles: true }));
       } catch (_) {}
 
-      composeBox = await waitForElement(() => document.querySelector('div[role="dialog"]') || document.querySelector('table.Ao.Il') || document.querySelector('div.AD'), 4000);
+      composeBox = await waitForElement([
+        'div[role="dialog"]',
+        'div.nH.Hd[role="dialog"]',
+        'table.Ao.Il',
+        'div.AD',
+        'input[name="subjectbox"]',
+        'div.Am.Al.editable',
+        'input.agP'
+      ], 6000);
     }
 
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 500));
+
+    let filledTo = false;
+    let filledSubject = false;
+    let filledBody = false;
 
     // 2. Isi Penerima (To / Kepada) & Verifikasi Chip Terbentuk
     if (to) {
       const toInput = await waitForElement([
         'input[peoplekit-id]',
+        'input.agP.vO',
         'input.agP',
+        'input.vO',
         'input[aria-label*="Kepada" i]',
         'input[aria-label*="To" i]',
         'input[role="combobox"]',
         'div[aria-label*="Kepada" i] input',
         'div[aria-label*="To" i] input',
         'table.Ao input',
+        'textarea[name="to"]',
+        'input[name="to"]',
         () => findElementByFuzzy("Kepada", "type"),
         () => findElementByFuzzy("To", "type")
-      ], 3500);
+      ], 5000);
 
       if (toInput) {
         toInput.focus();
+        toInput.click?.();
         setNativeInputValue(toInput, to);
-        // Dispatch Enter and Tab to commit recipient chip
+        toInput.value = to;
+        toInput.dispatchEvent(new Event("input", { bubbles: true }));
         toInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
         toInput.dispatchEvent(new KeyboardEvent("keypress", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
         toInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
         toInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", code: "Tab", keyCode: 9, which: 9, bubbles: true }));
+        toInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Tab", code: "Tab", keyCode: 9, which: 9, bubbles: true }));
         toInput.dispatchEvent(new Event("change", { bubbles: true }));
+        filledTo = true;
         await new Promise(r => setTimeout(r, 400));
 
-        // Dismiss dropdown autocomplete agar tidak menutupi tombol Kirim
         dismissAutocompleteOverlays();
         await new Promise(r => setTimeout(r, 200));
       }
@@ -1929,19 +2027,23 @@
     if (subject) {
       const subjectInput = await waitForElement([
         'input[name="subjectbox"]',
+        'input.aoT',
         'input[aria-label*="Subjek" i]',
         'input[aria-label*="Subject" i]',
         'input[placeholder*="Subjek" i]',
         'input[placeholder*="Subject" i]',
         () => findElementByFuzzy("Subjek", "type"),
         () => findElementByFuzzy("Subject", "type")
-      ], 3000);
+      ], 4000);
 
       if (subjectInput) {
         subjectInput.focus();
+        subjectInput.click?.();
         setNativeInputValue(subjectInput, subject);
+        subjectInput.value = subject;
         subjectInput.dispatchEvent(new Event("input", { bubbles: true }));
         subjectInput.dispatchEvent(new Event("change", { bubbles: true }));
+        filledSubject = true;
         await new Promise(r => setTimeout(r, 300));
       }
     }
@@ -1949,16 +2051,29 @@
     // 4. Isi Pesan (Body)
     if (body) {
       const bodyEditor = await waitForElement([
+        'div.Am.Al.editable',
         'div[role="textbox"][aria-label*="Pesan" i]',
         'div[role="textbox"][aria-label*="Message Body" i]',
         'div[role="textbox"][aria-label*="Body" i]',
-        'div.Am.Al.editable',
+        'div[role="textbox"]',
+        'div.Am.aJh.Al.editable',
+        'div[aria-label*="Isi pesan" i]',
+        'div[aria-label*="Teks pesan" i]',
         'div.editable[contenteditable="true"]',
         '[contenteditable="true"]'
-      ], 3000);
+      ], 4000);
 
       if (bodyEditor) {
         bodyEditor.focus();
+        bodyEditor.click?.();
+        try {
+          const sel = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(bodyEditor);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        } catch (_) {}
+
         let inserted = false;
         try {
           const htmlContent = body.replace(/\n/g, "<br>");
@@ -1969,18 +2084,33 @@
             inserted = document.execCommand("insertText", false, body);
           } catch (_) {}
         }
-        if (!inserted) {
-          bodyEditor.innerText = body;
+        if (!inserted || !bodyEditor.innerText?.trim()) {
+          bodyEditor.replaceChildren();
+          const lines = String(body).split("\n");
+          lines.forEach((line, idx) => {
+            if (idx > 0) bodyEditor.appendChild(document.createElement("br"));
+            if (line) bodyEditor.appendChild(document.createTextNode(line));
+          });
         }
+        bodyEditor.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: body }));
         bodyEditor.dispatchEvent(new Event("input", { bubbles: true }));
         bodyEditor.dispatchEvent(new Event("change", { bubbles: true }));
-        await new Promise(r => setTimeout(r, 300));
+        filledBody = true;
+        await new Promise(r => setTimeout(r, 400));
       }
     }
 
     // Tutup autocomplete popovers jika masih ada
     dismissAutocompleteOverlays();
     await new Promise(r => setTimeout(r, 300));
+
+    if (!filledTo && !filledSubject && !filledBody) {
+      return {
+        success: false,
+        error: "Formulir Compose Gmail terbuka namun kolom input (Kepada, Subjek, Isi Pesan) belum berhasil diakses. Silakan coba kembali.",
+        stateChanged: true
+      };
+    }
 
     // 5. Klik Kirim jika sendNow aktif dengan multi-strategy & retry backoff
     if (sendNow) {
@@ -2014,8 +2144,15 @@
 
       if (sendBtn) {
         try {
-          sendBtn.focus?.();
-          sendBtn.click();
+          const target = sendBtn.closest('[role="button"]') || sendBtn;
+          target.focus?.();
+          const evt = { bubbles: true, cancelable: true, composed: true, view: window };
+          target.dispatchEvent(new PointerEvent("pointerdown", evt));
+          target.dispatchEvent(new MouseEvent("mousedown", evt));
+          target.dispatchEvent(new PointerEvent("pointerup", evt));
+          target.dispatchEvent(new MouseEvent("mouseup", evt));
+          target.dispatchEvent(new MouseEvent("click", evt));
+          target.click?.();
           await new Promise(r => setTimeout(r, 800));
           return { success: true, message: `Email ke "${to}" dengan subjek "${subject}" berhasil dikirim ke penerima.`, stateChanged: true };
         } catch (err) {
