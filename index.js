@@ -32,7 +32,7 @@ function renderLogsPage(env) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pesat AI Agent — Realtime Activity & Error Logs</title>
+  <title>Pesat AI Agent — Telemetry & Bug Reports Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -80,7 +80,7 @@ function renderLogsPage(env) {
       gap: 16px;
       padding-bottom: 20px;
       border-bottom: 1px solid var(--card-border);
-      margin-bottom: 24px;
+      margin-bottom: 20px;
     }
     .header-title {
       display: flex;
@@ -131,56 +131,108 @@ function renderLogsPage(env) {
     .controls {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       flex-wrap: wrap;
     }
     .btn {
-      background: rgba(30, 41, 59, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
       color: var(--text);
-      padding: 8px 14px;
+      padding: 7px 14px;
       border-radius: 8px;
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
+      text-decoration: none;
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      text-decoration: none;
-      transition: all 0.2s ease;
+      transition: all 0.2s;
     }
     .btn:hover {
-      background: rgba(51, 65, 85, 0.9);
+      background: var(--card-hover);
       border-color: var(--accent);
-      transform: translateY(-1px);
+      color: #fff;
     }
     .btn-danger {
-      background: rgba(239, 68, 68, 0.15);
       border-color: rgba(239, 68, 68, 0.3);
       color: #fca5a5;
     }
     .btn-danger:hover {
-      background: rgba(239, 68, 68, 0.3);
+      background: rgba(239, 68, 68, 0.2);
       border-color: var(--danger);
-      color: white;
+      color: #fff;
     }
+
+    /* Tabs Navigation */
+    .tabs-nav {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 8px;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 14px;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .tab-btn.active {
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .tab-badge {
+      background: rgba(255, 255, 255, 0.1);
+      color: #cbd5e1;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 12px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .tab-badge.badge-bugs {
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 14px;
-      margin-bottom: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
     }
     .stat-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 12px;
-      padding: 16px;
+      border-radius: 10px;
+      padding: 14px;
       backdrop-filter: blur(8px);
     }
     .stat-label {
-      font-size: 12px;
+      font-size: 11.5px;
       color: var(--text-muted);
-      font-weight: 500;
+      font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       margin-bottom: 6px;
@@ -188,6 +240,7 @@ function renderLogsPage(env) {
     .stat-value {
       font-size: 24px;
       font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
       color: var(--text);
     }
     .toolbar {
@@ -196,55 +249,49 @@ function renderLogsPage(env) {
       justify-content: space-between;
       align-items: center;
       gap: 12px;
-      margin-bottom: 18px;
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 12px;
-      padding: 12px 16px;
+      margin-bottom: 16px;
     }
     .filter-group {
       display: flex;
-      gap: 8px;
       flex-wrap: wrap;
-      align-items: center;
+      gap: 6px;
     }
     .filter-btn {
-      background: transparent;
-      border: 1px solid transparent;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
       color: var(--text-muted);
-      padding: 5px 12px;
-      border-radius: 6px;
       font-size: 12px;
       font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 6px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.15s;
     }
-    .filter-btn:hover {
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.05);
-    }
-    .filter-btn.active {
+    .filter-btn:hover, .filter-btn.active {
       background: rgba(56, 189, 248, 0.15);
-      border-color: rgba(56, 189, 248, 0.4);
+      border-color: var(--accent);
       color: var(--accent);
     }
     .search-input {
-      background: rgba(15, 23, 42, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
       color: var(--text);
-      padding: 7px 12px;
-      border-radius: 6px;
       font-size: 13px;
-      min-width: 260px;
+      padding: 7px 14px;
+      border-radius: 8px;
+      width: 100%;
+      max-width: 320px;
       outline: none;
+      transition: all 0.2s;
     }
     .search-input:focus {
       border-color: var(--accent);
+      box-shadow: 0 0 10px var(--accent-glow);
     }
     .log-stream {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
     }
     .log-item {
       background: var(--card-bg);
@@ -285,6 +332,7 @@ function renderLogsPage(env) {
     .badge-ACTION { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
     .badge-WARN { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
     .badge-ERROR { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge-BUG_REPORT { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); }
     .source-tag {
       font-size: 11px;
       color: var(--text-muted);
@@ -321,6 +369,69 @@ function renderLogsPage(env) {
     .log-item.expanded .log-details {
       display: block;
     }
+
+    /* Bug Reports Table Styling */
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      overflow: hidden;
+      backdrop-filter: blur(8px);
+    }
+    .bugs-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+    .bugs-table th {
+      background: rgba(15, 23, 42, 0.9);
+      color: #94a3b8;
+      font-weight: 600;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--card-border);
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+    }
+    .bugs-table td {
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: #e2e8f0;
+      vertical-align: top;
+    }
+    .bugs-table tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .bug-desc-cell {
+      font-weight: 600;
+      color: #f8fafc;
+      max-width: 320px;
+    }
+    .bug-url-cell {
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      color: #38bdf8;
+    }
+    .bug-btn-view {
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #38bdf8;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .bug-btn-view:hover {
+      background: rgba(56, 189, 248, 0.3);
+      color: #fff;
+    }
     .empty-state {
       text-align: center;
       padding: 60px 20px;
@@ -336,7 +447,7 @@ function renderLogsPage(env) {
     <header class="header">
       <div class="header-title">
         <span class="logo-badge">PESAT.AI</span>
-        <h1>Developer Realtime Activity Logs</h1>
+        <h1>Developer Realtime Dashboard</h1>
         <div class="status-badge" id="liveBadge">
           <div class="status-dot"></div>
           <span id="liveStatusText">LIVE MONITORING (2s)</span>
@@ -351,60 +462,110 @@ function renderLogsPage(env) {
       </div>
     </header>
 
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">Total Log Events</div>
-        <div class="stat-value" id="statTotal">0</div>
+    <!-- Tabs Header -->
+    <div class="tabs-nav">
+      <button class="tab-btn active" id="tabNavLogs" onclick="switchTab('logs')">
+        <span>⚡ Dev Activity Logs</span>
+        <span class="tab-badge" id="tabBadgeLogs">0</span>
+      </button>
+      <button class="tab-btn" id="tabNavBugs" onclick="switchTab('bugs')">
+        <span>🐞 User Bug Reports</span>
+        <span class="tab-badge badge-bugs" id="tabBadgeBugs">0</span>
+      </button>
+    </div>
+
+    <!-- TAB 1: DEV ACTIVITY LOGS -->
+    <div class="tab-content active" id="tabContentLogs">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Total Events</div>
+          <div class="stat-value" id="statTotal">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">AI Processing</div>
+          <div class="stat-value" id="statAI" style="color: #c084fc;">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Actions Executed</div>
+          <div class="stat-value" id="statAction" style="color: #34d399;">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Warnings & Loops</div>
+          <div class="stat-value" id="statWarn" style="color: #fbbf24;">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Errors</div>
+          <div class="stat-value" id="statError" style="color: #f87171;">0</div>
+        </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">AI Processing</div>
-        <div class="stat-value" id="statAI" style="color: #c084fc;">0</div>
+
+      <div class="toolbar">
+        <div class="filter-group" id="filterGroup">
+          <button class="filter-btn active" data-level="ALL">ALL (0)</button>
+          <button class="filter-btn" data-level="AI">AI (0)</button>
+          <button class="filter-btn" data-level="ACTION">ACTIONS (0)</button>
+          <button class="filter-btn" data-level="INFO">INFO (0)</button>
+          <button class="filter-btn" data-level="WARN">WARN (0)</button>
+          <button class="filter-btn" data-level="ERROR">ERROR (0)</button>
+        </div>
+        <input type="text" class="search-input" id="searchLogsInput" placeholder="🔍 Cari aktivitas, ID elemen, URL...">
       </div>
-      <div class="stat-card">
-        <div class="stat-label">Actions Executed</div>
-        <div class="stat-value" id="statAction" style="color: #34d399;">0</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Warnings & Loops</div>
-        <div class="stat-value" id="statWarn" style="color: #fbbf24;">0</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Errors & Bugs</div>
-        <div class="stat-value" id="statError" style="color: #f87171;">0</div>
+
+      <div class="log-stream" id="logStream">
+        <div class="empty-state">
+          <div style="font-size:32px;margin-bottom:12px;">📡</div>
+          <h3>Menunggu aktivitas dari Chrome Extension...</h3>
+          <p style="margin-top: 6px; font-size: 13px;">Kirim perintah ke Agent untuk memantau alur pemrosesan.</p>
+        </div>
       </div>
     </div>
 
-    <div class="toolbar">
-      <div class="filter-group" id="filterGroup">
-        <button class="filter-btn active" data-level="ALL">ALL (0)</button>
-        <button class="filter-btn" data-level="AI">AI (0)</button>
-        <button class="filter-btn" data-level="ACTION">ACTIONS (0)</button>
-        <button class="filter-btn" data-level="INFO">INFO (0)</button>
-        <button class="filter-btn" data-level="WARN">WARN (0)</button>
-        <button class="filter-btn" data-level="ERROR">ERROR (0)</button>
+    <!-- TAB 2: USER BUG REPORTS -->
+    <div class="tab-content" id="tabContentBugs">
+      <div class="toolbar" style="margin-bottom: 14px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <h3 style="font-size:16px; font-weight:700; color:#f8fafc;">📋 Laporan Bug Masuk (<span id="countBugsHeader">0</span>)</h3>
+        </div>
+        <input type="text" class="search-input" id="searchBugsInput" placeholder="🔍 Cari laporan, URL, error...">
       </div>
-      <input type="text" class="search-input" id="searchInput" placeholder="🔍 Cari pesan, ID elemen, URL, error...">
-    </div>
 
-    <div class="log-stream" id="logStream">
-      <div class="empty-state">
-        <div style="font-size:32px;margin-bottom:12px;">📡</div>
-        <h3>Menunggu aktivitas dari Chrome Extension...</h3>
-        <p style="margin-top: 6px; font-size: 13px;">Kirim perintah ke Agent untuk memantau alur pemrosesan.</p>
+      <div class="table-container">
+        <table class="bugs-table">
+          <thead>
+            <tr>
+              <th style="width: 130px;">Waktu</th>
+              <th>Deskripsi Kendala</th>
+              <th>Halaman Web / URL</th>
+              <th>Error Terakhir</th>
+              <th style="width: 100px; text-align: center;">Detail Log</th>
+            </tr>
+          </thead>
+          <tbody id="bugsTableBody">
+            <tr>
+              <td colspan="5" style="text-align: center; padding: 40px; color: #94a3b8;">
+                <div style="font-size: 28px; margin-bottom: 8px;">🎉</div>
+                Belum ada laporan kendala dari pengguna (Zero Bug Reports).
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
 
   <script>
     let allLogs = [];
+    let activeTab = "logs";
     let activeFilter = "ALL";
-    let searchQuery = "";
+    let searchLogsQuery = "";
+    let searchBugsQuery = "";
     let isAutoRefreshing = true;
     let refreshInterval = null;
     const API_LOGS_URL = window.location.origin + "/api/logs";
 
     const logStream = document.getElementById("logStream");
-    const searchInput = document.getElementById("searchInput");
+    const searchLogsInput = document.getElementById("searchLogsInput");
+    const searchBugsInput = document.getElementById("searchBugsInput");
     const filterGroup = document.getElementById("filterGroup");
     const btnToggleAuto = document.getElementById("btnToggleAuto");
     const btnRefresh = document.getElementById("btnRefresh");
@@ -412,11 +573,29 @@ function renderLogsPage(env) {
     const btnClear = document.getElementById("btnClear");
     const liveBadge = document.getElementById("liveBadge");
 
+    const tabBadgeLogs = document.getElementById("tabBadgeLogs");
+    const tabBadgeBugs = document.getElementById("tabBadgeBugs");
+    const countBugsHeader = document.getElementById("countBugsHeader");
+    const bugsTableBody = document.getElementById("bugsTableBody");
+
     const statTotal = document.getElementById("statTotal");
     const statAI = document.getElementById("statAI");
     const statAction = document.getElementById("statAction");
     const statWarn = document.getElementById("statWarn");
     const statError = document.getElementById("statError");
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+      if (tab === "logs") {
+        document.getElementById("tabNavLogs").classList.add("active");
+        document.getElementById("tabContentLogs").classList.add("active");
+      } else {
+        document.getElementById("tabNavBugs").classList.add("active");
+        document.getElementById("tabContentBugs").classList.add("active");
+      }
+    }
 
     async function fetchLogs() {
       try {
@@ -427,6 +606,7 @@ function renderLogsPage(env) {
           allLogs = data.logs;
           updateStats();
           renderLogs();
+          renderBugReports();
         }
       } catch (err) {
         console.error("Gagal mengambil log:", err);
@@ -434,8 +614,15 @@ function renderLogsPage(env) {
     }
 
     function updateStats() {
-      const counts = { ALL: allLogs.length, AI: 0, ACTION: 0, INFO: 0, WARN: 0, ERROR: 0 };
-      allLogs.forEach(l => {
+      const devLogs = allLogs.filter(l => l.type !== "BUG_REPORT" && l.source !== "USER_BUG_REPORT");
+      const bugReports = allLogs.filter(l => l.type === "BUG_REPORT" || l.source === "USER_BUG_REPORT");
+
+      tabBadgeLogs.textContent = devLogs.length;
+      tabBadgeBugs.textContent = bugReports.length;
+      countBugsHeader.textContent = bugReports.length;
+
+      const counts = { ALL: devLogs.length, AI: 0, ACTION: 0, INFO: 0, WARN: 0, ERROR: 0 };
+      devLogs.forEach(l => {
         const lvl = (l.level || "INFO").toUpperCase();
         if (counts[lvl] !== undefined) counts[lvl]++;
       });
@@ -452,12 +639,13 @@ function renderLogsPage(env) {
     }
 
     function renderLogs() {
-      let filtered = allLogs.slice().reverse();
+      const devLogs = allLogs.filter(l => l.type !== "BUG_REPORT" && l.source !== "USER_BUG_REPORT");
+      let filtered = devLogs.slice().reverse();
       if (activeFilter !== "ALL") {
         filtered = filtered.filter(l => (l.level || "INFO").toUpperCase() === activeFilter);
       }
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+      if (searchLogsQuery.trim()) {
+        const q = searchLogsQuery.toLowerCase();
         filtered = filtered.filter(l => {
           const matchMsg = (l.message || "").toLowerCase().includes(q);
           const matchType = (l.type || "").toLowerCase().includes(q);
@@ -471,7 +659,7 @@ function renderLogsPage(env) {
         logStream.innerHTML = \`
           <div class="empty-state">
             <div style="font-size:32px;margin-bottom:12px;">🔍</div>
-            <h3>Tidak ada log yang sesuai filter</h3>
+            <h3>Tidak ada log aktivitas yang sesuai filter</h3>
           </div>
         \`;
         return;
@@ -487,16 +675,82 @@ function renderLogsPage(env) {
             <div class="log-header-row">
               <div class="log-meta">
                 <span class="badge-tag badge-\${level}">\${level}</span>
-                <span class="source-tag">\${escapeHtml(log.source || 'SYS')}</span>
-                <span class="source-tag" style="color:#38bdf8;">\${escapeHtml(log.type || 'EVENT')}</span>
+                <span class="badge-tag badge-tag-type">\${escapeHtml(log.type || 'EVENT')}</span>
+                <span class="source-tag">\${escapeHtml(log.source || 'CLIENT')}</span>
               </div>
-              <div class="log-time">\${time}</div>
+              <span class="log-time">\${time}</span>
             </div>
             <div class="log-message">\${escapeHtml(log.message || '')}</div>
-            \${hasDetails ? \`<div class="log-details">\${jsonStr}</div>\` : ''}
+            \${hasDetails ? \`<pre class="log-details">\${jsonStr}</pre>\` : ''}
           </div>
         \`;
       }).join('');
+    }
+
+    function renderBugReports() {
+      const bugReports = allLogs.filter(l => l.type === "BUG_REPORT" || l.source === "USER_BUG_REPORT").slice().reverse();
+      let filtered = bugReports;
+
+      if (searchBugsQuery.trim()) {
+        const q = searchBugsQuery.toLowerCase();
+        filtered = filtered.filter(l => {
+          const desc = (l.details?.userDescription || l.message || "").toLowerCase();
+          const url = (l.details?.url || l.url || "").toLowerCase();
+          const err = (l.details?.lastError || "").toLowerCase();
+          return desc.includes(q) || url.includes(q) || err.includes(q);
+        });
+      }
+
+      if (filtered.length === 0) {
+        bugsTableBody.innerHTML = \`
+          <tr>
+            <td colspan="5" style="text-align: center; padding: 40px; color: #94a3b8;">
+              <div style="font-size: 28px; margin-bottom: 8px;">🎉</div>
+              Belum ada laporan kendala dari pengguna.
+            </td>
+          </tr>
+        \`;
+        return;
+      }
+
+      bugsTableBody.innerHTML = filtered.map((log, idx) => {
+        const time = log.timestamp ? new Date(log.timestamp).toLocaleString("id-ID") : "-";
+        const desc = log.details?.userDescription || log.message || "-";
+        const url = log.details?.url || log.url || "-";
+        const tabTitle = log.details?.tabTitle || "";
+        const lastErr = log.details?.lastError || "-";
+        const logDetailStr = escapeHtml(JSON.stringify(log.details || {}, null, 2));
+
+        return \`
+          <tr>
+            <td style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #94a3b8;">\${time}</td>
+            <td class="bug-desc-cell">\${escapeHtml(desc)}</td>
+            <td>
+              <div style="font-size: 12.5px; font-weight: 600; color: #f1f5f9; margin-bottom: 2px;">\${escapeHtml(tabTitle || 'Halaman Web')}</div>
+              <div class="bug-url-cell" title="\${escapeHtml(url)}">\${escapeHtml(url)}</div>
+            </td>
+            <td style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #fca5a5; max-width: 200px; word-break: break-word;">
+              \${escapeHtml(lastErr)}
+            </td>
+            <td style="text-align: center;">
+              <button class="bug-btn-view" onclick="toggleBugDetails('bug-detail-\${idx}')">🔍 Lihat</button>
+            </td>
+          </tr>
+          <tr id="bug-detail-\${idx}" style="display: none; background: #060911;">
+            <td colspan="5" style="padding: 12px 16px;">
+              <div style="font-size: 12px; font-weight: 700; color: #38bdf8; margin-bottom: 6px;">Detail Log & Payload Laporan Bug:</div>
+              <pre style="background: #020617; padding: 12px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #cbd5e1; overflow-x: auto; max-height: 250px;">\${logDetailStr}</pre>
+            </td>
+          </tr>
+        \`;
+      }).join('');
+    }
+
+    function toggleBugDetails(id) {
+      const row = document.getElementById(id);
+      if (row) {
+        row.style.display = row.style.display === "none" ? "table-row" : "none";
+      }
     }
 
     function escapeHtml(str) {
@@ -517,9 +771,14 @@ function renderLogsPage(env) {
       renderLogs();
     });
 
-    searchInput.addEventListener("input", e => {
-      searchQuery = e.target.value;
+    searchLogsInput.addEventListener("input", e => {
+      searchLogsQuery = e.target.value;
       renderLogs();
+    });
+
+    searchBugsInput.addEventListener("input", e => {
+      searchBugsQuery = e.target.value;
+      renderBugReports();
     });
 
     btnToggleAuto.addEventListener("click", () => {
@@ -541,7 +800,7 @@ function renderLogsPage(env) {
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(allLogs, null, 2));
       const a = document.createElement("a");
       a.setAttribute("href", dataStr);
-      a.setAttribute("download", \`pesat-agent-logs-\${Date.now()}.json\`);
+      a.setAttribute("download", \`pesat-telemetry-logs-\${Date.now()}.json\`);
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -554,6 +813,7 @@ function renderLogsPage(env) {
           allLogs = [];
           updateStats();
           renderLogs();
+          renderBugReports();
         } catch (err) {
           alert("Gagal: " + err.message);
         }

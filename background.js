@@ -213,6 +213,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  // Abort Agent Loop Signal Handler
+  if (request.action === "ABORT_AGENT_LOOP" || request.type === "ABORT_AGENT_LOOP") {
+    actionHistoryPerTab.clear();
+    bgLog("WARN", "AGENT_ABORTED", `Siklus AI dihentikan secara paksa: ${request.reason || "Permintaan pengguna"}`, null);
+
+    // Buka lock shield & bersihkan markers di tab aktif
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs && tabs[0]?.id) {
+        chrome.tabs.sendMessage(tabs[0].id, { type: "UNLOCK_PAGE" }, () => { if (chrome.runtime.lastError) {} });
+        chrome.tabs.sendMessage(tabs[0].id, { type: "CLEAR_MARKERS" }, () => { if (chrome.runtime.lastError) {} });
+      }
+    });
+
+    sendResponse({ success: true, message: "Agent loop aborted successfully" });
+    return true;
+  }
+
   // Reset riwayat loop & token accumulator saat memulai sesi obrolan/perintah baru
   if (request.action === "RESET_LOOP_TRACKER" || request.type === "RESET_LOOP_TRACKER") {
     actionHistoryPerTab.clear();

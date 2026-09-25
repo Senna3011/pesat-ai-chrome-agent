@@ -218,12 +218,17 @@
 	  - Pengisian otomatis Google Sheets (`.grid-scrollable`, `#waffle-grid-tab`, `.cell-input`) melalui simulasi *Clipboard Event DataTransfer TSV/HTML* dan shortcut paste `Ctrl+V / Cmd+V`.
 	  - Autofill berurutan untuk tabel HTML generic (`<table>`, `[role="grid"]`, `[role="gridcell"]`).
 	  - Registrasi aksi agen baru: `fill_spreadsheet_grid`, `fill_table`, `fill_sheet`.
-	- [x] **UI Token Tracker Indicator & Bug Report Modal (`sidepanel.html`, `sidepanel.js`, `sidepanel.css`)**:
-	  - Indikator penggunaan token di status bar bawah composer: `⚡ Tokens: X (Prompt: Y, Output: Z) | Max: 4,096`.
-	  - Tombol **Bug Report 🐞** di header actions Sidepanel.
-	  - Modal form interaktif untuk pelaporan bug (textarea deskripsi kendala, checkbox lampirkan log aksi, checkbox snapshot DOM, dan notifikasi status pengiriman).
-	- [x] **Verifikasi & Sinkronisasi Build**:
-	  - Sinkronisasi penuh ke folder `extension/` dan seluruh sintaks JavaScript tervalidasi bersih (`node -c`).
+		- [x] **UI Token Tracker Indicator & Bug Report Modal (`sidepanel.html`, `sidepanel.js`, `sidepanel.css`)**:
+		  - Indikator penggunaan token di status bar bawah composer: `⚡ Tokens: X (Prompt: Y, Output: Z) | Max: 4,096`.
+		  - Tombol **Bug Report 🐞** di header actions Sidepanel.
+		  - Modal form interaktif untuk pelaporan bug (textarea deskripsi kendala, checkbox lampirkan log aksi, checkbox snapshot DOM, dan notifikasi status pengiriman).
+		- [x] **Instant Stop / Abort Button (`sidepanel.js`, `sidepanel.html`, `sidepanel.css`, `background.js`)**:
+		  - Transformasi tombol Kirim menjadi tombol **STOP / BATAL merah** beranimasi saat ReAct loop aktif.
+		  - Handler `ABORT_AGENT_LOOP` untuk pembatalan instan, pelepasan kunci halaman (`UNLOCK_PAGE`), dan pembersihan visual marker (`CLEAR_MARKERS`).
+		- [x] **2-Tab Telemetry & Bug Report Dashboard (`index.js`, `/logs`)**:
+		  - Pemisahan antarmuka dashboard menjadi **Tab 1: Dev Activity Logs** (request AI, token usage, filter level) dan **Tab 2: User Bug Reports** (tabel bersih laporan kendala pengguna dengan viewer logs aksi & DOM snapshot).
+		- [x] **Verifikasi & Sinkronisasi Build**:
+		  - Sinkronisasi penuh ke folder `extension/` dan seluruh sintaks JavaScript tervalidasi bersih (`node -c`).
 
 
 

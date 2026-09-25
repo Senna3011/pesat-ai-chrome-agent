@@ -857,22 +857,24 @@ textarea::placeholder {
 }
 
 .send-btn svg {
-  width: 22px;
-  height: 22px;
-}
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-  box-shadow: var(--accent-glow);
-}
-
-.send-btn:hover {
-  opacity: 0.95;
-  transform: translateY(-1px) scale(1.02);
-}
-
-.send-btn svg {
   width: 20px;
   height: 20px;
+}
+
+.send-btn.stop-btn {
+  background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%) !important;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.5) !important;
+  animation: pulseStopBtn 1.6s infinite alternate;
+}
+
+.send-btn.stop-btn:hover {
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%) !important;
+  transform: translateY(-1px) scale(1.04);
+}
+
+@keyframes pulseStopBtn {
+  0% { transform: scale(1); box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
+  100% { transform: scale(1.03); box-shadow: 0 0 20px rgba(239, 68, 68, 0.8); }
 }
 
 /* ==========================================================================

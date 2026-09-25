@@ -4411,14 +4411,22 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       }
     }
 
+    if (e.key === "Escape" && isAgentRunning) {
+      e.preventDefault();
+      abortAgentExecution("Pengguna menekan tombol Escape.");
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      if (!isAgentRunning) {
+        handleSend();
+      }
     }
   });
 
   // ═══════════════════════════════════════════════════
-  // HELPERS: STATUS, STOP, LOG
+  // HELPERS: STATUS, STOP, LOG, ABORT
   // ═══════════════════════════════════════════════════
   function setAgentRunning(running) {
     isAgentRunning = running;
@@ -4426,6 +4434,15 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     if (running) {
       agentStatus.classList.add("working");
       stopBar.classList.remove("hidden");
+      if (btnSend) {
+        btnSend.classList.add("stop-btn");
+        btnSend.title = "Hentikan / Batal Proses AI (Klik untuk STOP)";
+        btnSend.innerHTML = `
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="5" y="5" width="14" height="14" rx="2" ry="2"></rect>
+          </svg>
+        `;
+      }
       sendToContentScript({
         type: "LOCK_PAGE",
         message: "Tab ini sedang dikontrol oleh Pesat AI Agent... (Halaman dikunci agar AI fokus)"
@@ -4433,11 +4450,21 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     } else {
       agentStatus.classList.remove("working");
       stopBar.classList.add("hidden");
+      if (btnSend) {
+        btnSend.classList.remove("stop-btn");
+        btnSend.title = "Kirim Perintah (Enter)";
+        btnSend.innerHTML = `
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5"></line>
+            <polyline points="5 12 12 5 19 12"></polyline>
+          </svg>
+        `;
+      }
       sendToContentScript({ type: "UNLOCK_PAGE" }).catch(() => {});
     }
   }
 
-  btnStopAgent.addEventListener("click", () => {
+  function abortAgentExecution(reason = "Otomatisasi dihentikan oleh pengguna.") {
     shouldStopAgent = true;
     if (activeAbortController) {
       try {
@@ -4451,15 +4478,25 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     if (activeTask) {
       activeTask.status = "PAUSED";
       refreshTaskCard();
-      appendLog("🛑 Task dihentikan oleh pengguna (checkpoint tersimpan untuk dilanjutkan).", "WARN");
+      appendLog(`🛑 Task dihentikan: ${reason}`, "WARN");
       persistTask();
       activeTask = null;
       taskCardMsgIndex = -1;
     }
     setAgentRunning(false);
     hideStatusIndicator();
+
+    // Kirim sinyal ABORT_AGENT_LOOP ke background.js dan content script
+    try {
+      chrome.runtime.sendMessage({ action: "ABORT_AGENT_LOOP", type: "ABORT_AGENT_LOOP", reason });
+    } catch (_) {}
     sendToContentScript({ type: "UNLOCK_PAGE" }).catch(() => {});
-    appendLog("🛑 Otomatisasi dihentikan oleh pengguna.");
+    sendToContentScript({ type: "CLEAR_MARKERS" }).catch(() => {});
+    appendLog(`🛑 ${reason}`);
+  }
+
+  btnStopAgent.addEventListener("click", () => {
+    abortAgentExecution("Otomatisasi dihentikan via Stop Bar.");
   });
 
   function appendLog(logText, level = "INFO", details = null, type = "EVENT") {
@@ -4598,5 +4635,11 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   checkOnboarding();
   appendLog("Sesi ekstensi v5.2 (Direct PesatRouter BYOK) diaktifkan.", "INFO", { timestamp: Date.now() }, "SESSION_OPEN");
 
-  btnSend.addEventListener("click", handleSend);
+  btnSend.addEventListener("click", () => {
+    if (isAgentRunning) {
+      abortAgentExecution("Pengguna menghentikan proses via tombol Stop.");
+    } else {
+      handleSend();
+    }
+  });
 });
