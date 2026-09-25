@@ -1448,74 +1448,91 @@
 
       const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 
-      // 1. Focus target iframe / editor Google Docs
+      // 1. Klik dan aktifkan canvas/editor Google Docs
+      const editorCanvas = document.querySelector(".kix-appview-editor") ||
+                           document.querySelector(".kix-canvas-tile-content") ||
+                           document.querySelector(".kix-page-paginated") ||
+                           document.querySelector(".docs-editor") ||
+                           document.querySelector("#docs-editor") ||
+                           document.body;
+      if (editorCanvas) {
+        try {
+          editorCanvas.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+          editorCanvas.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+          editorCanvas.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+          editorCanvas.focus?.();
+        } catch (_) {}
+      }
+
+      // 2. Focus target iframe / textarea Google Docs
       const iframe = document.querySelector(".docs-texteventtarget-iframe") ||
                      document.querySelector("iframe[class*='texteventtarget']");
 
-      let targetElement = document.activeElement;
+      let innerTextarea = null;
+      let innerDoc = null;
 
       if (iframe) {
         try {
           iframe.focus?.();
-          const iDoc = iframe.contentDocument || iframe.contentWindow?.document;
-          if (iDoc) {
-            const inputEl = iDoc.querySelector("textarea, [contenteditable='true']") || iDoc.body;
-            if (inputEl) {
-              inputEl.focus?.();
-              targetElement = inputEl;
+          if (iframe.contentWindow) {
+            iframe.contentWindow.focus?.();
+          }
+          innerDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (innerDoc) {
+            innerTextarea = innerDoc.querySelector("textarea") ||
+                            innerDoc.querySelector("[contenteditable='true']") ||
+                            innerDoc.body;
+            if (innerTextarea) {
+              innerTextarea.focus?.();
             }
           }
         } catch (e) {
           iframe.focus?.();
-          targetElement = iframe;
-        }
-      } else {
-        const appView = document.querySelector(".kix-appview-editor") ||
-                        document.querySelector(".docs-editor") ||
-                        document.querySelector("[role='textbox']") ||
-                        document.body;
-        if (appView) {
-          appView.focus?.();
-          targetElement = appView;
         }
       }
 
-      let writeSuccess = false;
+      const targetElement = innerTextarea || document.activeElement || iframe || editorCanvas;
 
-      // 2. Clipboard API + Paste Event Simulation (Ctrl+V / Cmd+V)
+      // 3. Tulis ke Clipboard sistem
       try {
         if (navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(cleanText);
         }
-
-        const pasteEvent = new KeyboardEvent("keydown", {
-          key: "v",
-          code: "KeyV",
-          keyCode: 86,
-          which: 86,
-          ctrlKey: !isMac,
-          metaKey: isMac,
-          bubbles: true,
-          cancelable: true
-        });
-
-        (targetElement || document).dispatchEvent(pasteEvent);
-
-        const dt = new DataTransfer();
-        dt.setData("text/plain", cleanText);
-        const pasteClipboardEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
-        (targetElement || document).dispatchEvent(pasteClipboardEv);
-
-        try {
-          document.execCommand("paste");
-        } catch (_) {}
-
-        writeSuccess = true;
       } catch (clipboardErr) {
-        console.warn("[Pesat Docs] Clipboard paste simulation:", clipboardErr);
+        console.warn("[Pesat Docs] Clipboard write error:", clipboardErr);
       }
 
-      // 3. Fallback beforeinput & insertText
+      // 4. Simulasi Keyboard Event Paste (Ctrl+V / Cmd+V)
+      const pasteEvent = new KeyboardEvent("keydown", {
+        key: "v",
+        code: "KeyV",
+        keyCode: 86,
+        which: 86,
+        ctrlKey: !isMac,
+        metaKey: isMac,
+        bubbles: true,
+        cancelable: true
+      });
+
+      if (innerTextarea) innerTextarea.dispatchEvent(pasteEvent);
+      if (innerDoc) innerDoc.dispatchEvent(pasteEvent);
+      if (iframe) iframe.dispatchEvent(pasteEvent);
+      if (editorCanvas) editorCanvas.dispatchEvent(pasteEvent);
+      document.dispatchEvent(pasteEvent);
+
+      // 5. DataTransfer Clipboard Event (Paste Injection)
+      const dt = new DataTransfer();
+      dt.setData("text/plain", cleanText);
+      dt.setData("text/html", cleanText.replace(/\n/g, "<br>"));
+      const pasteClipboardEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+
+      if (innerTextarea) innerTextarea.dispatchEvent(pasteClipboardEv);
+      if (innerDoc) innerDoc.dispatchEvent(pasteClipboardEv);
+      if (iframe) iframe.dispatchEvent(pasteClipboardEv);
+      if (editorCanvas) editorCanvas.dispatchEvent(pasteClipboardEv);
+      document.dispatchEvent(pasteClipboardEv);
+
+      // 6. BeforeInput / InputEvent Fallback
       try {
         const beforeInput = new InputEvent("beforeinput", {
           bubbles: true,
@@ -1523,9 +1540,20 @@
           inputType: "insertText",
           data: cleanText
         });
-        (targetElement || document).dispatchEvent(beforeInput);
+        if (innerTextarea) innerTextarea.dispatchEvent(beforeInput);
+        if (innerDoc) innerDoc.dispatchEvent(beforeInput);
+        document.dispatchEvent(beforeInput);
+      } catch (_) {}
+
+      // 7. ExecCommand Fallback
+      try {
+        if (innerDoc) innerDoc.execCommand("insertText", false, cleanText);
+      } catch (_) {}
+      try {
         document.execCommand("insertText", false, cleanText);
-        writeSuccess = true;
+      } catch (_) {}
+      try {
+        document.execCommand("paste");
       } catch (_) {}
 
       showReadingHUD(`✓ Teks berhasil ditulis ke Google Docs (${cleanText.length} karakter)`, true);

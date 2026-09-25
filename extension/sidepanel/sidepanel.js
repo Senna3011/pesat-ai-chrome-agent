@@ -2671,16 +2671,22 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
       showStatusIndicator();
       appendLog("Mengambil data halaman web untuk menjawab...");
 
+      let activeTabInfo = null;
+      try {
+        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+        if (tabs && tabs[0]) activeTabInfo = tabs[0];
+      } catch (_) {}
+
       const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
       let cleanText = textRes?.text || "";
-      let pageTitle = textRes?.title || "Halaman Web";
-      let pageUrl = textRes?.url || "";
+      let pageTitle = activeTabInfo?.title || textRes?.title || "Halaman Web";
+      let pageUrl = activeTabInfo?.url || textRes?.url || "";
 
       if (!cleanText || cleanText.length < 20) {
         const scanFallback = await sendToContentScript({ type: "SCAN_DOM", showOverlay: false });
         cleanText = scanFallback?.data?.pageContent || "";
-        pageTitle = scanFallback?.data?.title || pageTitle;
-        pageUrl = scanFallback?.data?.url || pageUrl;
+        pageTitle = activeTabInfo?.title || scanFallback?.data?.title || pageTitle;
+        pageUrl = activeTabInfo?.url || scanFallback?.data?.url || pageUrl;
       }
 
       const isSeo = /(?:seo|meta|kata kunci|keyword)/i.test(userPrompt);
@@ -2757,27 +2763,28 @@ FORMAT STRUKTUR OUTPUT:
 ### 💼 FORMAT LINKEDIN (Long-form Post):
 (Format Hook Otoritatif $\\to$ Konteks Strategis $\\to$ 3 Key Takeaways $\\to$ Pertanyaan Diskusi)`;
       } else if (isArticle) {
-        promptPayload = `Tuliskan ARTIKEL EKSEKUTIF, MENDALAM, ELEGAN, DAN SANGAT PROFESIONAL (standar publikasi Harvard Business Review / MIT Technology Review):
+        const paragraphMatch = userPrompt.match(/(?:tulis|buatkan|buat|ketik|isi)\s+(\d+)\s+paragraf/i);
+        const paragraphCount = paragraphMatch ? parseInt(paragraphMatch[1], 10) : null;
 
-[INSTRUKSI & TOPIK PENGGUNA]:
+        promptPayload = `Bertindaklah sebagai MASTER TYPEWRITER & PRINCIPAL ESSAYIST KELAS DUNIA (standar editorial The Economist, Wall Street Journal, dan Paul Graham Essays).
+
+[PERINTAH & TOPIK PENGGUNA]:
 ${userPrompt}
 
-[KONTEKS WEB SAAT INI (jika relevan)]:
+[REFERENSI HALAMAN (jika ada)]:
 Judul: ${pageTitle} | URL: ${pageUrl}
-${cleanText.substring(0, 4000)}
+${cleanText.substring(0, 3000)}
 
-PEDOMAN PENULISAN DOKUMEN ARTIKEL PROFESIONAL:
-1. Gaya Bahasa & Tone: Otoritatif, tajam, mengalir alami, dan berbasis wawasan mendalam (DILARANG menggunakan kalimat pembuka klise seperti "Dalam era digital saat ini...").
-2. Struktur Dokumen:
-   - Judul Utama yang Kuat & Berbobot di baris pertama (# Judul Artikel)
-   - Lead / Paragraf Pembuka yang langsung membedah esensi masalah dan urgensi topik
-   - 2-3 Sub-heading Terstruktur (## Sub-topik) dengan paragraf padat berisi
-   - Poin-poin Analisis & Perbandingan Kunci (gunakan format listicle rapi: • **Poin Kunci**: Penjelasan mendalam)
-   - Kesimpulan Prospektif & Pandangan Strategis Masa Depan
-3. ATURAN KETAT KONTEN:
-   - DILARANG MENYERTAKAN format thread medsos, tweet 1/2, atau hashtag di dalam artikel! Artikel harus 100% murni berupa dokumen tulisan utuh.
-   - DILARANG menggunakan tanda kurung siku placeholder ([Judul...]) atau template kosong.
-   - Buat tulisan lengkap, matang, dan langsung siap dipublikasikan ke lembar kerja resmi.`;
+PEDOMAN KETAT TYPEWRITER EXPERT:
+1. GAYA BAHASA & KEDALAMAN (Zero AI Cliché):
+   - Gunakan gaya penulisan tajam, berwawasan mendalam, elegan, dan mengalir alami tanpa basa-basi.
+   - DILARANG menggunakan pembuka klise seperti: "Dalam era digital saat ini...", "Seperti yang kita ketahui...", "Kecerdasan buatan telah mengubah...", "Di dunia modern ini...".
+   - DILARANG menggunakan kata penghubung kaku: "Selain itu,", "Perlu diingat bahwa,", "Oleh karena itu kita harus,", "Tidak dapat dipungkiri bahwa,".
+   - DILARANG menggunakan penutup klise: "Kesimpulannya,", "Sebagai penutup,", "Mari kita bersama-sama...".
+   - Langsung masuk ke inti argumen, wawasan strategis, dan implikasi nyata dengan diksi berbobot tinggi.
+
+2. KEPATUHAN FORMAT:${paragraphCount ? `\n   - PENGGUNA MEMINTA TEPAT ${paragraphCount} PARAGRAF: Tuliskan TEPAT ${paragraphCount} paragraf yang kaya substansi, padat, dan mengalir mulus tanpa sub-heading atau bullet points tambahan!` : `\n   - Buat judul berbobot di baris pertama (# Judul)\n   - Tuliskan paragraf-paragraf yang utuh, padat, dan terstruktur rapi.`}
+3. DILARANG menggunakan tanda kurung siku placeholder ([...]), template kosong, atau format medsos (tweet/hashtag). Sajikan hasil final yang sempurna dan siap terbit.`;
       } else if (isSeo) {
         promptPayload = `Lakukan audit SEO profesional dan mendalam untuk halaman web berikut:
 
@@ -2871,9 +2878,9 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
                            pageUrl.includes("facebook.com") ||
                            pageUrl.includes("threads.net");
 
-      if (isDocsOrEditor && !isSocialThread && !isProductResearch && (isArticle || /(?:tulis|buatkan|ketik|tempel|masukkan|isi)/i.test(userPrompt))) {
-        showStatusIndicator("Menempelkan teks langsung ke Google Dokumen / editor...");
-        appendLog("📄 Menempelkan teks langsung ke Google Dokumen / Lembar kerja aktif...");
+      if (isDocsOrEditor && !isSocialThread && !isProductResearch && (isArticle || /(?:tulis|buatkan|ketik|tempel|masukkan|isi|paragraf|artikel)/i.test(userPrompt))) {
+        showStatusIndicator("Menuliskan teks langsung ke Google Dokumen / editor...");
+        appendLog("📄 Menuliskan teks langsung ke Google Dokumen / Lembar kerja aktif...");
         await sendToContentScript({
           type: "EXECUTE_ACTION",
           actionData: {
@@ -2881,7 +2888,7 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
             value: aiReply
           }
         });
-        addMessageToCurrentSession("assistant", `### 📝 Artikel Berhasil Dibuat & Dituliskan ke Dokumen\n\n${aiReply}`, {
+        addMessageToCurrentSession("assistant", `### 📝 Teks Berhasil Dibuat & Dituliskan ke Dokumen\n\n${aiReply}`, {
           skipClean: true,
           artifact
         });
