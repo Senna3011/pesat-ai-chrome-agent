@@ -290,8 +290,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           reportedAt: new Date().toISOString()
         };
 
-        // 1. Log telemetry via logger.js / bgLog
-        bgLog("WARN", "USER_BUG_REPORT", `[BUG REPORT] ${reportPayload.userDescription}`, reportPayload, activeTabId);
+        // 1. Log telemetry via logger.js
+        if (typeof sendRemoteLog === "function") {
+          sendRemoteLog({
+            level: "WARN",
+            source: "USER_BUG_REPORT",
+            type: "BUG_REPORT",
+            message: `[BUG REPORT] ${reportPayload.userDescription}`,
+            details: reportPayload,
+            tabId: activeTabId,
+            url: reportPayload.url
+          });
+        }
 
         // 2. Simpan backup lokal di chrome.storage.local
         chrome.storage.local.get(["pesat_bug_reports"], (res) => {
@@ -300,10 +310,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           chrome.storage.local.set({ pesat_bug_reports: reports.slice(0, 50) });
         });
 
-        // 3. Kirim ke remote endpoint jika tersedia
+        // 3. Kirim ke remote endpoint /api/logs dan /api/chat
+        const reportLogEntry = {
+          level: "WARN",
+          source: "USER_BUG_REPORT",
+          type: "BUG_REPORT",
+          message: `[BUG REPORT] ${reportPayload.userDescription}`,
+          details: reportPayload,
+          tabId: activeTabId,
+          url: reportPayload.url,
+          timestamp: Date.now()
+        };
+
         try {
-          const remoteEndpoint = "https://pesat-ai-chrome-agent.senna-947.workers.dev/api/chat";
-          await fetch(remoteEndpoint, {
+          await fetch("https://pesat-ai-chrome-agent.senna-947.workers.dev/api/logs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(reportLogEntry)
+          }).catch(() => {});
+        } catch (_) {}
+
+        try {
+          await fetch("https://pesat-ai-chrome-agent.senna-947.workers.dev/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

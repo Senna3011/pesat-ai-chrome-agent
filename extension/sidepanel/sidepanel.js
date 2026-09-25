@@ -1480,6 +1480,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     const actionLogs = activeTask?.scratchpad || [];
     const lastErr = activeTask?.scratchpad?.slice(-1)?.[0]?.observation || null;
 
+    // Catat juga via sendRemoteLog langsung dari sidepanel
+    try {
+      if (typeof sendRemoteLog === "function") {
+        sendRemoteLog({
+          level: "WARN",
+          source: "USER_BUG_REPORT",
+          type: "BUG_REPORT",
+          message: `[BUG REPORT] ${desc}`,
+          details: {
+            userDescription: desc,
+            actionLogs: bugIncludeLogs?.checked ? actionLogs : [],
+            lastError: lastErr,
+            domSnapshot: domSnap
+          }
+        });
+      }
+    } catch (_) {}
+
     chrome.runtime.sendMessage({
       action: "SUBMIT_BUG_REPORT",
       userDescription: desc,

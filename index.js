@@ -613,9 +613,17 @@ function renderLogsPage(env) {
       }
     }
 
+    function isBugReport(l) {
+      if (!l) return false;
+      const type = String(l.type || "").toUpperCase();
+      const src = String(l.source || "").toUpperCase();
+      const msg = String(l.message || "").toUpperCase();
+      return type.includes("BUG") || src.includes("BUG") || msg.includes("[BUG REPORT]") || !!l.details?.userDescription;
+    }
+
     function updateStats() {
-      const devLogs = allLogs.filter(l => l.type !== "BUG_REPORT" && l.source !== "USER_BUG_REPORT");
-      const bugReports = allLogs.filter(l => l.type === "BUG_REPORT" || l.source === "USER_BUG_REPORT");
+      const devLogs = allLogs.filter(l => !isBugReport(l));
+      const bugReports = allLogs.filter(isBugReport);
 
       tabBadgeLogs.textContent = devLogs.length;
       tabBadgeBugs.textContent = bugReports.length;
@@ -639,7 +647,7 @@ function renderLogsPage(env) {
     }
 
     function renderLogs() {
-      const devLogs = allLogs.filter(l => l.type !== "BUG_REPORT" && l.source !== "USER_BUG_REPORT");
+      const devLogs = allLogs.filter(l => !isBugReport(l));
       let filtered = devLogs.slice().reverse();
       if (activeFilter !== "ALL") {
         filtered = filtered.filter(l => (l.level || "INFO").toUpperCase() === activeFilter);
@@ -688,7 +696,7 @@ function renderLogsPage(env) {
     }
 
     function renderBugReports() {
-      const bugReports = allLogs.filter(l => l.type === "BUG_REPORT" || l.source === "USER_BUG_REPORT").slice().reverse();
+      const bugReports = allLogs.filter(isBugReport).slice().reverse();
       let filtered = bugReports;
 
       if (searchBugsQuery.trim()) {
@@ -1476,11 +1484,41 @@ export default {
 	        }
 	      }
 
-	      try {
-	        const body = await request.json();
-	        const userPrompt = body.prompt || "";
-	        const conversationHistory = body.messages || [];
-	        const rawUserQuery = body.userQuery || "";
+		      try {
+		        const body = await request.json();
+
+		        // ── Endpoint Bug Report Proxy Handler ──
+		        if (body.action === "SUBMIT_BUG_REPORT" || body.isBugReport || (body.userDescription && !body.prompt)) {
+		          const bugEntry = pushPesatLog({
+		            level: "WARN",
+		            source: "USER_BUG_REPORT",
+		            type: "BUG_REPORT",
+		            message: `[BUG REPORT] ${body.userDescription || "Tidak ada deskripsi"}`,
+		            details: {
+		              userDescription: body.userDescription || "",
+		              url: body.url || "",
+		              tabTitle: body.tabTitle || "",
+		              lastError: body.lastError || null,
+		              actionLogs: body.actionLogs || [],
+		              domSnapshot: body.domSnapshot ? String(body.domSnapshot).slice(0, 3000) : null,
+		              reportedAt: new Date().toISOString()
+		            },
+		            url: body.url || null
+		          });
+
+		          return new Response(
+		            JSON.stringify({
+		              success: true,
+		              message: "Laporan bug berhasil diterima dan dicatat ke sistem telemetry.",
+		              reportId: bugEntry.id
+		            }),
+		            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+		          );
+		        }
+
+		        const userPrompt = body.prompt || "";
+		        const conversationHistory = body.messages || [];
+		        const rawUserQuery = body.userQuery || "";
 
 	        pushPesatLog({
 	          level: "AI",
