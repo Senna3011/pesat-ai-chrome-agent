@@ -1078,14 +1078,40 @@ document.addEventListener("DOMContentLoaded", async () => {
                   }, 15000);
 
                   appendLog(`⤴️ Thread "${a.name}" berhasil ditempel ke kotak postingan Twitter/X.`);
-	                } else if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.includes("Spreadsheet") || a.name?.includes("Tabel")) {
-	                  showStatusIndicator("Mengisikan tabel data ke spreadsheet...");
+		                } else if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.includes("Spreadsheet") || a.name?.includes("Tabel")) {
+		                  showStatusIndicator("Mengisikan tabel data ke spreadsheet...");
+		                  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+
+		                  // 1. Pindahkan fokus peramban dari Sidepanel ke jendela Google Sheets secara otomatis
+		                  try {
+		                    const [tab] = await new Promise(r => chrome.tabs.query({ active: true, currentWindow: true }, r));
+		                    if (tab && tab.id) {
+		                      await chrome.tabs.update(tab.id, { active: true });
+		                      if (tab.windowId) await chrome.windows.update(tab.windowId, { focused: true });
+		                    }
+		                  } catch (_) {}
+
+		                  try {
+		                    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(contentStr);
+		                  } catch (_) {}
+
+		                  // 2. Trigger native paste via background worker
+		                  await sendToBackground({
+		                    action: "NATIVE_PASTE_SPREADSHEET",
+		                    tsv_data: contentStr,
+		                    isMac
+		                  }).catch(() => {});
+
+		                  // 3. Kirim sinyal PASTE_TSV_TO_SHEET ke content script
 		                  await sendToContentScript({
-		                    type: "EXECUTE_ACTION",
+		                    type: "PASTE_TSV_TO_SHEET",
+		                    action: "PASTE_TSV_TO_SHEET",
+		                    params: { tsv_data: contentStr },
 		                    actionData: { action: "fill_spreadsheet_grid", tsv_data: contentStr, value: contentStr }
 		                  }, 10000);
-	                  appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet aktif.`);
-	                } else {
+
+		                  appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet aktif.`);
+		                } else {
 	                  showStatusIndicator("Menempelkan teks ke editor aktif...");
 	                  await sendToContentScript({
 	                    type: "EXECUTE_ACTION",

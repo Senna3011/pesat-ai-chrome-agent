@@ -104,7 +104,17 @@ export async function onRequestPost(context) {
 
     const userPrompt = body.prompt || "";
     const conversationHistory = body.messages || [];
-    const maxTokens = Number(body.max_tokens) || 4096;
+
+    const isSummarize =
+      !!body.isSummarize ||
+      (typeof userPrompt === "string" &&
+        (/\[TEKS UTAMA ARTIKEL/i.test(userPrompt) ||
+          /(?:^|\s)(?:rangkum|ringkas|summarize|ringkasan|rangkuman)(?:\s|$)/i.test(body.userQuery || userPrompt)));
+
+    // Dynamic Token Limit Allocation (Light Task vs Heavy Task)
+    const isHeavyTask = isSummarize ||
+      /(?:artikel|tulis|buatkan|paragraf|blog|esai|tulisan|draf|dokumen|surat|tabel|spreadsheet|komparasi|riset|laporan|csv)/i.test(userPrompt || body.userQuery || "");
+    const maxTokens = Number(body.max_tokens) || (isHeavyTask ? 4096 : 500);
 
     const authHeader = request.headers.get("Authorization") || "";
     const headerKey = authHeader.replace(/^Bearer\s+/i, "").trim();
@@ -112,12 +122,6 @@ export async function onRequestPost(context) {
 
     const AI_BASE_URL = env.AI_BASE_URL || "https://api.pesatrouter.com/v1/chat/completions";
     const AI_MODEL_NAME = body.model || env.AI_MODEL_NAME || "pesat-flash";
-
-    const isSummarize =
-      !!body.isSummarize ||
-      (typeof userPrompt === "string" &&
-        (/\[TEKS UTAMA ARTIKEL/i.test(userPrompt) ||
-          /(?:^|\s)(?:rangkum|ringkas|summarize|ringkasan|rangkuman)(?:\s|$)/i.test(body.userQuery || userPrompt)));
 
     const SUMMARIZE_SYSTEM_PROMPT = `
 Kamu adalah asisten perangkum halaman web. Diberikan teks utama dari halaman web berikut, buat ringkasan poin-poin penting (bullet points) dari isi substansi artikel/informasi utama. ABAIKAN menu navigasi, tautan terkait, atau elemen header/footer jika ada yang tersisa.
