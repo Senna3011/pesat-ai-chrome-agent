@@ -94,6 +94,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   const btnComposerModel = document.getElementById("btnComposerModel");
   const composerModelName = document.getElementById("composerModelName");
 
+  // Bug Report & Token Tracker Elements
+  const btnBugReport = document.getElementById("btnBugReport");
+  const bugReportModal = document.getElementById("bugReportModal");
+  const btnCloseBugReport = document.getElementById("btnCloseBugReport");
+  const btnCancelBugReport = document.getElementById("btnCancelBugReport");
+  const btnSubmitBugReport = document.getElementById("btnSubmitBugReport");
+  const bugDescriptionInput = document.getElementById("bugDescriptionInput");
+  const bugIncludeLogs = document.getElementById("bugIncludeLogs");
+  const bugIncludeDom = document.getElementById("bugIncludeDom");
+  const bugReportAlert = document.getElementById("bugReportAlert");
+  const tokenTrackerBar = document.getElementById("tokenTrackerBar");
+  const tokenTrackerText = document.getElementById("tokenTrackerText");
+
   // ═══════════════════════════════════════════════════
   // KONFIGURASI TERPUSAT & BYOK STATE
   // ═══════════════════════════════════════════════════
@@ -344,6 +357,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     saveSessions();
     renderCurrentSession();
     historyDrawer.classList.add("hidden");
+
+    // Reset Token Tracker UI & background loop tracker
+    try {
+      chrome.runtime.sendMessage({ action: "RESET_LOOP_TRACKER" });
+      updateTokenTrackerUI({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
+    } catch (_) {}
+
     if (!silent) appendLog("Konteks obrolan baru dimulai.");
   }
 
@@ -1362,7 +1382,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     btnToggleSettingsKey.addEventListener("click", () => togglePasswordEye(apiKeyInput, btnToggleSettingsKey));
   }
 
-  // ── Usage Tracker (Informasional Pengganti Kuota) ──
+  // ── Usage Tracker (Informasional Pengganti Kuota & Realtime Task Token Tracker) ──
+  function updateTokenTrackerUI(usage = {}) {
+    if (!tokenTrackerText) return;
+    const promptToks = Number(usage.prompt_tokens) || 0;
+    const compToks = Number(usage.completion_tokens) || 0;
+    const totalToks = Number(usage.total_tokens) || (promptToks + compToks);
+    const maxToks = Number(storedSettings.maxTokens || 4096);
+
+    tokenTrackerText.innerHTML = `Tokens: <strong>${totalToks.toLocaleString("id-ID")}</strong> (Prompt: ${promptToks.toLocaleString("id-ID")}, Output: ${compToks.toLocaleString("id-ID")}) | Max: ${maxToks.toLocaleString("id-ID")}`;
+  }
+
   async function refreshUsageDisplay() {
     try {
       const today = new Date().toISOString().slice(0, 10);
@@ -1371,6 +1401,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       const toks = data.usageDate === today ? (data.usageTokens || 0) : 0;
       if (statTodayRequests) statTodayRequests.textContent = `${reqs} req`;
       if (statTodayTokens) statTodayTokens.textContent = `${toks.toLocaleString("id-ID")}`;
+
+      // Ambil token usage akumulatif task dari background
+      chrome.runtime.sendMessage({ action: "GET_TOKEN_USAGE" }, (res) => {
+        if (res && res.taskTokenUsage) {
+          updateTokenTrackerUI(res.taskTokenUsage);
+        }
+      });
     } catch (e) {}
   }
 
@@ -1391,7 +1428,103 @@ document.addEventListener("DOMContentLoaded", async () => {
         usageTokens: toks
       });
       refreshUsageDisplay();
+
+      // Rekam juga ke background tracker
+      chrome.runtime.sendMessage({ action: "RECORD_TOKEN_USAGE", usage });
     } catch (e) {}
+  }
+
+  // ── Bug Report Modal Logic ──
+  function openBugReportModal() {
+    if (!bugReportModal) return;
+    if (bugDescriptionInput) bugDescriptionInput.value = "";
+    if (bugReportAlert) {
+      bugReportAlert.className = "hidden";
+      bugReportAlert.textContent = "";
+    }
+    bugReportModal.classList.remove("hidden");
+    setTimeout(() => bugDescriptionInput?.focus(), 80);
+  }
+
+  function closeBugReportModal() {
+    if (!bugReportModal) return;
+    bugReportModal.classList.add("hidden");
+  }
+
+  async function submitBugReport() {
+    const desc = (bugDescriptionInput?.value || "").trim();
+    if (!desc) {
+      if (bugReportAlert) {
+        bugReportAlert.className = "";
+        bugReportAlert.style.background = "rgba(239, 68, 68, 0.2)";
+        bugReportAlert.style.border = "1px solid rgba(239, 68, 68, 0.4)";
+        bugReportAlert.style.color = "#fca5a5";
+        bugReportAlert.textContent = "Silakan tuliskan deskripsi kendala terlebih dahulu.";
+      }
+      return;
+    }
+
+    if (btnSubmitBugReport) {
+      btnSubmitBugReport.disabled = true;
+      btnSubmitBugReport.innerHTML = `<span>⏳ Mengirim...</span>`;
+    }
+
+    let domSnap = null;
+    if (bugIncludeDom?.checked) {
+      try {
+        const scanRes = await sendToContentScript({ type: "SCAN_DOM", showOverlay: false });
+        domSnap = scanRes?.data?.reducedDOM || null;
+      } catch (_) {}
+    }
+
+    const actionLogs = activeTask?.scratchpad || [];
+    const lastErr = activeTask?.scratchpad?.slice(-1)?.[0]?.observation || null;
+
+    chrome.runtime.sendMessage({
+      action: "SUBMIT_BUG_REPORT",
+      userDescription: desc,
+      includeLogs: !!bugIncludeLogs?.checked,
+      includeDom: !!bugIncludeDom?.checked,
+      domSnapshot: domSnap,
+      actionLogs: bugIncludeLogs?.checked ? actionLogs : [],
+      lastError: lastErr
+    }, (response) => {
+      if (btnSubmitBugReport) {
+        btnSubmitBugReport.disabled = false;
+        btnSubmitBugReport.innerHTML = `<span>🚀 Kirim Laporan</span>`;
+      }
+
+      if (response && response.success) {
+        if (bugReportAlert) {
+          bugReportAlert.className = "";
+          bugReportAlert.style.background = "rgba(16, 185, 129, 0.2)";
+          bugReportAlert.style.border = "1px solid rgba(16, 185, 129, 0.4)";
+          bugReportAlert.style.color = "#86efac";
+          bugReportAlert.textContent = "✅ Laporan bug berhasil dikirim! Terima kasih atas masukan Anda.";
+        }
+        setTimeout(() => {
+          closeBugReportModal();
+        }, 1400);
+      } else {
+        if (bugReportAlert) {
+          bugReportAlert.className = "";
+          bugReportAlert.style.background = "rgba(239, 68, 68, 0.2)";
+          bugReportAlert.style.border = "1px solid rgba(239, 68, 68, 0.4)";
+          bugReportAlert.style.color = "#fca5a5";
+          bugReportAlert.textContent = response?.error || "Gagal mengirim laporan. Coba lagi.";
+        }
+      }
+    });
+  }
+
+  if (btnBugReport) btnBugReport.addEventListener("click", openBugReportModal);
+  if (btnCloseBugReport) btnCloseBugReport.addEventListener("click", closeBugReportModal);
+  if (btnCancelBugReport) btnCancelBugReport.addEventListener("click", closeBugReportModal);
+  if (btnSubmitBugReport) btnSubmitBugReport.addEventListener("click", submitBugReport);
+  if (bugReportModal) {
+    bugReportModal.addEventListener("click", (e) => {
+      if (e.target === bugReportModal) closeBugReportModal();
+    });
   }
 
   // ── Test Connection Helper ──
@@ -4204,8 +4337,13 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     }
   });
 
-  // Download Observer Listener (§ 26)
+  // Runtime Message Observer Listener (Download & Token Usage)
   chrome.runtime.onMessage.addListener((msg) => {
+    if (msg && msg.type === "TOKEN_UPDATE" && msg.usage) {
+      updateTokenTrackerUI(msg.usage);
+      return;
+    }
+
     if (msg && msg.action === "DOWNLOAD_COMPLETED_EVENT" && msg.downloadItem) {
       const item = msg.downloadItem;
       appendLog(`⬇️ Download terdeteksi selesai: ${item.filename} (${item.fileSize} bytes)`);

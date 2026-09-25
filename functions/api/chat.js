@@ -72,15 +72,46 @@ export async function onRequestPost(context) {
 
   try {
     const body = await request.json();
+
+    // ── Endpoint Bug Report Proxy Handler ──
+    if (body.action === "SUBMIT_BUG_REPORT" || body.isBugReport || body.userDescription) {
+      const bugEntry = pushPesatLog({
+        level: "WARN",
+        source: "USER_BUG_REPORT",
+        type: "BUG_REPORT",
+        message: `[BUG REPORT] ${body.userDescription || "Tidak ada deskripsi"}`,
+        details: {
+          userDescription: body.userDescription || "",
+          url: body.url || "",
+          tabTitle: body.tabTitle || "",
+          lastError: body.lastError || null,
+          actionLogs: body.actionLogs || [],
+          domSnapshot: body.domSnapshot ? String(body.domSnapshot).slice(0, 3000) : null,
+          reportedAt: new Date().toISOString()
+        },
+        url: body.url || null
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "Laporan bug berhasil diterima dan dicatat ke sistem telemetry.",
+          reportId: bugEntry.id
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const userPrompt = body.prompt || "";
     const conversationHistory = body.messages || [];
+    const maxTokens = Number(body.max_tokens) || 4096;
 
     const authHeader = request.headers.get("Authorization") || "";
     const headerKey = authHeader.replace(/^Bearer\s+/i, "").trim();
     const AI_API_KEY = headerKey || env.AI_API_KEY || "";
 
     const AI_BASE_URL = env.AI_BASE_URL || "https://api.pesatrouter.com/v1/chat/completions";
-    const AI_MODEL_NAME = env.AI_MODEL_NAME || "pesat-flash";
+    const AI_MODEL_NAME = body.model || env.AI_MODEL_NAME || "pesat-flash";
 
     const isSummarize =
       !!body.isSummarize ||
@@ -339,6 +370,7 @@ PANDUAN ANTI-LOOPING & GUARDRAILS:
 
     const payload = {
       model: AI_MODEL_NAME,
+      max_tokens: maxTokens,
       messages: [
         { role: "system", content: isSummarize ? SUMMARIZE_SYSTEM_PROMPT : SYSTEM_PROMPT },
         ...conversationHistory,
@@ -352,7 +384,12 @@ PANDUAN ANTI-LOOPING & GUARDRAILS:
         JSON.stringify({
           success: true,
           reply: `🤖 [Pesat AI Worker Connected]\nPrompt diterima.\n\nSilakan masukkan AI_API_KEY di dashboard Cloudflare untuk menghubungkan ke model AI nyata.`,
-          mock: true
+          mock: true,
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 25,
+            total_tokens: 35
+          }
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -390,17 +427,31 @@ PANDUAN ANTI-LOOPING & GUARDRAILS:
       );
     }
 
-    const reply = data?.choices?.[0]?.message?.content || data?.reply || rawText;
+    const choice = data?.choices?.[0] || {};
+    const reply = choice?.message?.content || data?.reply || rawText;
+    const toolCalls = choice?.message?.tool_calls || null;
+    const usage = data?.usage || {
+      prompt_tokens: Math.ceil((userPrompt.length + JSON.stringify(conversationHistory).length) / 4),
+      completion_tokens: Math.ceil(reply.length / 4),
+      total_tokens: Math.ceil((userPrompt.length + JSON.stringify(conversationHistory).length + reply.length) / 4)
+    };
+
     pushPesatLog({
       level: "AI",
       source: "CF_PAGES",
       type: "AI_RESPONSE",
-      message: `Respon AI diterima (${reply.length} chars)`,
-      details: { reply, model: AI_MODEL_NAME }
+      message: `Respon AI diterima (${reply.length} chars) | Tokens: ${usage.total_tokens}`,
+      details: { reply, model: AI_MODEL_NAME, usage }
     });
 
     return new Response(
-      JSON.stringify({ success: true, reply }),
+      JSON.stringify({
+        success: true,
+        reply,
+        message: choice?.message || { role: "assistant", content: reply },
+        tool_calls: toolCalls,
+        usage: usage
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

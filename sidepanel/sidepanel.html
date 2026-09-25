@@ -41,6 +41,9 @@
         </div>
       </div>
       <div class="header-actions">
+        <button class="icon-btn" id="btnBugReport" title="Laporkan Bug / Kendala (🐞)">
+          <span style="font-size: 14px;">🐞</span>
+        </button>
         <button class="icon-btn" id="btnNewChat" title="Mulai Obrolan / Konteks Baru (+)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -439,7 +442,50 @@
           </div>
         </div>
       </div>
+
+      <!-- Token Tracker Bar (Usage Metrics) -->
+      <div class="token-tracker-bar" id="tokenTrackerBar" title="Penggunaan Token Sesi Task Ini">
+        <span class="token-tracker-icon">⚡</span>
+        <span class="token-tracker-text" id="tokenTrackerText">Tokens: <strong>0</strong> (Prompt: 0, Output: 0) | Max: 4,096</span>
+      </div>
     </footer>
+  </div>
+
+  <!-- BUG REPORT MODAL -->
+  <div class="modal-overlay hidden" id="bugReportModal">
+    <div class="bug-report-card">
+      <div class="drawer-header" style="padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size: 18px;">🐞</span>
+          <h3 style="font-size: 15px; font-weight: 700; color: #f8fafc; margin: 0;">Laporkan Bug / Kendala</h3>
+        </div>
+        <button class="close-btn" id="btnCloseBugReport">✕</button>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;">
+        <label style="font-size: 12.5px; color: #94a3b8; font-weight: 500;">Jelaskan kendala atau perilaku yang dialami:</label>
+        <textarea id="bugDescriptionInput" placeholder="Contoh: Saat mengisi formulir, tombol tidak terklik otomatis..." rows="4" style="width: 100%; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; padding: 10px; font-size: 13px; resize: vertical; font-family: inherit; box-sizing: border-box; min-height: 70px;"></textarea>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 2px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #cbd5e1; cursor: pointer;">
+            <input type="checkbox" id="bugIncludeLogs" checked style="accent-color: #38bdf8;" />
+            <span>Lampirkan riwayat log aksi terakhir</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #cbd5e1; cursor: pointer;">
+            <input type="checkbox" id="bugIncludeDom" checked style="accent-color: #38bdf8;" />
+            <span>Lampirkan snapshot struktur DOM tab aktif</span>
+          </label>
+        </div>
+
+        <div id="bugReportAlert" class="hidden" style="padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 500;"></div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
+          <button type="button" class="btn btn-secondary-pill" id="btnCancelBugReport" style="padding: 6px 14px; font-size: 12px;">Batal</button>
+          <button type="button" class="btn btn-primary-pill" id="btnSubmitBugReport" style="padding: 6px 18px; font-size: 12.5px; font-weight: 600;">
+            <span>🚀 Kirim Laporan</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="../config.js"></script>

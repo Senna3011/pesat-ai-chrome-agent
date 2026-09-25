@@ -226,12 +226,15 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
         payloadMessages.push({ role: "user", content: promptText });
       }
 
+      const maxTokens = Number(config.maxTokens || config.max_tokens) || 4096;
+
       if (apiKey) {
         const baseUrl = (config.apiBaseUrl || "").trim() || DEFAULT_PESATROUTER;
         const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
 
         const requestBody = {
           model: model,
+          max_tokens: maxTokens,
           messages: payloadMessages,
           temperature: phase === "chat" ? 0.3 : 0.1
         };
@@ -254,11 +257,24 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
 
         const data = (typeof res === "object" && res !== null && !(res instanceof Response)) ? res : await res.json();
         const choice = data?.choices?.[0] || {};
+        const replyText = choice.message?.content || "";
+        const usage = data.usage || {
+          prompt_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length) / 4),
+          completion_tokens: Math.ceil(replyText.length / 4),
+          total_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length + replyText.length) / 4)
+        };
+
+        try {
+          if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+            chrome.runtime.sendMessage({ action: "RECORD_TOKEN_USAGE", usage }).catch(() => {});
+          }
+        } catch (_) {}
+
         return {
           message: choice.message || { role: "assistant", content: "" },
-          reply: choice.message?.content || "",
+          reply: replyText,
           tool_calls: choice.message?.tool_calls || null,
-          usage: data.usage || null
+          usage: usage
         };
       } else {
         // Fallback Cloudflare Worker
@@ -272,6 +288,7 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
             prompt: promptText,
             phase: phase,
             model: model,
+            max_tokens: maxTokens,
             domTree: domTree
           }),
           signal: signal
@@ -279,11 +296,24 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
 
         const data = (typeof res === "object" && res !== null && !(res instanceof Response)) ? res : await res.json();
         const choice = data?.choices?.[0] || {};
+        const replyText = choice.message?.content || data?.reply || data?.response || "";
+        const usage = data.usage || {
+          prompt_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length) / 4),
+          completion_tokens: Math.ceil(replyText.length / 4),
+          total_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length + replyText.length) / 4)
+        };
+
+        try {
+          if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+            chrome.runtime.sendMessage({ action: "RECORD_TOKEN_USAGE", usage }).catch(() => {});
+          }
+        } catch (_) {}
+
         return {
-          message: choice.message || { role: "assistant", content: data.reply || data.response || "" },
-          reply: choice.message?.content || data.reply || data.response || "",
+          message: choice.message || { role: "assistant", content: replyText },
+          reply: replyText,
           tool_calls: choice.message?.tool_calls || null,
-          usage: data.usage || null
+          usage: usage
         };
       }
     }

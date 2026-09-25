@@ -197,10 +197,33 @@
 	  - Deteksi domain `docs.google.com` berbasis `chrome.tabs.query` sebagai *source-of-truth*.
 	  - Injeksi langsung ke lembar kerja Google Docs via simulasi klik canvas `.kix-appview-editor`, fokus ke iframe `.docs-texteventtarget-iframe`, dan *DataTransfer Clipboard Paste Injection* (`Ctrl+V` / `Cmd+V`) + `beforeinput` fallback.
 	  - Pangkas delay stabilitas DOM dari 3500ms menjadi 600–2000ms untuk pengetikan cepat dan instan (2–3 detik).
-	- [x] **Master Typewriter & Principal Essayist Generation Engine (`sidepanel.js`, `ai-engine.js`)**:
-	  - Eliminasi total klise AI generik (*"Dalam era digital saat ini..."*, *"Selain itu,"*, *"Kesimpulannya,"*).
-	  - Kepatuhan presisi terhadap permintaan jumlah paragraf pengguna (misal: tepat 3 paragraf utuh tanpa heading tambahan yang tidak diminta).
-	  - Diksi berbobot tinggi standar editorial *The Economist*, *WSJ*, dan *Paul Graham Essays*.
-	- [x] **Sinkronisasi Kode Penuh**: Seluruh pembaruan telah disinkronkan secara konsisten ke direktori root dan `extension/`.
+		- [x] **Master Typewriter & Principal Essayist Generation Engine (`sidepanel.js`, `ai-engine.js`)**:
+		  - Eliminasi total klise AI generik (*"Dalam era digital saat ini..."*, *"Selain itu,"*, *"Kesimpulannya,"*).
+		  - Kepatuhan presisi terhadap permintaan jumlah paragraf pengguna (misal: tepat 3 paragraf utuh tanpa heading tambahan yang tidak diminta).
+		  - Diksi berbobot tinggi standar editorial *The Economist*, *WSJ*, dan *Paul Graham Essays*.
+		- [x] **Sinkronisasi Kode Penuh**: Seluruh pembaruan telah disinkronkan secara konsisten ke direktori root dan `extension/`.
+
+	### 🗓️ Day 8 (Bug Report UI, Spreadsheet Input Engine, & Realtime Token Tracker)
+	- [x] **Max Token Config & Metrics Usage Extractor (`functions/api/chat.js`, `index.js`)**:
+	  - Penambahan parameter `max_tokens` (default `4096`) pada seluruh payload panggilan model PesatRouter / LLM.
+	  - Ekstraksi objek metrics `usage` (`prompt_tokens`, `completion_tokens`, `total_tokens`) dari respon AI untuk dikembalikan secara transparan ke client extension.
+	- [x] **Bug Report Proxy & Telemetry Endpoint (`functions/api/chat.js`)**:
+	  - Handler `SUBMIT_BUG_REPORT` di serverless backend Cloudflare untuk menerima, mencatat, dan mengagregasikan laporan bug pengguna beserta metadata tab dan screenshot/DOM snapshot.
+	- [x] **Task Token Usage Accumulator (`background.js`, `ai-engine.js`)**:
+	  - Variabel `taskTokenUsage` di background worker untuk mengakumulasi pemakaian token per sesi task (`prompt_tokens`, `completion_tokens`, `total_tokens`).
+	  - Penyiaran otomatis pesan `TOKEN_UPDATE` ke sidepanel dan reset akumulasi saat memulai sesi obrolan baru.
+	  - Listener `SUBMIT_BUG_REPORT` di background script yang mengumpulkan log aksi terakhir, snapshot DOM aktif, dan menyimpan backup riwayat di `chrome.storage.local`.
+	- [x] **Spreadsheet & Data Grid Table Input Engine (`content.js`)**:
+	  - Fungsi `handleSpreadsheetGridInput` untuk parsing data tabel dinamis (CSV, TSV, Markdown Table `| col1 | col2 |`, atau 2D array).
+	  - Pengisian otomatis Google Sheets (`.grid-scrollable`, `#waffle-grid-tab`, `.cell-input`) melalui simulasi *Clipboard Event DataTransfer TSV/HTML* dan shortcut paste `Ctrl+V / Cmd+V`.
+	  - Autofill berurutan untuk tabel HTML generic (`<table>`, `[role="grid"]`, `[role="gridcell"]`).
+	  - Registrasi aksi agen baru: `fill_spreadsheet_grid`, `fill_table`, `fill_sheet`.
+	- [x] **UI Token Tracker Indicator & Bug Report Modal (`sidepanel.html`, `sidepanel.js`, `sidepanel.css`)**:
+	  - Indikator penggunaan token di status bar bawah composer: `⚡ Tokens: X (Prompt: Y, Output: Z) | Max: 4,096`.
+	  - Tombol **Bug Report 🐞** di header actions Sidepanel.
+	  - Modal form interaktif untuk pelaporan bug (textarea deskripsi kendala, checkbox lampirkan log aksi, checkbox snapshot DOM, dan notifikasi status pengiriman).
+	- [x] **Verifikasi & Sinkronisasi Build**:
+	  - Sinkronisasi penuh ke folder `extension/` dan seluruh sintaks JavaScript tervalidasi bersih (`node -c`).
+
 
 

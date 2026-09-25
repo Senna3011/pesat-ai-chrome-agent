@@ -1339,8 +1339,10 @@ ATURAN AKURASI ELEMENT ID (@eN):
 - Pastikan mencocokkan kolom teks/password dan tombol submit sesuai Accessible Name / Placeholder pada daftar.
 `.trim();
 
+        const maxTokens = Number(body.max_tokens) || 4096;
         const payload = {
           model: AI_MODEL_NAME,
+          max_tokens: maxTokens,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             ...conversationHistory,
@@ -1369,16 +1371,30 @@ ATURAN AKURASI ELEMENT ID (@eN):
             }
 
             if (aiResponse.ok) {
-              const reply = data?.choices?.[0]?.message?.content || data?.reply || rawText;
+              const choice = data?.choices?.[0] || {};
+              const reply = choice?.message?.content || data?.reply || rawText;
+              const usage = data?.usage || {
+                prompt_tokens: Math.ceil((userPrompt.length + JSON.stringify(conversationHistory).length) / 4),
+                completion_tokens: Math.ceil(reply.length / 4),
+                total_tokens: Math.ceil((userPrompt.length + JSON.stringify(conversationHistory).length + reply.length) / 4)
+              };
+
               pushPesatLog({
                 level: "AI",
                 source: "CF_WORKER",
                 type: "AI_RESPONSE",
-                message: `Respon Live AI diterima (${reply.length} chars)`,
-                details: { reply, model: AI_MODEL_NAME }
+                message: `Respon Live AI diterima (${reply.length} chars) | Tokens: ${usage.total_tokens}`,
+                details: { reply, model: AI_MODEL_NAME, usage }
               });
               return new Response(
-                JSON.stringify({ success: true, reply, source: "live_ai" }),
+                JSON.stringify({
+                  success: true,
+                  reply,
+                  message: choice?.message || { role: "assistant", content: reply },
+                  tool_calls: choice?.message?.tool_calls || null,
+                  usage: usage,
+                  source: "live_ai"
+                }),
                 { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
               );
             }

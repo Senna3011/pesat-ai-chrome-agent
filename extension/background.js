@@ -19,6 +19,13 @@ function bgLog(level, type, message, details = null, tabId = null) {
 // Action history tracker untuk pencegahan infinite loop
 const actionHistoryPerTab = new Map();
 
+// Task Token Usage Accumulator Tracker
+let taskTokenUsage = {
+  prompt_tokens: 0,
+  completion_tokens: 0,
+  total_tokens: 0
+};
+
 // Buka side panel otomatis ketika ikon ekstensi di-klik di toolbar
 chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
@@ -206,10 +213,95 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  // Reset riwayat loop saat memulai sesi obrolan/perintah baru
-  if (request.action === "RESET_LOOP_TRACKER") {
+  // Reset riwayat loop & token accumulator saat memulai sesi obrolan/perintah baru
+  if (request.action === "RESET_LOOP_TRACKER" || request.type === "RESET_LOOP_TRACKER") {
     actionHistoryPerTab.clear();
-    sendResponse({ success: true });
+    taskTokenUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+    sendResponse({ success: true, taskTokenUsage });
+    return true;
+  }
+
+  // Token Usage Tracking Handlers
+  if (request.action === "RECORD_TOKEN_USAGE" || request.type === "RECORD_TOKEN_USAGE") {
+    const usage = request.usage || {};
+    taskTokenUsage.prompt_tokens += (Number(usage.prompt_tokens) || 0);
+    taskTokenUsage.completion_tokens += (Number(usage.completion_tokens) || 0);
+    taskTokenUsage.total_tokens += (Number(usage.total_tokens) || ((Number(usage.prompt_tokens) || 0) + (Number(usage.completion_tokens) || 0)));
+
+    // Broadcast update token ke seluruh view yang aktif
+    try {
+      chrome.runtime.sendMessage({
+        type: "TOKEN_UPDATE",
+        usage: { ...taskTokenUsage }
+      }).catch(() => {});
+    } catch (_) {}
+
+    sendResponse({ success: true, taskTokenUsage });
+    return true;
+  }
+
+  if (request.action === "GET_TOKEN_USAGE" || request.type === "GET_TOKEN_USAGE") {
+    sendResponse({ success: true, taskTokenUsage });
+    return true;
+  }
+
+  // Bug Report Collector Handler
+  if (request.action === "SUBMIT_BUG_REPORT" || request.type === "SUBMIT_BUG_REPORT") {
+    (async () => {
+      try {
+        let activeTabUrl = "";
+        let activeTabTitle = "";
+        let activeTabId = null;
+
+        try {
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tabs && tabs[0]) {
+            activeTabUrl = tabs[0].url || "";
+            activeTabTitle = tabs[0].title || "";
+            activeTabId = tabs[0].id || null;
+          }
+        } catch (_) {}
+
+        const reportPayload = {
+          userDescription: request.userDescription || request.description || "Tidak ada deskripsi",
+          url: request.url || activeTabUrl,
+          tabTitle: activeTabTitle,
+          tabId: activeTabId,
+          lastError: request.lastError || null,
+          actionLogs: request.actionLogs || [],
+          domSnapshot: request.includeDom ? request.domSnapshot : null,
+          reportedAt: new Date().toISOString()
+        };
+
+        // 1. Log telemetry via logger.js / bgLog
+        bgLog("WARN", "USER_BUG_REPORT", `[BUG REPORT] ${reportPayload.userDescription}`, reportPayload, activeTabId);
+
+        // 2. Simpan backup lokal di chrome.storage.local
+        chrome.storage.local.get(["pesat_bug_reports"], (res) => {
+          const reports = res.pesat_bug_reports || [];
+          reports.unshift({ ...reportPayload, timestamp: Date.now() });
+          chrome.storage.local.set({ pesat_bug_reports: reports.slice(0, 50) });
+        });
+
+        // 3. Kirim ke remote endpoint jika tersedia
+        try {
+          const remoteEndpoint = "https://pesat-ai-chrome-agent.senna-947.workers.dev/api/chat";
+          await fetch(remoteEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "SUBMIT_BUG_REPORT",
+              isBugReport: true,
+              ...reportPayload
+            })
+          }).catch(() => {});
+        } catch (_) {}
+
+        sendResponse({ success: true, message: "Laporan bug berhasil dikirim dan dicatat!" });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
     return true;
   }
 
