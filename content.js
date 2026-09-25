@@ -1576,9 +1576,23 @@
             inserted = target.innerText.includes(text.slice(0, 20));
           } catch (e) {}
           if (!inserted) {
-            target.innerText = (target.innerText || "") + text;
+            // Clear konten lama sebelum menyisipkan (prevents double-write / overwriting)
+            try {
+              document.execCommand("selectAll", false, null);
+              document.execCommand("delete", false, null);
+            } catch (_) {
+              target.innerText = "";
+            }
             target.dispatchEvent(new Event("input", { bubbles: true }));
-            inserted = true;
+            try {
+              document.execCommand("insertText", false, text);
+              inserted = target.innerText.includes(text.slice(0, 20));
+            } catch (e) {}
+            if (!inserted) {
+              target.innerText = text;
+              target.dispatchEvent(new Event("input", { bubbles: true }));
+              inserted = true;
+            }
           }
         } else {
           const editable = target.querySelector?.("textarea, [contenteditable='true']");

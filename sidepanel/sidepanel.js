@@ -2633,9 +2633,12 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     // Deteksi cerdas antara Perintah Aksi Fisik di Web vs Pembuatan Konten/Artikel/Analisis Langsung
     const isEmailAction = /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt);
     const isContentOrWriting = !isEmailAction && (
-      /(?:buatkan|tuliskan|tulis|buat|draft|ketik|isi|generate)\s+(?:(?:\d+\s+)?(?:paragraf|kalimat|artikel|surat|konten|esai|tulisan|laporan|draf|copywriting|catatan)|tentang|mengenai)/i.test(userPrompt) ||
+      /(?:buatkan|tuliskan|tulis|buat|draft|ketik|isi|generate|ceritakan|cerita)\s+(?:(?:\d+\s+)?(?:paragraf|kalimat|artikel|surat|konten|esai|tulisan|laporan|draf|copywriting|catatan|cerita)|tentang|mengenai)/i.test(userPrompt) ||
       /(?:buatkan artikel|tulis artikel|buat artikel|artikel edukasi|buatkan draf artikel|buat draf artikel|surat penawaran|rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt) ||
-      /(?:tulis|ketik|isi|buat).*di\s+(?:google\s+docs|docs|dokumen|lembar\s+kerja)/i.test(userPrompt)
+      /(?:tulis|ketik|isi|buat).*di\s+(?:google\s+docs|docs|dokumen|lembar\s+kerja)/i.test(userPrompt) ||
+      // Deteksi eksplisit permintaan N paragraf atau cerita pendek
+      /\d+\s+(?:paragraf|kalimat|bait|bab)/i.test(userPrompt) ||
+      /(?:cerita\s+(?:pendek|singkat|fiksi|rakyat|dongeng)|prosa|puisi|narasi)/i.test(userPrompt)
     );
 
     const hasPhysicalActionVerb = isEmailAction || (!isContentOrWriting && (
@@ -2658,6 +2661,11 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
   }
 
   async function runAnalysisFlow(userPrompt) {
+    // Guard: Jika ada proses analisis/task yang sedang berjalan, tolak pemanggilan ganda
+    if (isAgentRunning) {
+      appendLog("⚠️ Analisis sudah berjalan, permintaan duplikat diabaikan.", "WARN");
+      return;
+    }
     try {
       setAgentRunning(true);
       showStatusIndicator();
@@ -3257,6 +3265,20 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
           activeTask._socialComposerFilled = true;
         }
 
+        // Anti-Loop Universal: Cegah type_text yang identik ke elemen yang sama secara berulang
+        if (isTypingAction) {
+          const typeSig = `${resObj.elementId || resObj.targetText || ""}::${String(resObj.text || resObj.value || "").length}`;
+          if (!activeTask._filledTextboxSigs) activeTask._filledTextboxSigs = new Set();
+          if (activeTask._filledTextboxSigs.has(typeSig)) {
+            appendLog(`✍️ Elemen textbox sudah pernah diisi dengan teks yang sama (Anti-Loop). Melanjutkan ke subtask berikutnya.`, "INFO");
+            markSubtask(sub.id, "done");
+            refreshTaskCard();
+            await persistTask();
+            continue;
+          }
+          activeTask._filledTextboxSigs.add(typeSig);
+        }
+
         // Anti-Loop Khusus Gmail: Jika dialog 'Pesan Baru' / Compose sudah terbuka, cegah klik tombol Tulis berulang dan langsung isi form
         if (isGmailPage && isClickAction) {
           const isTargetingCompose = /tulis|compose/i.test(resObj.targetText || "") || resObj.elementId === "@e1";
@@ -3369,23 +3391,20 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
             artifact
           });
 
-          // Cek jika halaman saat ini adalah Google Docs / editor, langsung tempelkan
+          // Cek jika halaman saat ini adalah Google Docs / editor, langsung tempelkan (SEKALI SAJA)
           const isDocs = pageData.url?.includes("docs.google.com") || pageData.url?.includes("word.office.com") || pageData.title?.includes("Google Dokumen");
-          if (isDocs) {
-            showStatusIndicator();
+          if (isDocs && !activeTask._articleWritten) {
+            activeTask._articleWritten = true;
+            showStatusIndicator("Menempelkan teks ke editor dokumen...");
             await executeAgentAction({ action: "paste_text", value: reply });
           }
 
-          markSubtask(sub.id, "done");
+          // Tandai seluruh plan sebagai done dan akhiri task — JANGAN continue (mencegah loop)
+          (activeTask.plan || []).forEach(s => { s.status = "done"; });
           refreshTaskCard();
           await persistTask();
-
-          const remaining = (activeTask.plan || []).filter(s => s.status === "pending");
-          if (remaining.length === 0) {
-            await finalizeTask("done", "✅ Copywriting telah selesai dirumuskan dan disimpan di panel artefak.");
-            return;
-          }
-          continue;
+          await finalizeTask("done", "✅ Konten telah selesai dirumuskan dan disimpan di panel artefak.");
+          return;
         }
 
         const remainingPlan = (activeTask.plan || []).filter(s => s.status !== "done");
