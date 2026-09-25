@@ -213,6 +213,65 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  // Native Spreadsheet Multi-Cell Injection Handler (CDP Trusted Input Dispatcher)
+  if (request.action === "NATIVE_PASTE_SPREADSHEET" || request.type === "NATIVE_PASTE_SPREADSHEET") {
+    (async () => {
+      try {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tabs || !tabs[0] || !tabs[0].id) {
+          sendResponse({ success: false, error: "Tidak ada tab aktif." });
+          return;
+        }
+        const tabId = tabs[0].id;
+        const tsvData = request.tsv_data || request.tsvData || request.value || "";
+
+        // 1. Prepare target focus and clipboard in content script
+        await sendTabMessageSafe(tabId, {
+          type: "FILL_SPREADSHEET_GRID",
+          params: { tsv_data: tsvData }
+        }).catch(() => {});
+
+        await new Promise(r => setTimeout(r, 250));
+
+        // 2. Attach Chrome DevTools Protocol to send trusted OS-level paste (Ctrl+V / Cmd+V)
+        try {
+          await chrome.debugger.attach({ tabId: tabId }, "1.3");
+          const isMac = Boolean(request.isMac);
+          const modifier = isMac ? 8 : 2; // 8 = Command, 2 = Control
+
+          await chrome.debugger.sendCommand({ tabId: tabId }, "Input.dispatchKeyEvent", {
+            type: "rawKeyDown",
+            modifiers: modifier,
+            windowsVirtualKeyCode: 86,
+            code: "KeyV",
+            key: "v",
+            unmodifiedText: "v",
+            text: "v"
+          });
+
+          await chrome.debugger.sendCommand({ tabId: tabId }, "Input.dispatchKeyEvent", {
+            type: "keyUp",
+            modifiers: modifier,
+            windowsVirtualKeyCode: 86,
+            code: "KeyV",
+            key: "v"
+          });
+
+          await new Promise(r => setTimeout(r, 300));
+          await chrome.debugger.detach({ tabId: tabId });
+        } catch (dbgErr) {
+          console.warn("[Pesat SW] Debugger native paste:", dbgErr);
+          try { await chrome.debugger.detach({ tabId: tabId }); } catch (_) {}
+        }
+
+        sendResponse({ success: true, message: "Data berhasil dimasukkan ke spreadsheet." });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
   // Abort Agent Loop Signal Handler
   if (request.action === "ABORT_AGENT_LOOP" || request.type === "ABORT_AGENT_LOOP") {
     actionHistoryPerTab.clear();

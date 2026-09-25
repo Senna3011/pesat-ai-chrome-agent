@@ -1080,10 +1080,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                   appendLog(`⤴️ Thread "${a.name}" berhasil ditempel ke kotak postingan Twitter/X.`);
 	                } else if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.includes("Spreadsheet") || a.name?.includes("Tabel")) {
 	                  showStatusIndicator("Mengisikan tabel data ke spreadsheet...");
-	                  await sendToContentScript({
-	                    type: "EXECUTE_ACTION",
-	                    actionData: { action: "fill_spreadsheet_grid", value: contentStr }
-	                  }, 10000);
+		                  await sendToContentScript({
+		                    type: "EXECUTE_ACTION",
+		                    actionData: { action: "fill_spreadsheet_grid", tsv_data: contentStr, value: contentStr }
+		                  }, 10000);
 	                  appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet aktif.`);
 	                } else {
 	                  showStatusIndicator("Menempelkan teks ke editor aktif...");
@@ -3112,10 +3112,22 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
       if (isSheetsSite || (isSpreadsheetTask && (pageUrl.includes("docs.google.com") || pageUrl.includes("sheets")))) {
         showStatusIndicator("Mengisikan data tabel langsung ke Google Sheets...");
         appendLog("📊 Mengisikan baris & kolom data langsung ke Google Sheets...");
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(aiReply);
+          }
+        } catch (_) {}
+        await sendToBackground({
+          action: "NATIVE_PASTE_SPREADSHEET",
+          tsv_data: aiReply,
+          isMac
+        }).catch(() => {});
         await sendToContentScript({
           type: "EXECUTE_ACTION",
           actionData: {
             action: "fill_spreadsheet_grid",
+            tsv_data: aiReply,
             value: aiReply
           }
         });
@@ -3606,8 +3618,21 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
         }
 
         if (userChoice.includes("Paste") || userChoice.includes("Google Sheets")) {
+          try {
+            if (navigator.clipboard?.writeText) {
+              await navigator.clipboard.writeText(tsvData);
+            }
+          } catch (_) {}
           showStatusIndicator("Menempelkan batch data ke spreadsheet...");
           appendLog("📋 Mengisikan batch data TSV ke Google Sheets aktif...");
+
+          const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+          await sendToBackground({
+            action: "NATIVE_PASTE_SPREADSHEET",
+            tsv_data: tsvData,
+            isMac
+          }).catch(() => {});
+
           const execRes = await sendToContentScript({
             type: "EXECUTE_ACTION",
             actionData: {
@@ -3616,7 +3641,7 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
               value: tsvData
             }
           });
-          const successMsg = execRes?.message || "Data berhasil di-paste ke spreadsheet dalam 1 batch.";
+          const successMsg = execRes?.message || "Data berhasil dimasukkan ke Google Sheets.";
           appendLog(`✅ ${successMsg}`);
           (activeTask.plan || []).forEach(p => { p.status = "done"; });
           refreshTaskCard();
@@ -3695,38 +3720,72 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
             sendNow: /(?:langsung posting|langsung tweet|auto post|publish)/i.test(activeTask.goal)
           };
         } else if (reply && (reply.length > 100 || isContentTask)) {
-          const isTable = /\|.*\|[\r\n]+\|[-:\s|]+\|/i.test(reply) || /(?:riset|tabel|laptop|produk|komparasi|harga|spesifikasi|csv)/i.test(activeTask.goal || sub.description);
-          const artType = isTable ? "table" : "text";
-          const artTitle = isTable
-            ? `Riset-${(activeTask.goal || "Produk").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
+          const isTable = /\|.*\|[\r\n]+\|[-:\s|]+\|/i.test(reply) || /(?:riset|tabel|laptop|produk|komparasi|harga|spesifikasi|csv|spreadsheet)/i.test(activeTask.goal || sub.description);
+          const isSheets = pageData.url?.includes("/spreadsheets") ||
+                           pageData.title?.includes("Spreadsheet") ||
+                           pageData.title?.includes("Google Sheets") ||
+                           pageUrl.includes("excel.office.com") ||
+                           /(?:spreadsheet|sheets\.new|masukkan ke spreadsheet|isi spreadsheet|isi langsung)/i.test(activeTask.goal || sub.description);
+
+          const artType = (isTable || isSheets) ? "table" : "text";
+          const artTitle = (isTable || isSheets)
+            ? `Spreadsheet-${(activeTask.goal || "Data").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
             : `Draf-${(activeTask.goal || "Copywriting").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`;
 
-          appendLog(`✍️ Model berhasil menghasilkan ${isTable ? "tabel data riset/komparasi" : "draf tulisan"} (${reply.length} karakter).`);
+          appendLog(`✍️ Model berhasil menghasilkan ${(isTable || isSheets) ? "tabel data spreadsheet/komparasi" : "draf tulisan"} (${reply.length} karakter).`);
           const artifact = {
             artifactType: artType,
             name: artTitle,
-            content: reply
+            content: (isTable || isSheets) ? tsvToCSV(reply) : reply
           };
           activeTask.artifacts.push(artifact);
 
-          addMessageToCurrentSession("assistant", `${isTable ? "### 📊 Laporan Riset Produk & Tabel Data (.CSV)" : "### 📝 Draf Copywriting Berhasil Dibuat"}\n\n${reply}`, {
+          addMessageToCurrentSession("assistant", `${(isTable || isSheets) ? "### 📊 Laporan Riset Produk & Tabel Data (.CSV)" : "### 📝 Draf Copywriting Berhasil Dibuat"}\n\n${reply}`, {
             skipClean: true,
             artifact
           });
 
-          // Cek jika halaman saat ini adalah Google Docs / editor, langsung tempelkan (SEKALI SAJA)
-          const isDocs = pageData.url?.includes("docs.google.com") || pageData.url?.includes("word.office.com") || pageData.title?.includes("Google Dokumen");
-          if (isDocs && !activeTask._articleWritten) {
+          // 1. Cek jika halaman saat ini adalah Google Sheets atau perintah tabel spreadsheet, langsung isikan ke spreadsheet
+          if (isSheets && (isTable || reply.includes("|"))) {
             activeTask._articleWritten = true;
-            showStatusIndicator("Menempelkan teks ke editor dokumen...");
-            await executeAgentAction({ action: "paste_text", value: reply });
+            showStatusIndicator("Mengisikan data tabel langsung ke spreadsheet...");
+            appendLog("📊 Mengisikan baris & kolom data langsung ke Google Sheets aktif...");
+            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+            try {
+              if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(reply);
+              }
+            } catch (_) {}
+            await sendToBackground({
+              action: "NATIVE_PASTE_SPREADSHEET",
+              tsv_data: reply,
+              isMac
+            }).catch(() => {});
+            await sendToContentScript({
+              type: "EXECUTE_ACTION",
+              actionData: {
+                action: "fill_spreadsheet_grid",
+                tsv_data: reply,
+                value: reply
+              }
+            });
+          } else {
+            // 2. Cek jika halaman saat ini adalah Google Docs / editor dokumen teks
+            const isGoogleDocsDoc = (pageData.url?.includes("docs.google.com") && !pageData.url?.includes("/spreadsheets")) ||
+                                    pageData.url?.includes("word.office.com") ||
+                                    pageData.title?.includes("Google Dokumen");
+            if (isGoogleDocsDoc && !activeTask._articleWritten) {
+              activeTask._articleWritten = true;
+              showStatusIndicator("Menempelkan teks ke editor dokumen...");
+              await executeAgentAction({ action: "paste_text", value: reply });
+            }
           }
 
           // Tandai seluruh plan sebagai done dan akhiri task — JANGAN continue (mencegah loop)
           (activeTask.plan || []).forEach(s => { s.status = "done"; });
           refreshTaskCard();
           await persistTask();
-          await finalizeTask("done", "✅ Konten telah selesai dirumuskan dan disimpan di panel artefak.");
+          await finalizeTask("done", isSheets ? "✅ Tabel data berhasil dibuat dan diisikan langsung ke spreadsheet." : "✅ Konten telah selesai dirumuskan dan disimpan di panel artefak.");
           return;
         }
 

@@ -9,7 +9,10 @@
     "scripting",
     "storage",
     "tabs",
-    "downloads"
+    "downloads",
+    "debugger",
+    "clipboardWrite",
+    "clipboardRead"
   ],
   "host_permissions": [
     "https://*/*",

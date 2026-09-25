@@ -1360,6 +1360,10 @@
   async function executeSingleActionInternal(actionData) {
     const { action, value, pressEnter, scrollDirection } = actionData;
 
+    if (action === "fill_spreadsheet_grid" || action === "fill_table" || action === "fill_sheet") {
+      return await handleSpreadsheetGridInput(actionData);
+    }
+
     if (action === "scroll") {
       const distance = scrollDirection === "up" ? -500 : 500;
       window.scrollBy({ top: distance, behavior: "smooth" });
@@ -1565,44 +1569,119 @@
       };
     }
 
-    // ── Dedicated Batch Spreadsheet Grid Handler (TSV Clipboard Paste) ──
-    function handleSpreadsheetGridInput(tsvData) {
-      const payload = (typeof tsvData === "object" && tsvData !== null && !Array.isArray(tsvData))
-        ? (tsvData.tsv_data || tsvData.tsvData || tsvData.value || tsvData.text || "")
-        : tsvData;
+    function parseToTableMatrix(rawInput) {
+      if (!rawInput) return [];
+      if (Array.isArray(rawInput)) {
+        return rawInput.map(r => Array.isArray(r) ? r.map(c => String(c ?? "")) : [String(r ?? "")]);
+      }
+      const rawStr = String(rawInput).trim();
+      if (rawStr.includes("|") && rawStr.includes("\n")) {
+        const lines = rawStr.split(/\r?\n/).map(l => l.trim()).filter(l => l.startsWith("|") && l.endsWith("|"));
+        const filtered = lines.filter(l => !/^\|[-:\s|]+\|$/.test(l));
+        if (filtered.length > 0) {
+          return filtered.map(l => l.slice(1, -1).split("|").map(c => c.trim()));
+        }
+      }
+      const lines = rawStr.split(/\r?\n/).filter(l => l.trim().length > 0);
+      return lines.map(line => {
+        if (line.includes("\t")) return line.split("\t").map(c => c.trim());
+        if (line.includes(",")) return line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/^"|"$/g, "").trim());
+        return [line.trim()];
+      });
+    }
 
-      let rawTsv = "";
-      if (Array.isArray(payload)) {
-        rawTsv = payload.map(r => Array.isArray(r) ? r.join("\t") : String(r)).join("\n");
-      } else {
-        rawTsv = String(payload || "").trim();
+    // ── Dedicated Batch Spreadsheet Grid Handler (Multi-Target Clipboard & Matrix Injection) ──
+    async function handleSpreadsheetGridInput(params) {
+      const payload = (typeof params === "object" && params !== null && !Array.isArray(params))
+        ? (params.tsv_data || params.tsvData || params.data || params.value || params.text || "")
+        : params;
+
+      const matrix = parseToTableMatrix(payload);
+      if (!matrix || matrix.length === 0) {
+        return { success: false, error: "Data tabel spreadsheet kosong.", errorType: "TOOL_INVALID_ARGUMENT" };
       }
 
-      const activeEl = document.activeElement || document.querySelector('[role="gridcell"]') || document.body;
-      activeEl.focus?.();
+      const tsvText = matrix.map(r => r.join("\t")).join("\r\n");
+      const htmlTable = `<html><body><!--StartFragment--><table>${matrix.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</table><!--EndFragment--></body></html>`;
 
-      const clipboardData = new DataTransfer();
-      clipboardData.setData('text/plain', rawTsv);
+      // 1. Salin ke System Clipboard via Navigator API
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(tsvText);
+        }
+      } catch (err) {
+        console.warn("Gagal writeText ke clipboard:", err);
+      }
 
-      const pasteEvent = new ClipboardEvent('paste', {
-        clipboardData: clipboardData,
+      const isGoogleSheets = window.location.hostname.includes("docs.google.com") && window.location.pathname.includes("/spreadsheets");
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+
+      // 2. Escape mode edit sel jika kursor sedang aktif di dalam 1 sel Google Sheets
+      if (isGoogleSheets) {
+        try {
+          const escEvent = new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true });
+          document.activeElement?.dispatchEvent(escEvent);
+          document.dispatchEvent(escEvent);
+        } catch (_) {}
+      }
+
+      // 3. Kumpulkan target elemen clipboard di Google Sheets / Web Grid
+      const clipTargets = [
+        document.querySelector("textarea.clip-target"),
+        document.querySelector(".waffle-clipboard-target"),
+        document.querySelector("#waffle-grid-tab"),
+        document.querySelector("textarea[class*='clip']"),
+        document.querySelector(".grid-scrollable"),
+        document.querySelector(".cell-input"),
+        document.querySelector("#t-formula-bar-input"),
+        document.activeElement,
+        document.body
+      ].filter(Boolean);
+
+      const uniqueTargets = [...new Set(clipTargets)];
+
+      const dt = new DataTransfer();
+      dt.setData("text/plain", tsvText);
+      dt.setData("text/html", htmlTable);
+
+      const pasteEvent = new ClipboardEvent("paste", {
+        clipboardData: dt,
         bubbles: true,
         cancelable: true
       });
 
-      activeEl.dispatchEvent(pasteEvent);
+      for (const target of uniqueTargets) {
+        try {
+          target.focus?.();
+          target.dispatchEvent(pasteEvent);
 
+          // Keyboard paste simulation
+          target.dispatchEvent(new KeyboardEvent("keydown", { key: "v", code: "KeyV", keyCode: 86, which: 86, ctrlKey: !isMac, metaKey: isMac, bubbles: true }));
+          target.dispatchEvent(new KeyboardEvent("keyup", { key: "v", code: "KeyV", keyCode: 86, which: 86, ctrlKey: !isMac, metaKey: isMac, bubbles: true }));
+
+          if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
+            target.value = tsvText;
+            target.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+        } catch (_) {}
+      }
+
+      // Dispatch global di dokumen
       try {
-        if (navigator.clipboard?.writeText) {
-          navigator.clipboard.writeText(rawTsv).catch(() => {});
-        }
+        document.dispatchEvent(pasteEvent);
+        window.dispatchEvent(pasteEvent);
+        document.execCommand("paste");
       } catch (_) {}
 
       try {
-        showReadingHUD("Data berhasil di-paste ke spreadsheet dalam 1 batch.", true);
+        showReadingHUD(`✓ Data tabel (${matrix.length} baris) siap di clipboard! Tekan ${isMac ? "Cmd+V" : "Ctrl+V"} pada sel jika belum muncul.`, true);
       } catch (_) {}
 
-      return { success: true, message: "Data berhasil di-paste ke spreadsheet dalam 1 batch.", stateChanged: true };
+      return {
+        success: true,
+        message: `Berhasil menyiapkan matriks ${matrix.length} baris x ${matrix[0]?.length || 0} kolom ke spreadsheet.`,
+        stateChanged: true
+      };
     }
 
     // ── paste_text: insert teks pada posisi kursor (Google Docs, Canvas, & Rich Editor friendly) ──
@@ -1923,12 +2002,6 @@
 
         restoreOutline();
         return { success: true, message: `Klik [@e${cleanId}] berhasil${fuzzyNote}${coveredNote}.`, stateChanged: true };
-      }
-
-      if (action === "fill_spreadsheet_grid" || action === "fill_table" || action === "fill_sheet") {
-        const dataPayload = actionData.tsv_data || actionData.tsvData || actionData.data || actionData.rows || actionData.table || actionData.text || value;
-        restoreOutline();
-        return handleSpreadsheetGridInput(dataPayload);
       }
 
       if (action === "type" || action === "type_text" || action === "fill") {
@@ -2565,6 +2638,10 @@
   async function executeAction(actionData) {
     if (!actionData) return { success: false, error: "Data aksi kosong" };
 
+    if (actionData.action === "fill_spreadsheet_grid" || actionData.action === "fill_table" || actionData.action === "fill_sheet") {
+      return await handleSpreadsheetGridInput(actionData);
+    }
+
     if (actionData.action === "compose_email" || actionData.action === "send_email" || actionData.action === "email_compose") {
       return await handleEmailComposeAutomation(actionData);
     }
@@ -2665,6 +2742,11 @@
 
     if (request.type === "EXECUTE_ACTION") {
       executeAction(request.actionData).then((result) => sendResponse(result));
+      return true;
+    }
+
+    if (request.type === "FILL_SPREADSHEET_GRID" || request.action === "fill_spreadsheet_grid") {
+      handleSpreadsheetGridInput(request.params || request.actionData || request).then((result) => sendResponse(result));
       return true;
     }
 
