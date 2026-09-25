@@ -98,6 +98,21 @@
           required: ["message"]
         }
       }
+    },
+    {
+      type: "function",
+      function: {
+        name: "fill_spreadsheet_grid",
+        description: "Mengisi data jumlah besar ke dalam spreadsheet (Google Sheets / Excel Web) secara sekaligus menggunakan Batch TSV Clipboard",
+        parameters: {
+          type: "object",
+          properties: {
+            tsv_data: { type: "string", description: "Teks data terpisah Tab (\\t) untuk kolom dan Newline (\\n) untuk baris" },
+            summary: { type: "string", description: "Ringkasan analisis data yang dimasukkan" }
+          },
+          required: ["tsv_data"]
+        }
+      }
     }
   ];
 

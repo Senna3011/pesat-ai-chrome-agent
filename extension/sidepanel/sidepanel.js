@@ -686,6 +686,69 @@ document.addEventListener("DOMContentLoaded", async () => {
 </html>`;
   }
 
+  function tsvToMarkdownTable(tsvData) {
+    if (!tsvData) return "";
+    const raw = String(tsvData).trim();
+    if (raw.includes("|") && raw.includes("\n")) {
+      return raw;
+    }
+    const lines = raw.split(/\r?\n/).filter(line => line.trim().length > 0);
+    if (lines.length === 0) return "";
+    const rows = lines.map(line => line.split("\t"));
+    if (rows.length === 0) return "";
+
+    const maxCols = Math.max(...rows.map(r => r.length));
+    if (maxCols === 0) return "";
+
+    const padRow = (row) => {
+      const copy = [...row];
+      while (copy.length < maxCols) copy.push("");
+      return copy;
+    };
+
+    const header = padRow(rows[0]);
+    const headerStr = "| " + header.map(c => (c.trim() || " ").replace(/\|/g, "\\|")).join(" | ") + " |";
+    const dividerStr = "| " + header.map(() => "---").join(" | ") + " |";
+    const bodyStr = rows.slice(1).map(r => {
+      const padded = padRow(r);
+      return "| " + padded.map(c => (c.trim() || " ").replace(/\|/g, "\\|")).join(" | ") + " |";
+    }).join("\n");
+
+    return bodyStr ? `${headerStr}\n${dividerStr}\n${bodyStr}` : `${headerStr}\n${dividerStr}`;
+  }
+
+  function tsvToCSV(tsvData) {
+    if (!tsvData) return "";
+    const raw = String(tsvData).trim();
+    const lines = raw.split(/\r?\n/);
+    return lines.map(line => {
+      const cells = line.includes("\t") ? line.split("\t") : (line.includes(",") ? line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/) : [line]);
+      return cells.map(cell => {
+        let str = String(cell ?? "").replace(/^"|"$/g, "").trim();
+        if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+          str = '"' + str.replace(/"/g, '""') + '"';
+        }
+        return str;
+      }).join(",");
+    }).join("\r\n");
+  }
+
+  function triggerCSVDownload(csvContent, filename = "spreadsheet_data.csv") {
+    try {
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      console.error("Gagal download CSV:", e);
+    }
+  }
+
   function buildMessageNode(msg, index) {
     const isUser = msg.role === "user";
     const msgDiv = document.createElement("div");
@@ -2662,7 +2725,9 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         fileName: resObj.fileName,
         contentText: resObj.contentText,
         contentBase64: resObj.contentBase64,
-        mimeType: resObj.mimeType
+        mimeType: resObj.mimeType,
+        tsv_data: resObj.tsv_data || resObj.tsvData,
+        summary: resObj.summary
       };
     }
 
@@ -3402,6 +3467,11 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
         } else if (fnName === "finish_task") {
           resObj.action = "finish";
           resObj.message = fnArgs.message;
+        } else if (fnName === "fill_spreadsheet_grid") {
+          resObj.action = "fill_spreadsheet_grid";
+          resObj.tsv_data = fnArgs.tsv_data || fnArgs.tsvData || fnArgs.data || "";
+          resObj.summary = fnArgs.summary || "";
+          resObj.value = resObj.tsv_data;
         }
       } else {
         resObj = parseActionJSON(reply);
@@ -3501,6 +3571,72 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
         if (activeTask.repeatActionCount >= 2) {
           appendLog(`⚠️ Deteksi aksi berulang "${resObj.action}" (Anti-Loop Circuit Breaker). Menghentikan loop secara aman.`, "WARN");
           await finalizeTask("done", `Tindakan telah diselesaikan (guard anti-loop aktif).`);
+          return;
+        }
+      }
+
+      // 2.5 Batch Spreadsheet Grid Handler (fill_spreadsheet_grid)
+      if (resObj && (resObj.action === "fill_spreadsheet_grid" || resObj.tsv_data)) {
+        const tsvData = resObj.tsv_data || resObj.tsvData || resObj.value || "";
+        const summaryText = resObj.summary || "";
+        const mdTable = tsvToMarkdownTable(tsvData);
+        const displayMarkdown = `${summaryText ? `**Ringkasan Analisis:** ${summaryText}\n\n` : ""}${mdTable || tsvData}`;
+
+        const artifact = {
+          artifactType: "table",
+          name: `Spreadsheet_${Date.now()}.csv`,
+          content: tsvToCSV(tsvData)
+        };
+        activeTask.artifacts = activeTask.artifacts || [];
+        activeTask.artifacts.push(artifact);
+
+        addMessageToCurrentSession("assistant", `### 📊 Ringkasan Spreadsheet Data\n\n${displayMarkdown}`, {
+          skipClean: true,
+          artifact
+        });
+
+        const userChoice = await requestAskUser(
+          "Silakan tentukan tindakan untuk data spreadsheet di atas:",
+          ["Paste ke Google Sheets Aktif", "Download File CSV"]
+        );
+
+        if (shouldStopAgent || !userChoice || userChoice.toLowerCase().includes("batal")) {
+          await finalizeTask("cancelled", "⛔ Tindakan spreadsheet dibatalkan pengguna.");
+          return;
+        }
+
+        if (userChoice.includes("Paste") || userChoice.includes("Google Sheets")) {
+          showStatusIndicator("Menempelkan batch data ke spreadsheet...");
+          appendLog("📋 Mengisikan batch data TSV ke Google Sheets aktif...");
+          const execRes = await sendToContentScript({
+            type: "EXECUTE_ACTION",
+            actionData: {
+              action: "fill_spreadsheet_grid",
+              tsv_data: tsvData,
+              value: tsvData
+            }
+          });
+          const successMsg = execRes?.message || "Data berhasil di-paste ke spreadsheet dalam 1 batch.";
+          appendLog(`✅ ${successMsg}`);
+          (activeTask.plan || []).forEach(p => { p.status = "done"; });
+          refreshTaskCard();
+          await persistTask();
+          await finalizeTask("done", `✅ ${successMsg}`);
+          return;
+        } else if (userChoice.includes("Download") || userChoice.includes("CSV")) {
+          showStatusIndicator("Mengunduh file CSV...");
+          appendLog("⬇️ Menghasilkan dan mengunduh file CSV...");
+          triggerCSVDownload(tsvToCSV(tsvData), `spreadsheet_data_${Date.now()}.csv`);
+          (activeTask.plan || []).forEach(p => { p.status = "done"; });
+          refreshTaskCard();
+          await persistTask();
+          await finalizeTask("done", "✅ File CSV berhasil diunduh.");
+          return;
+        } else {
+          (activeTask.plan || []).forEach(p => { p.status = "done"; });
+          refreshTaskCard();
+          await persistTask();
+          await finalizeTask("done", `✅ ${userChoice}`);
           return;
         }
       }

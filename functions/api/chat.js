@@ -268,12 +268,27 @@ DAFTAR TOOL CALLING YANG DIDUKUNG:
    }
    \`\`\`
 
+10. "fill_spreadsheet_grid":
+   - Mengisi data jumlah besar ke dalam spreadsheet (Google Sheets / Excel Web) secara sekaligus menggunakan Batch TSV Clipboard.
+   - Jika pengguna meminta membuat, menganalisis, atau mengisi spreadsheet/tabel data berukuran besar, DILARANG menggunakan tool type_text berulang kali. Gunakan tool `fill_spreadsheet_grid` dengan data lengkap berformat TSV.
+   Format:
+   \`\`\`json
+   {
+     "planner": { "steps": ["1. Menyiapkan data tabel TSV", "2. Memasukkan batch data ke spreadsheet"] },
+     "action": "fill_spreadsheet_grid",
+     "tsv_data": "Header1\\tHeader2\\nNilai1\\tNilai2",
+     "summary": "Ringkasan analisis data spreadsheet",
+     "message": "Mengisikan tabel data ke spreadsheet dalam satu batch"
+   }
+   \`\`\`
+
 ═══════════════════════════════════════════════════
 PANDUAN ANTI-LOOPING & GUARDRAILS:
 ═══════════════════════════════════════════════════
 - Evaluasi halaman setelah setiap aksi. Jika tujuan pengguna sudah tercapai (misal: halaman hasil pencarian sudah terbuka, form sudah terisi, atau informasi yang dicari sudah muncul di layar), DILARANG melakukan aksi klik/type lagi. Kamu WAJIB memanggil tool "finish_task".
 - DILARANG mengklik tombol menu/navbar yang sama berulang kali (membuka lalu menutup lalu membuka kembali).
 - Jika sebuah tombol sudah diklik dan tidak memunculkan navigasi yang diharapkan, jangan ulangi klik elemen yang sama. Beralihlah ke scroll, pencarian, atau gunakan tool "ask_user".
+- Jika pengguna meminta membuat, menganalisis, atau mengisi spreadsheet/tabel data berukuran besar, DILARANG menggunakan tool type_text berulang kali. Gunakan tool `fill_spreadsheet_grid` dengan data lengkap berformat TSV.
 `.trim();
 
     // Tools Function Calling Schema
@@ -363,6 +378,21 @@ PANDUAN ANTI-LOOPING & GUARDRAILS:
               key: { type: "string", description: "Nama tombol keyboard, contoh: 'Enter'" }
             },
             required: ["key"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "fill_spreadsheet_grid",
+          description: "Mengisi data jumlah besar ke dalam spreadsheet (Google Sheets / Excel Web) secara sekaligus menggunakan Batch TSV Clipboard",
+          parameters: {
+            type: "object",
+            properties: {
+              tsv_data: { type: "string", description: "Teks data terpisah Tab (\\t) untuk kolom dan Newline (\\n) untuk baris" },
+              summary: { type: "string", description: "Ringkasan analisis data yang dimasukkan" }
+            },
+            required: ["tsv_data"]
           }
         }
       }
