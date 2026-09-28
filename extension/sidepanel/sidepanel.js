@@ -1015,13 +1015,29 @@ document.addEventListener("DOMContentLoaded", async () => {
                   }, 15000);
 
                   appendLog(`⤴️ Thread "${a.name}" berhasil ditempel ke kotak postingan Twitter/X.`);
-	                } else if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.includes("Spreadsheet") || a.name?.includes("Tabel")) {
-	                  showStatusIndicator("Mengisikan tabel data ke spreadsheet...");
-	                  await sendToContentScript({
-	                    type: "EXECUTE_ACTION",
-	                    actionData: { action: "fill_spreadsheet_grid", value: contentStr }
-	                  }, 10000);
-	                  appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet aktif.`);
+		                } else if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.includes("Spreadsheet") || a.name?.includes("Tabel")) {
+		                  showStatusIndicator("Mengisikan tabel data ke Google Sheets...");
+		                  appendLog(`📊 Menyiapkan pengisian data tabel "${a.name}" ke Google Sheets...`);
+
+		                  let currentTab = null;
+		                  try {
+		                    const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+		                    if (tabs && tabs[0]) currentTab = tabs[0];
+		                  } catch (e) {}
+
+		                  const isAlreadySheets = currentTab && (/docs\.google\.com\/spreadsheets/i.test(currentTab.url || "") || /excel\.office\.com/i.test(currentTab.url || ""));
+		                  if (!isAlreadySheets) {
+		                    appendLog("Membuka Google Sheets baru (sheets.new)...");
+		                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new" });
+		                    await new Promise(r => setTimeout(r, 4500));
+		                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
+		                  }
+
+		                  await sendToContentScript({
+		                    type: "EXECUTE_ACTION",
+		                    actionData: { action: "fill_spreadsheet_grid", value: contentStr }
+		                  }, 25000);
+		                  appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet.`);
 	                } else {
 	                  showStatusIndicator("Menempelkan teks ke editor aktif...");
 	                  await sendToContentScript({
@@ -2077,6 +2093,54 @@ document.addEventListener("DOMContentLoaded", async () => {
     return null;
   }
 
+  // Helper ekstraksi parameter email (To, Subject, Body) yang presisi
+  function extractEmailParameters(text = "") {
+    if (!text) return { to: "", subject: "Pesan Baru", body: "" };
+
+    let to = "";
+    let subject = "";
+    let body = "";
+
+    // 1. Ekstrak Email Penerima
+    const toMatch = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+    if (toMatch) {
+      to = toMatch[1].trim();
+    }
+
+    // 2. Ekstrak Subjek (Mendukung tanda kutip atau unquoted dengan toleransi kata sambung/nya)
+    const quotedSubMatch = text.match(/(?:subjek|subject|judul)(?:\s+isi)?(?:\s+pesan)?(?:\s+email)?(?:\s+nya)?\s*[:=]?\s*["'“`]([^"'”`\n]+)["'”`]/i);
+    if (quotedSubMatch) {
+      subject = quotedSubMatch[1].trim();
+    } else {
+      const unquotedSubMatch = text.match(/(?:subjek|subject|judul)(?:\s+isi)?(?:\s+pesan)?(?:\s+email)?(?:\s+nya)?\s*[:=]?\s*([^,\n.]+?)(?=\s+(?:lalu|dan|kemudian|isi|pesan|body|dengan isi)|[.,\n]|$)/i);
+      if (unquotedSubMatch) {
+        subject = unquotedSubMatch[1].trim();
+      }
+    }
+
+    // 3. Ekstrak Isi Pesan / Body (Mendukung tanda kutip atau unquoted)
+    const quotedBodyMatch = text.match(/(?:isi\s+pesan(?:\s+email)?|pesan(?:\s+email)?|isi(?:\s+email)?|body)(?:\s+nya)?\s*[:=]?\s*["'“`]([^"'”`\n]+)["'”`]/i);
+    if (quotedBodyMatch) {
+      body = quotedBodyMatch[1].trim();
+    } else {
+      const unquotedBodyMatch = text.match(/(?:isi\s+pesan(?:\s+email)?|pesan(?:\s+email)?|isi(?:\s+email)?|body)(?:\s+nya)?\s*[:=]?\s*([^\n]+)$/i);
+      if (unquotedBodyMatch) {
+        body = unquotedBodyMatch[1].trim();
+      }
+    }
+
+    if (!subject) subject = "Pesan Baru";
+    if (!body) {
+      if (/formal|resmi|profesional/i.test(text)) {
+        body = `Halo,\n\nMelalui pesan ini kami sampaikan informasi terkait ${subject}.\n\nDemikian kami sampaikan. Terima kasih.\n\nSalam hormat.`;
+      } else {
+        body = text;
+      }
+    }
+
+    return { to, subject, body };
+  }
+
   // Recovery parser natural language (fallback jika LLM jawab teks instruktif)
   function tryParseNaturalLanguageActions(text, userPrompt = "") {
     if (!text && !userPrompt) return null;
@@ -2128,36 +2192,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Email intent detection (e.g. kirim email ke X subjek Y pesan Z / buka compose di Gmail)
-    const emailToMatch = combined.match(/(?:ke|to)\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i) ||
-                         combined.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
-    const emailSubMatch = combined.match(/(?:subjek|subject|judul)\s*[:=]?\s*[`"']?([^`"'\n,]+?)(?=\s+(?:pesan|isi|body|dengan isi|lalu|kemudian)|[`"']|$)/i);
-    const emailBodyMatch = combined.match(/(?:pesan|isi|body|pesan email|isi pesan|tulis draf email|tulis email|draf email|tulis draf|tulis)\s*[:=]?\s*[`"']?([\s\S]+?)[`"']?$/i);
     const isEmailIntent = /(?:kirim|tulis|buat|draft|send|compose|buka compose)\s+(?:ke\s+|pesan\s+)?email|gmail/i.test(combined);
+    const emailParams = extractEmailParameters(combined);
 
-    if (isEmailIntent && emailToMatch) {
-      const recipient = emailToMatch[1];
-      const subject = emailSubMatch ? emailSubMatch[1].trim() : "Laporan Progres Mingguan Pesat AI";
-      let rawBody = emailBodyMatch ? emailBodyMatch[1].trim() : "";
-      let body = rawBody;
-
-      if (!body) {
-        body = combined;
-      }
-
-      if (/formal|resmi|profesional|jelaskan|menjelaskan/i.test(rawBody)) {
-        let cleanTopic = rawBody.replace(/^(?:formal\s+|resmi\s+|profesional\s+)?(?:yang\s+)?(?:menjelaskan\s+)?(?:bahwa\s+)?/i, "").trim();
-        if (cleanTopic) cleanTopic = cleanTopic.charAt(0).toUpperCase() + cleanTopic.slice(1);
-        body = `Halo Bapak/Ibu,\n\nMelalui email ini kami sampaikan bahwa ${cleanTopic || "seluruh milestone proyek telah selesai 100%."}\n\nSeluruh fungsionalitas dan fitur otomasi telah berjalan secara optimal dan teruji tuntas.\n\nDemikian laporan ini kami sampaikan. Terima kasih atas perhatian dan kerja samanya.\n\nSalam hormat,\nTim Pengembang Pesat AI`;
-      }
-
+    if (isEmailIntent && emailParams.to) {
       return {
-        planner: { steps: [`1. Membuka formulir compose Gmail`, `2. Mengisi penerima (${recipient})`, `3. Mengisi subjek (${subject})`, `4. Menuliskan isi pesan draf formal & menyelesaikan pengiriman`] },
+        planner: { steps: [`1. Membuka formulir compose Gmail`, `2. Mengisi penerima (${emailParams.to})`, `3. Mengisi subjek (${emailParams.subject})`, `4. Menuliskan isi pesan & menyelesaikan pengisian`] },
         action: "send_email",
-        to: recipient,
-        subject: subject,
-        body: body,
+        to: emailParams.to,
+        subject: emailParams.subject,
+        body: emailParams.body,
         sendNow: /(?:kirim sekarang|langsung kirim|auto send)/i.test(combined),
-        message: `Mempersiapkan pengiriman email ke ${recipient}...`
+        message: `Mempersiapkan pengiriman email ke ${emailParams.to}...`
       };
     }
 
@@ -2787,8 +2833,11 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
 
     // Deteksi cerdas antara Perintah Aksi Fisik di Web vs Pembuatan Konten/Artikel/Analisis Langsung
     const isEmailAction = /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt);
+    const isSpreadsheetAction = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(userPrompt);
+
     const isContentOrWriting = !isEmailAction && (
-      /(?:buatkan|tuliskan|tulis|buat|draft|ketik|isi|generate|ceritakan|cerita)\s+(?:(?:\d+\s+)?(?:paragraf|kalimat|artikel|surat|konten|esai|tulisan|laporan|draf|copywriting|catatan|cerita)|tentang|mengenai)/i.test(userPrompt) ||
+      isSpreadsheetAction ||
+      /(?:buatkan|tuliskan|tulis|buat|draft|ketik|isi|generate|ceritakan|cerita)\s+(?:(?:\d+\s+)?(?:paragraf|kalimat|artikel|surat|konten|esai|tulisan|laporan|draf|copywriting|catatan|cerita|tabel)|tentang|mengenai)/i.test(userPrompt) ||
       /(?:buatkan artikel|tulis artikel|buat artikel|artikel edukasi|buatkan draf artikel|buat draf artikel|surat penawaran|rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt) ||
       /(?:tulis|ketik|isi|buat).*di\s+(?:google\s+docs|docs|dokumen|lembar\s+kerja)/i.test(userPrompt) ||
       // Deteksi eksplisit permintaan N paragraf atau cerita pendek
@@ -3059,7 +3108,15 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
                            pageUrl.includes("facebook.com") ||
                            pageUrl.includes("threads.net");
 
-      if (isSheetsSite || (isSpreadsheetTask && (pageUrl.includes("docs.google.com") || pageUrl.includes("sheets")))) {
+      if (isSpreadsheetTask) {
+        if (!isSheetsSite) {
+          appendLog("Membuka lembar kerja Google Sheets baru (sheets.new)...");
+          showStatusIndicator("Membuka lembar kerja Google Sheets...");
+          await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new" });
+          await new Promise(r => setTimeout(r, 4500));
+          await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
+        }
+
         showStatusIndicator("Mengisikan data tabel langsung ke Google Sheets...");
         appendLog("📊 Mengisikan baris & kolom data langsung ke Google Sheets...");
         await sendToContentScript({
@@ -3212,7 +3269,14 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
         }).catch(() => {});
       }
 
-      // ══ FAST PATH FOR END-TO-END AUTOMATIONS (Email & Social) ══
+      // ══ FAST PATH FOR END-TO-END AUTOMATIONS (Spreadsheet, Email, & Social) ══
+      const isSpreadsheetGoal = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(goal);
+      if (isSpreadsheetGoal) {
+        appendLog("📊 Mengalihkan ke Spreadsheet Automation Engine...");
+        await runAnalysisFlow(goal);
+        return;
+      }
+
       const fastAction = tryParseNaturalLanguageActions("", goal);
       if (fastAction && (fastAction.action === "send_email" || fastAction.action === "post_social")) {
         const steps = fastAction.planner?.steps || [
@@ -3556,14 +3620,13 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
         const isContentTask = !isEmailAction && !isSocialAction && /(copywriting|tulis artikel|buatkan draf artikel|surat penawaran)/i.test(activeTask.goal || sub.description);
 
         if (isEmailAction) {
-          const emailMatch = (activeTask.goal || "").match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
-          const subMatch = (activeTask.goal || "").match(/(?:subjek|subject|judul)\s*[:=]?\s*[`"']?([^`"'\n,]+)[`"']?/i);
-          appendLog(`📧 Mengonversi draf ke aksi automasi email fisik ke ${emailMatch ? emailMatch[1] : "penerima"}...`);
+          const emailParams = extractEmailParameters(activeTask.goal || sub.description || "");
+          appendLog(`📧 Mengonversi draf ke aksi automasi email fisik ke ${emailParams.to || "penerima"}...`);
           resObj = {
             action: "send_email",
-            to: emailMatch ? emailMatch[1] : "",
-            subject: subMatch ? subMatch[1].trim() : "Pesan Baru",
-            body: reply || activeTask.goal,
+            to: emailParams.to,
+            subject: emailParams.subject,
+            body: emailParams.body || reply || activeTask.goal,
             sendNow: /(?:kirim sekarang|langsung kirim|auto send)/i.test(activeTask.goal)
           };
         } else if (isSocialAction) {
@@ -3574,10 +3637,10 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
             sendNow: /(?:langsung posting|langsung tweet|auto post|publish)/i.test(activeTask.goal)
           };
         } else if (reply && (reply.length > 100 || isContentTask)) {
-          const isTable = /\|.*\|[\r\n]+\|[-:\s|]+\|/i.test(reply) || /(?:riset|tabel|laptop|produk|komparasi|harga|spesifikasi|csv)/i.test(activeTask.goal || sub.description);
+          const isTable = /\|.*\|[\r\n]+\|[-:\s|]+\|/i.test(reply) || /(?:riset|tabel|laptop|produk|komparasi|harga|spesifikasi|csv|penjualan)/i.test(activeTask.goal || sub.description);
           const artType = isTable ? "table" : "text";
           const artTitle = isTable
-            ? `Riset-${(activeTask.goal || "Produk").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
+            ? `Tabel-${(activeTask.goal || "Data").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
             : `Draf-${(activeTask.goal || "Copywriting").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`;
 
           appendLog(`✍️ Model berhasil menghasilkan ${isTable ? "tabel data riset/komparasi" : "draf tulisan"} (${reply.length} karakter).`);
@@ -3588,14 +3651,20 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
           };
           activeTask.artifacts.push(artifact);
 
-          addMessageToCurrentSession("assistant", `${isTable ? "### 📊 Laporan Riset Produk & Tabel Data (.CSV)" : "### 📝 Draf Copywriting Berhasil Dibuat"}\n\n${reply}`, {
+          addMessageToCurrentSession("assistant", `${isTable ? "### 📊 Tabel Data Berhasil Dibuat (.CSV)" : "### 📝 Draf Copywriting Berhasil Dibuat"}\n\n${reply}`, {
             skipClean: true,
             artifact
           });
 
-          // Cek jika halaman saat ini adalah Google Docs / editor, langsung tempelkan (SEKALI SAJA)
-          const isDocs = pageData.url?.includes("docs.google.com") || pageData.url?.includes("word.office.com") || pageData.title?.includes("Google Dokumen");
-          if (isDocs && !activeTask._articleWritten) {
+          // Cek jika halaman saat ini adalah Google Docs / editor, langsung tempelkan
+          const isDocs = pageData.url?.includes("docs.google.com") && !pageData.url?.includes("/spreadsheets");
+          const isSheets = pageData.url?.includes("/spreadsheets") || pageData.url?.includes("excel.office.com");
+
+          if (isSheets && !activeTask._sheetWritten) {
+            activeTask._sheetWritten = true;
+            showStatusIndicator("Mengisikan data tabel ke Google Sheets...");
+            await executeAgentAction({ action: "fill_spreadsheet_grid", value: reply });
+          } else if (isDocs && !activeTask._articleWritten) {
             activeTask._articleWritten = true;
             showStatusIndicator("Menempelkan teks ke editor dokumen...");
             await executeAgentAction({ action: "paste_text", value: reply });

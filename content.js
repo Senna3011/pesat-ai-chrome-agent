@@ -1602,71 +1602,132 @@
       const tsvText = rows.map(r => r.join("\t")).join("\r\n");
       const htmlTable = `<html><body><!--StartFragment--><table>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</table><!--EndFragment--></body></html>`;
 
-      // 1. Google Sheets Integration (Grid Selection & Multi-Cell Matrix Paste)
+      // 1. Google Sheets Integration (Waffle Clipboard Engine & Formula Bar Direct Injection)
       if (isGoogleSheets) {
-        // Keluar dari Text Edit Mode jika sedang mengedit sel tunggal (tekan Escape)
-        try {
-          const escEvent = new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true });
-          document.activeElement?.dispatchEvent(escEvent);
-          document.dispatchEvent(escEvent);
-        } catch (_) {}
-
-        // Target elemen clipboard Google Sheets khusus untuk multi-sel
-        const clipTarget = document.querySelector("textarea.clip-target") ||
-                           document.querySelector(".waffle-clipboard-target") ||
-                           document.querySelector("#waffle-grid-tab") ||
-                           document.querySelector(".grid-scrollable") ||
-                           document.body;
-
-        if (clipTarget) {
-          try {
-            clipTarget.focus?.();
-            clipTarget.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
-            clipTarget.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
-            clipTarget.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-          } catch (_) {}
-        }
-
-        // Tulis TSV matriks ke system clipboard
+        // Tulis TSV matriks ke system clipboard agar data tersalin secara global
         try {
           if (navigator.clipboard?.writeText) {
             await navigator.clipboard.writeText(tsvText);
           }
         } catch (_) {}
 
-        // Kirim event paste dengan DataTransfer TSV & HTML Table
-        const dt = new DataTransfer();
-        dt.setData("text/plain", tsvText);
-        dt.setData("text/html", htmlTable);
-        const pasteClipboardEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+        // A. Waffle Clipboard Engine Injection (Target utama Google Sheets untuk multi-sel matriks)
+        const waffleClipTargets = [
+          document.querySelector("textarea.clip-target"),
+          document.querySelector(".waffle-clipboard-target"),
+          document.querySelector("#waffle-grid-tab textarea"),
+          document.querySelector(".grid-scrollable textarea"),
+          document.querySelector("#waffle-grid-tab"),
+          document.querySelector(".grid-scrollable"),
+          document.body
+        ].filter(Boolean);
 
-        if (clipTarget) clipTarget.dispatchEvent(pasteClipboardEv);
-        document.activeElement?.dispatchEvent(pasteClipboardEv);
-        document.dispatchEvent(pasteClipboardEv);
-        window.dispatchEvent(pasteClipboardEv);
+        for (const target of waffleClipTargets) {
+          try {
+            target.focus?.();
+            if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
+              target.value = tsvText;
+              target.select?.();
+            }
 
-        const pasteKeyEvent = new KeyboardEvent("keydown", {
-          key: "v",
-          code: "KeyV",
-          keyCode: 86,
-          which: 86,
-          ctrlKey: !isMac,
-          metaKey: isMac,
-          bubbles: true,
-          cancelable: true
-        });
+            const dt = new DataTransfer();
+            dt.setData("text/plain", tsvText);
+            dt.setData("text/html", htmlTable);
 
-        if (clipTarget) clipTarget.dispatchEvent(pasteKeyEvent);
-        document.activeElement?.dispatchEvent(pasteKeyEvent);
-        document.dispatchEvent(pasteKeyEvent);
+            const pasteEv = new ClipboardEvent("paste", {
+              bubbles: true,
+              cancelable: true,
+              clipboardData: dt
+            });
+            target.dispatchEvent(pasteEv);
 
-        try { document.execCommand("paste"); } catch (_) {}
+            const pasteKeyEvent = new KeyboardEvent("keydown", {
+              key: "v",
+              code: "KeyV",
+              keyCode: 86,
+              which: 86,
+              ctrlKey: !isMac,
+              metaKey: isMac,
+              bubbles: true,
+              cancelable: true
+            });
+            target.dispatchEvent(pasteKeyEvent);
+          } catch (_) {}
+        }
 
-        showReadingHUD(`✓ Data tabel (${rows.length} baris x ${rows[0]?.length || 0} kolom) siap di Google Sheets! (Salinan clipboard aktif — klik sel A1 lalu tekan Ctrl+V / Cmd+V jika perlu)`, true);
-        await new Promise(r => setTimeout(r, 600));
+        // B. Direct Cell Injection via Formula Bar & Name Box
+        function getColLetter(idx) {
+          let letter = "";
+          while (idx >= 0) {
+            letter = String.fromCharCode((idx % 26) + 65) + letter;
+            idx = Math.floor(idx / 26) - 1;
+          }
+          return letter;
+        }
+
+        const nameBox = document.querySelector("#t-name-box") ||
+                        document.querySelector("input#t-name-box") ||
+                        document.querySelector("input.name-box-input") ||
+                        document.querySelector("[aria-label*='kotak nama' i]") ||
+                        document.querySelector("[aria-label*='name box' i]");
+
+        const formulaInput = document.querySelector("#t-formula-bar-input") ||
+                             document.querySelector(".cell-input") ||
+                             document.querySelector("[id*='formula-bar']") ||
+                             document.querySelector(".docs-formula-input") ||
+                             document.querySelector("div[role='combobox']#t-formula-bar-input");
+
+        let directCellSuccess = 0;
+
+        if (nameBox && formulaInput) {
+          showReadingHUD(`📊 Mengisikan ${rows.length} baris data ke Google Sheets...`);
+          for (let rIdx = 0; rIdx < rows.length; rIdx++) {
+            const rowNum = rIdx + 1;
+            const rowData = rows[rIdx];
+
+            for (let cIdx = 0; cIdx < rowData.length; cIdx++) {
+              const cellPos = `${getColLetter(cIdx)}${rowNum}`;
+              const cellVal = String(rowData[cIdx] ?? "").trim();
+              if (!cellVal && cIdx > 0 && cIdx === rowData.length - 1) continue;
+
+              // 1. Pilih posisi sel via Name Box
+              try {
+                nameBox.focus();
+                nameBox.value = cellPos;
+                nameBox.dispatchEvent(new Event("input", { bubbles: true }));
+                nameBox.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+                nameBox.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+              } catch (_) {}
+
+              await new Promise(r => setTimeout(r, 25));
+
+              // 2. Tuliskan nilai/formula ke Formula Bar
+              try {
+                formulaInput.focus();
+                const range = document.createRange();
+                range.selectNodeContents(formulaInput);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+
+                document.execCommand("insertText", false, cellVal);
+                formulaInput.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: cellVal }));
+                formulaInput.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: cellVal }));
+                formulaInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+                formulaInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+              } catch (_) {}
+
+              directCellSuccess++;
+              await new Promise(r => setTimeout(r, 25));
+            }
+          }
+        }
+
+        showReadingHUD(`✓ Data tabel (${rows.length} baris x ${rows[0]?.length || 0} kolom) berhasil dimasukkan ke Google Sheets!`, true);
+        await new Promise(r => setTimeout(r, 400));
         return {
           success: true,
-          message: `Berhasil menyiapkan matriks ${rows.length} baris x ${rows[0]?.length || 0} kolom ke Google Sheets.`,
+          message: `Berhasil mengisikan ${rows.length} baris x ${rows[0]?.length || 0} kolom (${directCellSuccess} sel) ke Google Sheets.`,
           stateChanged: true
         };
       }
