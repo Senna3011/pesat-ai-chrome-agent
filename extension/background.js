@@ -213,65 +213,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  // Native Spreadsheet Multi-Cell Injection Handler (CDP Trusted Input Dispatcher)
-  if (request.action === "NATIVE_PASTE_SPREADSHEET" || request.type === "NATIVE_PASTE_SPREADSHEET") {
-    (async () => {
-      try {
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tabs || !tabs[0] || !tabs[0].id) {
-          sendResponse({ success: false, error: "Tidak ada tab aktif." });
-          return;
-        }
-        const tabId = tabs[0].id;
-        const tsvData = request.tsv_data || request.tsvData || request.value || "";
-
-        // 1. Prepare target focus and clipboard in content script
-        await sendTabMessageSafe(tabId, {
-          type: "FILL_SPREADSHEET_GRID",
-          params: { tsv_data: tsvData }
-        }).catch(() => {});
-
-        await new Promise(r => setTimeout(r, 250));
-
-        // 2. Attach Chrome DevTools Protocol to send trusted OS-level paste (Ctrl+V / Cmd+V)
-        try {
-          await chrome.debugger.attach({ tabId: tabId }, "1.3");
-          const isMac = Boolean(request.isMac);
-          const modifier = isMac ? 8 : 2; // 8 = Command, 2 = Control
-
-          await chrome.debugger.sendCommand({ tabId: tabId }, "Input.dispatchKeyEvent", {
-            type: "rawKeyDown",
-            modifiers: modifier,
-            windowsVirtualKeyCode: 86,
-            code: "KeyV",
-            key: "v",
-            unmodifiedText: "v",
-            text: "v"
-          });
-
-          await chrome.debugger.sendCommand({ tabId: tabId }, "Input.dispatchKeyEvent", {
-            type: "keyUp",
-            modifiers: modifier,
-            windowsVirtualKeyCode: 86,
-            code: "KeyV",
-            key: "v"
-          });
-
-          await new Promise(r => setTimeout(r, 300));
-          await chrome.debugger.detach({ tabId: tabId });
-        } catch (dbgErr) {
-          console.warn("[Pesat SW] Debugger native paste:", dbgErr);
-          try { await chrome.debugger.detach({ tabId: tabId }); } catch (_) {}
-        }
-
-        sendResponse({ success: true, message: "Data berhasil dimasukkan ke spreadsheet." });
-      } catch (err) {
-        sendResponse({ success: false, error: err.message });
-      }
-    })();
-    return true;
-  }
-
   // Abort Agent Loop Signal Handler
   if (request.action === "ABORT_AGENT_LOOP" || request.type === "ABORT_AGENT_LOOP") {
     actionHistoryPerTab.clear();
@@ -348,6 +289,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           domSnapshot: request.includeDom ? request.domSnapshot : null,
           reportedAt: new Date().toISOString()
         };
+
+        try {
+          await fetch("https://pesat-ai-chrome-agent.senna-947.workers.dev/api/reports", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              category: "GENERAL_BUG",
+              title: `[User Report] ${reportPayload.userDescription.slice(0, 60)}`,
+              description: reportPayload.userDescription,
+              url: reportPayload.url,
+              recentLogs: reportPayload.actionLogs,
+              extraContext: { tabTitle: reportPayload.tabTitle, lastError: reportPayload.lastError }
+            })
+          }).catch(() => {});
+        } catch (_) {}
 
         // 1. Kirim single telemetry log ke Cloudflare Worker
         const reportLogEntry = {
@@ -488,6 +444,67 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     chrome.storage.local.get(["googleAuthToken", "googleUserEmail"], (res) => {
       sendResponse({ connected: Boolean(res.googleAuthToken), email: res.googleUserEmail || "" });
     });
+    return true;
+  }
+
+  if (request.action === "GOOGLE_CONNECT") {
+    (async () => {
+      try {
+        const customClientId = request.clientId;
+        const data = await chrome.storage.local.get(["googleClientId"]);
+        const clientId = customClientId || data.googleClientId || "";
+
+        if (!clientId) {
+          sendResponse({
+            success: false,
+            error: "Google Client ID belum diisi. Masukkan Google Client ID di menu Pengaturan Lanjut jika ingin menggunakan API Latar Belakang."
+          });
+          return;
+        }
+
+        const redirectUri = chrome.identity.getRedirectURL("goog");
+        const scopes = [
+          "https://www.googleapis.com/auth/spreadsheets",
+          "https://www.googleapis.com/auth/documents",
+          "https://www.googleapis.com/auth/userinfo.email"
+        ].join(" ");
+
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&prompt=consent`;
+
+        chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, async (responseUrl) => {
+          if (chrome.runtime.lastError || !responseUrl) {
+            sendResponse({ success: false, error: chrome.runtime.lastError?.message || "Autentikasi Google dibatalkan." });
+            return;
+          }
+          try {
+            const urlObj = new URL(responseUrl);
+            const params = new URLSearchParams(urlObj.hash.substring(1));
+            const token = params.get("access_token");
+            if (token) {
+              await chrome.storage.local.set({ googleAuthToken: token });
+              // Ambil info email user
+              try {
+                const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+                if (userRes.ok) {
+                  const userData = await userRes.json();
+                  if (userData.email) await chrome.storage.local.set({ googleUserEmail: userData.email });
+                }
+              } catch (_) {}
+
+              sendResponse({ success: true, message: "Berhasil terhubung ke Google Workspace!" });
+            } else {
+              sendResponse({ success: false, error: "Gagal mendapatkan access token dari Google." });
+            }
+          } catch (e) {
+            sendResponse({ success: false, error: e.message });
+          }
+        });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
     return true;
   }
 

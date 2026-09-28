@@ -10,9 +10,7 @@
     "storage",
     "tabs",
     "downloads",
-    "debugger",
-    "clipboardWrite",
-    "clipboardRead"
+    "identity"
   ],
   "host_permissions": [
     "https://*/*",

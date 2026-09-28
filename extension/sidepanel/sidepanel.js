@@ -686,69 +686,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 </html>`;
   }
 
-  function tsvToMarkdownTable(tsvData) {
-    if (!tsvData) return "";
-    const raw = String(tsvData).trim();
-    if (raw.includes("|") && raw.includes("\n")) {
-      return raw;
-    }
-    const lines = raw.split(/\r?\n/).filter(line => line.trim().length > 0);
-    if (lines.length === 0) return "";
-    const rows = lines.map(line => line.split("\t"));
-    if (rows.length === 0) return "";
-
-    const maxCols = Math.max(...rows.map(r => r.length));
-    if (maxCols === 0) return "";
-
-    const padRow = (row) => {
-      const copy = [...row];
-      while (copy.length < maxCols) copy.push("");
-      return copy;
-    };
-
-    const header = padRow(rows[0]);
-    const headerStr = "| " + header.map(c => (c.trim() || " ").replace(/\|/g, "\\|")).join(" | ") + " |";
-    const dividerStr = "| " + header.map(() => "---").join(" | ") + " |";
-    const bodyStr = rows.slice(1).map(r => {
-      const padded = padRow(r);
-      return "| " + padded.map(c => (c.trim() || " ").replace(/\|/g, "\\|")).join(" | ") + " |";
-    }).join("\n");
-
-    return bodyStr ? `${headerStr}\n${dividerStr}\n${bodyStr}` : `${headerStr}\n${dividerStr}`;
-  }
-
-  function tsvToCSV(tsvData) {
-    if (!tsvData) return "";
-    const raw = String(tsvData).trim();
-    const lines = raw.split(/\r?\n/);
-    return lines.map(line => {
-      const cells = line.includes("\t") ? line.split("\t") : (line.includes(",") ? line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/) : [line]);
-      return cells.map(cell => {
-        let str = String(cell ?? "").replace(/^"|"$/g, "").trim();
-        if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
-          str = '"' + str.replace(/"/g, '""') + '"';
-        }
-        return str;
-      }).join(",");
-    }).join("\r\n");
-  }
-
-  function triggerCSVDownload(csvContent, filename = "spreadsheet_data.csv") {
-    try {
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (e) {
-      console.error("Gagal download CSV:", e);
-    }
-  }
-
   function buildMessageNode(msg, index) {
     const isUser = msg.role === "user";
     const msgDiv = document.createElement("div");
@@ -1078,40 +1015,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                   }, 15000);
 
                   appendLog(`⤴️ Thread "${a.name}" berhasil ditempel ke kotak postingan Twitter/X.`);
-		                } else if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.includes("Spreadsheet") || a.name?.includes("Tabel")) {
-		                  showStatusIndicator("Mengisikan tabel data ke spreadsheet...");
-		                  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-
-		                  // 1. Pindahkan fokus peramban dari Sidepanel ke jendela Google Sheets secara otomatis
-		                  try {
-		                    const [tab] = await new Promise(r => chrome.tabs.query({ active: true, currentWindow: true }, r));
-		                    if (tab && tab.id) {
-		                      await chrome.tabs.update(tab.id, { active: true });
-		                      if (tab.windowId) await chrome.windows.update(tab.windowId, { focused: true });
-		                    }
-		                  } catch (_) {}
-
-		                  try {
-		                    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(contentStr);
-		                  } catch (_) {}
-
-		                  // 2. Trigger native paste via background worker
-		                  await sendToBackground({
-		                    action: "NATIVE_PASTE_SPREADSHEET",
-		                    tsv_data: contentStr,
-		                    isMac
-		                  }).catch(() => {});
-
-		                  // 3. Kirim sinyal PASTE_TSV_TO_SHEET ke content script
-		                  await sendToContentScript({
-		                    type: "PASTE_TSV_TO_SHEET",
-		                    action: "PASTE_TSV_TO_SHEET",
-		                    params: { tsv_data: contentStr },
-		                    actionData: { action: "fill_spreadsheet_grid", tsv_data: contentStr, value: contentStr }
-		                  }, 10000);
-
-		                  appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet aktif.`);
-		                } else {
+	                } else if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.includes("Spreadsheet") || a.name?.includes("Tabel")) {
+	                  showStatusIndicator("Mengisikan tabel data ke spreadsheet...");
+	                  await sendToContentScript({
+	                    type: "EXECUTE_ACTION",
+	                    actionData: { action: "fill_spreadsheet_grid", value: contentStr }
+	                  }, 10000);
+	                  appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet aktif.`);
+	                } else {
 	                  showStatusIndicator("Menempelkan teks ke editor aktif...");
 	                  await sendToContentScript({
 	                    type: "EXECUTE_ACTION",
@@ -1795,7 +1706,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   function showGoogleAlert(type, message) {
     if (!googleAlertBox) return;
     googleAlertBox.className = `google-alert-box ${type}`;
-    googleAlertBox.textContent = message;
+    googleAlertBox.innerHTML = message;
     googleAlertBox.classList.remove("hidden");
   }
 
@@ -1810,7 +1721,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       googleConnected = !!(res && res.connected);
       if (googleConnected) {
         if (googleStatusEl) {
-          googleStatusEl.textContent = "🟢 Terhubung";
+          googleStatusEl.textContent = `🟢 Terhubung (${res.email || "Google Workspace"})`;
           googleStatusEl.className = "google-status connected";
         }
         if (googleConnectText) googleConnectText.textContent = "Putuskan Akun Google";
@@ -1833,8 +1744,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     hideGoogleAlert();
     try {
       // Auto-save client ID dari input jika diisi oleh pengguna
-      const customId = (googleClientIdInput?.value || "").trim();
-      if (customId) {
+      let customId = (googleClientIdInput?.value || "").trim();
+      if (!customId) {
+        const localData = await chrome.storage.local.get(["googleClientId"]);
+        customId = localData.googleClientId || "";
+      } else {
         await chrome.storage.local.set({ googleClientId: customId });
       }
 
@@ -1845,6 +1759,16 @@ document.addEventListener("DOMContentLoaded", async () => {
           showGoogleAlert("info", "Koneksi Google diputuskan. Otomatisasi tab Google Sheets/Docs tetap berfungsi normal.");
         }
       } else {
+        if (!customId) {
+          // Buka details section agar user tahu kolom pengisian Client ID
+          const detailsEl = document.querySelector(".advanced-google-details");
+          if (detailsEl) detailsEl.open = true;
+          googleClientIdInput?.focus();
+          showGoogleAlert("info", "💡 <strong>Cara Menghubungkan Google Workspace:</strong><br><br>1. <strong>Otomatisasi Tab (Rekomendasi - Tanpa Login):</strong> Anda bisa langsung meminta AI Agent membuka dan mengedit Google Sheets/Docs/Gmail di browser Chrome tanpa setup!<br><br>2. <strong>API Latar Belakang:</strong> Buat OAuth Client ID di Google Cloud Console, masukkan ke kolom <em>Custom OAuth Client ID</em> di bawah, lalu klik tombol ini lagi.");
+          btnGoogleConnect.disabled = false;
+          return;
+        }
+
         const res = await sendToBackground({
           action: "GOOGLE_CONNECT",
           clientId: customId || undefined
@@ -1856,7 +1780,9 @@ document.addEventListener("DOMContentLoaded", async () => {
           appendLog(`⚠️ Google: ${res?.error || "gagal"}`, "WARN");
           const errText = res?.error || "Operasi Google gagal.";
           if (errText.includes("belum terpasang") || errText.includes("belum diisi")) {
-            showGoogleAlert("info", "💡 <strong>Otomatisasi Tab Sudah Aktif (Tanpa Login):</strong><br>Anda dapat langsung meminta AI Agent membuka dan mengedit Google Sheets atau Docs Anda di tab browser Chrome tanpa login akun di sini.<br><br><small style='color:#94a3b8;'>Jika Anda pengembang yang ingin API latar belakang, masukkan Client ID pada menu Pengaturan Client ID di bawah.</small>");
+            const detailsEl = document.querySelector(".advanced-google-details");
+            if (detailsEl) detailsEl.open = true;
+            showGoogleAlert("info", "💡 <strong>Otomatisasi Tab Sudah Aktif (Tanpa Login):</strong><br>Anda dapat langsung meminta AI Agent membuka dan mengedit Google Sheets atau Docs Anda di tab browser Chrome tanpa login akun di sini.<br><br><small style='color:#94a3b8;'>Jika Anda ingin menghubungkan API latar belakang, masukkan Client ID pada menu Pengaturan Client ID di bawah.</small>");
           } else {
             showGoogleAlert("error", `❌ ${errText}`);
           }
@@ -2751,9 +2677,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         fileName: resObj.fileName,
         contentText: resObj.contentText,
         contentBase64: resObj.contentBase64,
-        mimeType: resObj.mimeType,
-        tsv_data: resObj.tsv_data || resObj.tsvData,
-        summary: resObj.summary
+        mimeType: resObj.mimeType
       };
     }
 
@@ -3138,22 +3062,10 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
       if (isSheetsSite || (isSpreadsheetTask && (pageUrl.includes("docs.google.com") || pageUrl.includes("sheets")))) {
         showStatusIndicator("Mengisikan data tabel langsung ke Google Sheets...");
         appendLog("📊 Mengisikan baris & kolom data langsung ke Google Sheets...");
-        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-        try {
-          if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(aiReply);
-          }
-        } catch (_) {}
-        await sendToBackground({
-          action: "NATIVE_PASTE_SPREADSHEET",
-          tsv_data: aiReply,
-          isMac
-        }).catch(() => {});
         await sendToContentScript({
           type: "EXECUTE_ACTION",
           actionData: {
             action: "fill_spreadsheet_grid",
-            tsv_data: aiReply,
             value: aiReply
           }
         });
@@ -3505,11 +3417,6 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
         } else if (fnName === "finish_task") {
           resObj.action = "finish";
           resObj.message = fnArgs.message;
-        } else if (fnName === "fill_spreadsheet_grid") {
-          resObj.action = "fill_spreadsheet_grid";
-          resObj.tsv_data = fnArgs.tsv_data || fnArgs.tsvData || fnArgs.data || "";
-          resObj.summary = fnArgs.summary || "";
-          resObj.value = resObj.tsv_data;
         }
       } else {
         resObj = parseActionJSON(reply);
@@ -3613,85 +3520,6 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
         }
       }
 
-      // 2.5 Batch Spreadsheet Grid Handler (fill_spreadsheet_grid)
-      if (resObj && (resObj.action === "fill_spreadsheet_grid" || resObj.tsv_data)) {
-        const tsvData = resObj.tsv_data || resObj.tsvData || resObj.value || "";
-        const summaryText = resObj.summary || "";
-        const mdTable = tsvToMarkdownTable(tsvData);
-        const displayMarkdown = `${summaryText ? `**Ringkasan Analisis:** ${summaryText}\n\n` : ""}${mdTable || tsvData}`;
-
-        const artifact = {
-          artifactType: "table",
-          name: `Spreadsheet_${Date.now()}.csv`,
-          content: tsvToCSV(tsvData)
-        };
-        activeTask.artifacts = activeTask.artifacts || [];
-        activeTask.artifacts.push(artifact);
-
-        addMessageToCurrentSession("assistant", `### 📊 Ringkasan Spreadsheet Data\n\n${displayMarkdown}`, {
-          skipClean: true,
-          artifact
-        });
-
-        const userChoice = await requestAskUser(
-          "Silakan tentukan tindakan untuk data spreadsheet di atas:",
-          ["Paste ke Google Sheets Aktif", "Download File CSV"]
-        );
-
-        if (shouldStopAgent || !userChoice || userChoice.toLowerCase().includes("batal")) {
-          await finalizeTask("cancelled", "⛔ Tindakan spreadsheet dibatalkan pengguna.");
-          return;
-        }
-
-        if (userChoice.includes("Paste") || userChoice.includes("Google Sheets")) {
-          try {
-            if (navigator.clipboard?.writeText) {
-              await navigator.clipboard.writeText(tsvData);
-            }
-          } catch (_) {}
-          showStatusIndicator("Menempelkan batch data ke spreadsheet...");
-          appendLog("📋 Mengisikan batch data TSV ke Google Sheets aktif...");
-
-          const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-          await sendToBackground({
-            action: "NATIVE_PASTE_SPREADSHEET",
-            tsv_data: tsvData,
-            isMac
-          }).catch(() => {});
-
-          const execRes = await sendToContentScript({
-            type: "EXECUTE_ACTION",
-            actionData: {
-              action: "fill_spreadsheet_grid",
-              tsv_data: tsvData,
-              value: tsvData
-            }
-          });
-          const successMsg = execRes?.message || "Data berhasil dimasukkan ke Google Sheets.";
-          appendLog(`✅ ${successMsg}`);
-          (activeTask.plan || []).forEach(p => { p.status = "done"; });
-          refreshTaskCard();
-          await persistTask();
-          await finalizeTask("done", `✅ ${successMsg}`);
-          return;
-        } else if (userChoice.includes("Download") || userChoice.includes("CSV")) {
-          showStatusIndicator("Mengunduh file CSV...");
-          appendLog("⬇️ Menghasilkan dan mengunduh file CSV...");
-          triggerCSVDownload(tsvToCSV(tsvData), `spreadsheet_data_${Date.now()}.csv`);
-          (activeTask.plan || []).forEach(p => { p.status = "done"; });
-          refreshTaskCard();
-          await persistTask();
-          await finalizeTask("done", "✅ File CSV berhasil diunduh.");
-          return;
-        } else {
-          (activeTask.plan || []).forEach(p => { p.status = "done"; });
-          refreshTaskCard();
-          await persistTask();
-          await finalizeTask("done", `✅ ${userChoice}`);
-          return;
-        }
-      }
-
       // 3. Human-in-the-Loop (`ask_user`)
       if (resObj && (resObj.action === "ask_user" || resObj.isAskUser)) {
         const questionText = resObj.question || "Apakah Anda ingin melanjutkan tindakan ini?";
@@ -3746,72 +3574,38 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
             sendNow: /(?:langsung posting|langsung tweet|auto post|publish)/i.test(activeTask.goal)
           };
         } else if (reply && (reply.length > 100 || isContentTask)) {
-          const isTable = /\|.*\|[\r\n]+\|[-:\s|]+\|/i.test(reply) || /(?:riset|tabel|laptop|produk|komparasi|harga|spesifikasi|csv|spreadsheet)/i.test(activeTask.goal || sub.description);
-          const isSheets = pageData.url?.includes("/spreadsheets") ||
-                           pageData.title?.includes("Spreadsheet") ||
-                           pageData.title?.includes("Google Sheets") ||
-                           pageUrl.includes("excel.office.com") ||
-                           /(?:spreadsheet|sheets\.new|masukkan ke spreadsheet|isi spreadsheet|isi langsung)/i.test(activeTask.goal || sub.description);
-
-          const artType = (isTable || isSheets) ? "table" : "text";
-          const artTitle = (isTable || isSheets)
-            ? `Spreadsheet-${(activeTask.goal || "Data").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
+          const isTable = /\|.*\|[\r\n]+\|[-:\s|]+\|/i.test(reply) || /(?:riset|tabel|laptop|produk|komparasi|harga|spesifikasi|csv)/i.test(activeTask.goal || sub.description);
+          const artType = isTable ? "table" : "text";
+          const artTitle = isTable
+            ? `Riset-${(activeTask.goal || "Produk").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
             : `Draf-${(activeTask.goal || "Copywriting").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`;
 
-          appendLog(`✍️ Model berhasil menghasilkan ${(isTable || isSheets) ? "tabel data spreadsheet/komparasi" : "draf tulisan"} (${reply.length} karakter).`);
+          appendLog(`✍️ Model berhasil menghasilkan ${isTable ? "tabel data riset/komparasi" : "draf tulisan"} (${reply.length} karakter).`);
           const artifact = {
             artifactType: artType,
             name: artTitle,
-            content: (isTable || isSheets) ? tsvToCSV(reply) : reply
+            content: reply
           };
           activeTask.artifacts.push(artifact);
 
-          addMessageToCurrentSession("assistant", `${(isTable || isSheets) ? "### 📊 Laporan Riset Produk & Tabel Data (.CSV)" : "### 📝 Draf Copywriting Berhasil Dibuat"}\n\n${reply}`, {
+          addMessageToCurrentSession("assistant", `${isTable ? "### 📊 Laporan Riset Produk & Tabel Data (.CSV)" : "### 📝 Draf Copywriting Berhasil Dibuat"}\n\n${reply}`, {
             skipClean: true,
             artifact
           });
 
-          // 1. Cek jika halaman saat ini adalah Google Sheets atau perintah tabel spreadsheet, langsung isikan ke spreadsheet
-          if (isSheets && (isTable || reply.includes("|"))) {
+          // Cek jika halaman saat ini adalah Google Docs / editor, langsung tempelkan (SEKALI SAJA)
+          const isDocs = pageData.url?.includes("docs.google.com") || pageData.url?.includes("word.office.com") || pageData.title?.includes("Google Dokumen");
+          if (isDocs && !activeTask._articleWritten) {
             activeTask._articleWritten = true;
-            showStatusIndicator("Mengisikan data tabel langsung ke spreadsheet...");
-            appendLog("📊 Mengisikan baris & kolom data langsung ke Google Sheets aktif...");
-            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-            try {
-              if (navigator.clipboard?.writeText) {
-                await navigator.clipboard.writeText(reply);
-              }
-            } catch (_) {}
-            await sendToBackground({
-              action: "NATIVE_PASTE_SPREADSHEET",
-              tsv_data: reply,
-              isMac
-            }).catch(() => {});
-            await sendToContentScript({
-              type: "EXECUTE_ACTION",
-              actionData: {
-                action: "fill_spreadsheet_grid",
-                tsv_data: reply,
-                value: reply
-              }
-            });
-          } else {
-            // 2. Cek jika halaman saat ini adalah Google Docs / editor dokumen teks
-            const isGoogleDocsDoc = (pageData.url?.includes("docs.google.com") && !pageData.url?.includes("/spreadsheets")) ||
-                                    pageData.url?.includes("word.office.com") ||
-                                    pageData.title?.includes("Google Dokumen");
-            if (isGoogleDocsDoc && !activeTask._articleWritten) {
-              activeTask._articleWritten = true;
-              showStatusIndicator("Menempelkan teks ke editor dokumen...");
-              await executeAgentAction({ action: "paste_text", value: reply });
-            }
+            showStatusIndicator("Menempelkan teks ke editor dokumen...");
+            await executeAgentAction({ action: "paste_text", value: reply });
           }
 
           // Tandai seluruh plan sebagai done dan akhiri task — JANGAN continue (mencegah loop)
           (activeTask.plan || []).forEach(s => { s.status = "done"; });
           refreshTaskCard();
           await persistTask();
-          await finalizeTask("done", isSheets ? "✅ Tabel data berhasil dibuat dan diisikan langsung ke spreadsheet." : "✅ Konten telah selesai dirumuskan dan disimpan di panel artefak.");
+          await finalizeTask("done", "✅ Konten telah selesai dirumuskan dan disimpan di panel artefak.");
           return;
         }
 

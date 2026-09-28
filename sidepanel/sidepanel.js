@@ -1706,7 +1706,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   function showGoogleAlert(type, message) {
     if (!googleAlertBox) return;
     googleAlertBox.className = `google-alert-box ${type}`;
-    googleAlertBox.textContent = message;
+    googleAlertBox.innerHTML = message;
     googleAlertBox.classList.remove("hidden");
   }
 
@@ -1721,7 +1721,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       googleConnected = !!(res && res.connected);
       if (googleConnected) {
         if (googleStatusEl) {
-          googleStatusEl.textContent = "🟢 Terhubung";
+          googleStatusEl.textContent = `🟢 Terhubung (${res.email || "Google Workspace"})`;
           googleStatusEl.className = "google-status connected";
         }
         if (googleConnectText) googleConnectText.textContent = "Putuskan Akun Google";
@@ -1744,8 +1744,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     hideGoogleAlert();
     try {
       // Auto-save client ID dari input jika diisi oleh pengguna
-      const customId = (googleClientIdInput?.value || "").trim();
-      if (customId) {
+      let customId = (googleClientIdInput?.value || "").trim();
+      if (!customId) {
+        const localData = await chrome.storage.local.get(["googleClientId"]);
+        customId = localData.googleClientId || "";
+      } else {
         await chrome.storage.local.set({ googleClientId: customId });
       }
 
@@ -1756,6 +1759,16 @@ document.addEventListener("DOMContentLoaded", async () => {
           showGoogleAlert("info", "Koneksi Google diputuskan. Otomatisasi tab Google Sheets/Docs tetap berfungsi normal.");
         }
       } else {
+        if (!customId) {
+          // Buka details section agar user tahu kolom pengisian Client ID
+          const detailsEl = document.querySelector(".advanced-google-details");
+          if (detailsEl) detailsEl.open = true;
+          googleClientIdInput?.focus();
+          showGoogleAlert("info", "💡 <strong>Cara Menghubungkan Google Workspace:</strong><br><br>1. <strong>Otomatisasi Tab (Rekomendasi - Tanpa Login):</strong> Anda bisa langsung meminta AI Agent membuka dan mengedit Google Sheets/Docs/Gmail di browser Chrome tanpa setup!<br><br>2. <strong>API Latar Belakang:</strong> Buat OAuth Client ID di Google Cloud Console, masukkan ke kolom <em>Custom OAuth Client ID</em> di bawah, lalu klik tombol ini lagi.");
+          btnGoogleConnect.disabled = false;
+          return;
+        }
+
         const res = await sendToBackground({
           action: "GOOGLE_CONNECT",
           clientId: customId || undefined
@@ -1767,7 +1780,9 @@ document.addEventListener("DOMContentLoaded", async () => {
           appendLog(`⚠️ Google: ${res?.error || "gagal"}`, "WARN");
           const errText = res?.error || "Operasi Google gagal.";
           if (errText.includes("belum terpasang") || errText.includes("belum diisi")) {
-            showGoogleAlert("info", "💡 <strong>Otomatisasi Tab Sudah Aktif (Tanpa Login):</strong><br>Anda dapat langsung meminta AI Agent membuka dan mengedit Google Sheets atau Docs Anda di tab browser Chrome tanpa login akun di sini.<br><br><small style='color:#94a3b8;'>Jika Anda pengembang yang ingin API latar belakang, masukkan Client ID pada menu Pengaturan Client ID di bawah.</small>");
+            const detailsEl = document.querySelector(".advanced-google-details");
+            if (detailsEl) detailsEl.open = true;
+            showGoogleAlert("info", "💡 <strong>Otomatisasi Tab Sudah Aktif (Tanpa Login):</strong><br>Anda dapat langsung meminta AI Agent membuka dan mengedit Google Sheets atau Docs Anda di tab browser Chrome tanpa login akun di sini.<br><br><small style='color:#94a3b8;'>Jika Anda ingin menghubungkan API latar belakang, masukkan Client ID pada menu Pengaturan Client ID di bawah.</small>");
           } else {
             showGoogleAlert("error", `❌ ${errText}`);
           }

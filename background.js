@@ -290,6 +290,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           reportedAt: new Date().toISOString()
         };
 
+        try {
+          await fetch("https://pesat-ai-chrome-agent.senna-947.workers.dev/api/reports", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              category: "GENERAL_BUG",
+              title: `[User Report] ${reportPayload.userDescription.slice(0, 60)}`,
+              description: reportPayload.userDescription,
+              url: reportPayload.url,
+              recentLogs: reportPayload.actionLogs,
+              extraContext: { tabTitle: reportPayload.tabTitle, lastError: reportPayload.lastError }
+            })
+          }).catch(() => {});
+        } catch (_) {}
+
         // 1. Kirim single telemetry log ke Cloudflare Worker
         const reportLogEntry = {
           level: "WARN",
@@ -429,6 +444,67 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     chrome.storage.local.get(["googleAuthToken", "googleUserEmail"], (res) => {
       sendResponse({ connected: Boolean(res.googleAuthToken), email: res.googleUserEmail || "" });
     });
+    return true;
+  }
+
+  if (request.action === "GOOGLE_CONNECT") {
+    (async () => {
+      try {
+        const customClientId = request.clientId;
+        const data = await chrome.storage.local.get(["googleClientId"]);
+        const clientId = customClientId || data.googleClientId || "";
+
+        if (!clientId) {
+          sendResponse({
+            success: false,
+            error: "Google Client ID belum diisi. Masukkan Google Client ID di menu Pengaturan Lanjut jika ingin menggunakan API Latar Belakang."
+          });
+          return;
+        }
+
+        const redirectUri = chrome.identity.getRedirectURL("goog");
+        const scopes = [
+          "https://www.googleapis.com/auth/spreadsheets",
+          "https://www.googleapis.com/auth/documents",
+          "https://www.googleapis.com/auth/userinfo.email"
+        ].join(" ");
+
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&prompt=consent`;
+
+        chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, async (responseUrl) => {
+          if (chrome.runtime.lastError || !responseUrl) {
+            sendResponse({ success: false, error: chrome.runtime.lastError?.message || "Autentikasi Google dibatalkan." });
+            return;
+          }
+          try {
+            const urlObj = new URL(responseUrl);
+            const params = new URLSearchParams(urlObj.hash.substring(1));
+            const token = params.get("access_token");
+            if (token) {
+              await chrome.storage.local.set({ googleAuthToken: token });
+              // Ambil info email user
+              try {
+                const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+                if (userRes.ok) {
+                  const userData = await userRes.json();
+                  if (userData.email) await chrome.storage.local.set({ googleUserEmail: userData.email });
+                }
+              } catch (_) {}
+
+              sendResponse({ success: true, message: "Berhasil terhubung ke Google Workspace!" });
+            } else {
+              sendResponse({ success: false, error: "Gagal mendapatkan access token dari Google." });
+            }
+          } catch (e) {
+            sendResponse({ success: false, error: e.message });
+          }
+        });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
     return true;
   }
 
