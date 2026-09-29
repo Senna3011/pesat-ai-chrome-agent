@@ -1086,6 +1086,8 @@
   // ─────────────────────────────────────────────────────
   // RICH TEXT & MARKDOWN SANITIZER UNTUK DOKUMEN WEB
   // ─────────────────────────────────────────────────────
+  // RICH DOCUMENT & HTML TABLE FORMATTER (Docs & Rich Editor Support)
+  // ─────────────────────────────────────────────────────
   function convertMarkdownToRichDoc(md = "") {
     let raw = String(md || "").trim();
 
@@ -1093,8 +1095,59 @@
     raw = raw.replace(/\n\s*---\s*\n\s*(?:Thread Ringkas|Tweet|Twitter|#)[\s\S]*$/i, "");
     raw = raw.replace(/\n\s*---\s*\n/g, "\n\n");
 
-    // 2. Bersihkan Plain Text yang rapi untuk dokumen (tanpa tanda pagar #, **, dll)
-    let cleanPlain = raw
+    // 2. Convert Markdown Tables to real HTML <table> elements (Google Docs & Word Native Table Conversion)
+    const tableRegex = /((?:^[ \t]*\|[^\n]+\|[ \t]*(?:\r?\n|$))+)/gm;
+    const tablesHtml = [];
+    raw = raw.replace(tableRegex, (match) => {
+      const lines = match.trim().split(/\r?\n/).map(l => l.trim()).filter(l => l.startsWith("|") && l.endsWith("|"));
+      if (lines.length < 2) return match;
+
+      let headers = [];
+      let rows = [];
+      let separatorIndex = -1;
+
+      for (let i = 0; i < lines.length; i++) {
+        if (/^\|[-:\s|]+\|$/.test(lines[i])) {
+          separatorIndex = i;
+          break;
+        }
+      }
+      if (separatorIndex === -1) return match;
+
+      headers = lines[0].slice(1, -1).split("|").map(c => c.trim());
+      for (let i = separatorIndex + 1; i < lines.length; i++) {
+        const cells = lines[i].slice(1, -1).split("|").map(c => c.trim());
+        if (cells.some(c => c.length > 0)) {
+          rows.push(cells);
+        }
+      }
+
+      let tHtml = `<table style="border-collapse: collapse; width: 100%; border: 1px solid #cbd5e1; margin: 16px 0; font-family: Arial, sans-serif; font-size: 13px;">\n<thead>\n<tr style="background-color: #f1f5f9;">\n`;
+      headers.forEach(h => {
+        tHtml += `  <th style="border: 1px solid #cbd5e1; padding: 10px 14px; font-weight: bold; text-align: left; color: #0f172a; background-color: #f1f5f9;">${h}</th>\n`;
+      });
+      tHtml += `</tr>\n</thead>\n<tbody>\n`;
+      rows.forEach((r, idx) => {
+        const bg = idx % 2 === 1 ? "background-color: #f8fafc;" : "background-color: #ffffff;";
+        tHtml += `<tr style="${bg}">\n`;
+        r.forEach(c => {
+          tHtml += `  <td style="border: 1px solid #cbd5e1; padding: 10px 14px; color: #1e293b;">${c}</td>\n`;
+        });
+        tHtml += `</tr>\n`;
+      });
+      tHtml += `</tbody>\n</table>\n`;
+
+      const placeholder = `__HTML_TABLE_${tablesHtml.length}__`;
+      tablesHtml.push(tHtml);
+      return placeholder;
+    });
+
+    // 3. Bersihkan Plain Text yang rapi untuk dokumen
+    let cleanPlain = raw;
+    tablesHtml.forEach((tHtml, idx) => {
+      cleanPlain = cleanPlain.replace(`__HTML_TABLE_${idx}__`, md);
+    });
+    cleanPlain = cleanPlain
       .replace(/^#{1,6}\s+(.*$)/gm, "$1")
       .replace(/\*\*(.*?)\*\*\s*:\s*/g, "$1: ")
       .replace(/\*\*(.*?)\*\*/g, "$1")
@@ -1104,7 +1157,7 @@
       .replace(/\n{3,}/g, "\n\n")
       .trim();
 
-    // 3. HTML Rich Text untuk Clipboard
+    // 4. HTML Rich Text untuk Clipboard
     let cleanHtml = raw
       .replace(/^### (.*$)/gim, '<h3>$1</h3>')
       .replace(/^## (.*$)/gim, '<h2>$1</h2>')
@@ -1117,6 +1170,14 @@
       .replace(/\n/g, '<br>');
 
     cleanHtml = `<p>${cleanHtml}</p>`;
+
+    // Restore HTML tables
+    tablesHtml.forEach((tHtml, idx) => {
+      cleanHtml = cleanHtml.replace(`<p>__HTML_TABLE_${idx}__</p>`, tHtml);
+      cleanHtml = cleanHtml.replace(`__HTML_TABLE_${idx}__`, tHtml);
+    });
+
+    cleanHtml = `<html><body><!--StartFragment-->${cleanHtml}<!--EndFragment--></body></html>`;
 
     return { plain: cleanPlain, html: cleanHtml };
   }
@@ -1493,13 +1554,26 @@
 
       const targetElement = innerTextarea || document.activeElement || iframe || editorCanvas;
 
-      // 3. Tulis ke Clipboard sistem
+      const { plain: cleanPlain, html: cleanHtml } = convertMarkdownToRichDoc(cleanText);
+
+      // 3. Tulis ke Clipboard sistem dengan format HTML & Plain (Mendukung Tabel & Rich Format)
       try {
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(cleanText);
+        if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+          const blobHtml = new Blob([cleanHtml], { type: "text/html" });
+          const blobText = new Blob([cleanPlain], { type: "text/plain" });
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              "text/html": blobHtml,
+              "text/plain": blobText
+            })
+          ]);
+        } else if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(cleanPlain);
         }
       } catch (clipboardErr) {
-        console.warn("[Pesat Docs] Clipboard write error:", clipboardErr);
+        try {
+          await navigator.clipboard?.writeText?.(cleanPlain);
+        } catch (_) {}
       }
 
       // 4. Simulasi Keyboard Event Paste (Ctrl+V / Cmd+V)
@@ -1520,10 +1594,10 @@
       if (editorCanvas) editorCanvas.dispatchEvent(pasteEvent);
       document.dispatchEvent(pasteEvent);
 
-      // 5. DataTransfer Clipboard Event (Paste Injection)
+      // 5. DataTransfer Clipboard Event (Paste Injection dengan Rich HTML & Plain)
       const dt = new DataTransfer();
-      dt.setData("text/plain", cleanText);
-      dt.setData("text/html", cleanText.replace(/\n/g, "<br>"));
+      dt.setData("text/plain", cleanPlain);
+      dt.setData("text/html", cleanHtml);
       const pasteClipboardEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
 
       if (innerTextarea) innerTextarea.dispatchEvent(pasteClipboardEv);
@@ -1538,7 +1612,7 @@
           bubbles: true,
           cancelable: true,
           inputType: "insertText",
-          data: cleanText
+          data: cleanPlain
         });
         if (innerTextarea) innerTextarea.dispatchEvent(beforeInput);
         if (innerDoc) innerDoc.dispatchEvent(beforeInput);
@@ -1547,16 +1621,16 @@
 
       // 7. ExecCommand Fallback
       try {
-        if (innerDoc) innerDoc.execCommand("insertText", false, cleanText);
+        if (innerDoc) innerDoc.execCommand("insertText", false, cleanPlain);
       } catch (_) {}
       try {
-        document.execCommand("insertText", false, cleanText);
+        document.execCommand("insertText", false, cleanPlain);
       } catch (_) {}
       try {
         document.execCommand("paste");
       } catch (_) {}
 
-      showReadingHUD(`✓ Teks berhasil ditulis ke Google Docs (${cleanText.length} karakter)`, true);
+      showReadingHUD(`✓ Konten/Tabel berhasil ditulis ke Google Docs (${cleanPlain.length} karakter)`, true);
       await new Promise((r) => setTimeout(r, 400));
       return {
         success: true,
@@ -1780,10 +1854,15 @@
       };
     }
 
-    // ── paste_text: insert teks pada posisi kursor (Google Docs, Canvas, & Rich Editor friendly) ──
-    if (action === "paste_text") {
-      const text = String(value ?? actionData.text ?? "");
+    // ── paste_text / insert_table / create_table: insert teks pada posisi kursor (Google Docs, Canvas, & Rich Editor friendly) ──
+    if (action === "paste_text" || action === "insert_table" || action === "create_table" || action === "fill_table") {
+      const text = String(value ?? actionData.text ?? actionData.table ?? actionData.data ?? "");
       if (!text) return { success: false, error: "Teks kosong untuk paste_text.", errorType: "TOOL_INVALID_ARGUMENT" };
+
+      const isGoogleSheets = window.location.hostname.includes("docs.google.com") && window.location.pathname.includes("/spreadsheets");
+      if (isGoogleSheets) {
+        return await handleSpreadsheetGridInput(text);
+      }
 
       const isGoogleDocs = window.location.hostname.includes("docs.google.com");
       if (isGoogleDocs) {

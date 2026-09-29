@@ -1839,30 +1839,52 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  function sendToContentScript(payload, timeoutMs = 12000) {
+  function sendToContentScript(payload, timeoutMs = 15000, maxRetries = 2) {
     return new Promise((resolve) => {
       let resolved = false;
-      const timer = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          resolve({ success: false, error: "Content script timeout (halaman mungkin internal/terproteksi)" });
-        }
-      }, timeoutMs);
+      let retryCount = 0;
 
-      chrome.runtime.sendMessage(
-        { action: "EXECUTE_IN_CONTENT", payload },
-        (response) => {
+      const attemptSend = () => {
+        const timer = setTimeout(() => {
           if (!resolved) {
-            resolved = true;
-            clearTimeout(timer);
-            if (chrome.runtime.lastError) {
-              resolve({ success: false, error: chrome.runtime.lastError.message });
+            if (retryCount < maxRetries) {
+              retryCount++;
+              appendLog(`[Retry ${retryCount}/${maxRetries}] Content script timeout, mencoba ulang...`, "WARN");
+              attemptSend();
             } else {
-              resolve(response?.data || response || { success: false, error: "No response" });
+              resolved = true;
+              resolve({
+                success: false,
+                error: "Content script tidak merespon setelah beberapa percobaan. Halaman mungkin sedang memuat atau terproteksi."
+              });
             }
           }
-        }
-      );
+        }, timeoutMs);
+
+        chrome.runtime.sendMessage(
+          { action: "EXECUTE_IN_CONTENT", payload },
+          (response) => {
+            if (!resolved) {
+              clearTimeout(timer);
+              if (chrome.runtime.lastError) {
+                if (retryCount < maxRetries) {
+                  retryCount++;
+                  appendLog(`[Retry ${retryCount}/${maxRetries}] Jalur komunikasi belum siap, mengulang...`, "WARN");
+                  setTimeout(attemptSend, 800);
+                  return;
+                }
+                resolved = true;
+                resolve({ success: false, error: chrome.runtime.lastError.message });
+              } else {
+                resolved = true;
+                resolve(response?.data || response || { success: false, error: "No response" });
+              }
+            }
+          }
+        );
+      };
+
+      attemptSend();
     });
   }
 
@@ -2487,6 +2509,12 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     if (actionType === "type_text" || actionType === "fill") actionType = "type";
     if (actionType === "click_element") actionType = "click";
     if (actionType === "finish_task") actionType = "finish";
+    if (/(?:insert_table|create_table|sisipkan.*tabel|buat.*tabel|isi.*tabel)/i.test(actionType)) {
+      actionType = "paste_text";
+      if (!resObj.value && !resObj.text) {
+        resObj.value = resObj.table || resObj.data || activeTask?.goal || resObj.message || "";
+      }
+    }
 
     // Recovery navigate tanpa value
     if (actionType === "navigate") {
@@ -2833,10 +2861,19 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
 
     // Deteksi cerdas antara Perintah Aksi Fisik di Web vs Pembuatan Konten/Artikel/Analisis Langsung
     const isEmailAction = /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt);
-    const isSpreadsheetAction = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(userPrompt);
+
+    const isDocsTarget = /(?:google\s+docs?|docs\.new|di docs|ke docs|google\s+dokumen|di dokumen|ke dokumen)/i.test(userPrompt);
+    const hasTableCreation = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan)/i.test(userPrompt);
+
+    const isSpreadsheetAction = !isDocsTarget && (
+      /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan spreadsheet)/i.test(userPrompt) ||
+      hasTableCreation
+    );
 
     const isContentOrWriting = !isEmailAction && (
       isSpreadsheetAction ||
+      isDocsTarget ||
+      hasTableCreation ||
       /(?:buatkan|tuliskan|tulis|buat|draft|ketik|isi|generate|ceritakan|cerita)\s+(?:(?:\d+\s+)?(?:paragraf|kalimat|artikel|surat|konten|esai|tulisan|laporan|draf|copywriting|catatan|cerita|tabel)|tentang|mengenai)/i.test(userPrompt) ||
       /(?:buatkan artikel|tulis artikel|buat artikel|artikel edukasi|buatkan draf artikel|buat draf artikel|surat penawaran|rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt) ||
       /(?:tulis|ketik|isi|buat).*di\s+(?:google\s+docs|docs|dokumen|lembar\s+kerja)/i.test(userPrompt) ||
@@ -2862,6 +2899,28 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     }
 
     await startTask(userPrompt, contextSourcesToSend);
+  }
+
+  function parseMarkdownTable(markdown = "") {
+    if (!markdown) return null;
+    const lines = String(markdown).split("\n").map(l => l.trim()).filter(l => l.startsWith("|"));
+    if (lines.length < 2) return null;
+
+    const rows = [];
+    for (const line of lines) {
+      if (/^\|[-:\s|]+\|$/.test(line)) continue; // Skip separator row (|---|---|)
+      const cells = line
+        .replace(/^\|/, "")
+        .replace(/\|$/, "")
+        .split("|")
+        .map(c => c.trim());
+
+      if (cells.some(c => c.length > 0)) {
+        rows.push(cells);
+      }
+    }
+
+    return rows.length > 0 ? rows : null;
   }
 
   async function runAnalysisFlow(userPrompt) {
@@ -2899,18 +2958,54 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
                            pageTitle.includes("Excel") ||
                            pageUrl.includes("excel.office.com");
 
-      const isSpreadsheetTask = isSheetsSite ||
-                                /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi)/i.test(userPrompt);
+      const isDocsSite = (pageUrl.includes("docs.google.com") && !pageUrl.includes("/spreadsheets")) ||
+                         pageTitle.includes("Google Dokumen") ||
+                         pageTitle.includes("Google Docs") ||
+                         pageUrl.includes("word.office.com");
 
-      const isSeo = !isSpreadsheetTask && /(?:seo|meta|kata kunci|keyword)/i.test(userPrompt);
-      const isSecurity = !isSpreadsheetTask && /(?:keamanan|security|audit keamanan|ssl|https)/i.test(userPrompt);
-      const isSummarize = !isSpreadsheetTask && /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
-      const isSocialThread = !isSpreadsheetTask && /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed)/i.test(userPrompt);
-      const isProductResearch = !isSpreadsheetTask && !isSocialThread && /(?:riset produk|laptop|harga|rekomendasi produk|komparasi|spesifikasi|cari produk|tokopedia|shopee|produk)/i.test(userPrompt);
-      const isArticle = !isSpreadsheetTask && !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt);
+      const isDocsTarget = /(?:google\s+docs?|docs\.new|di docs|ke docs|google\s+dokumen|di dokumen|ke dokumen)/i.test(userPrompt) || isDocsSite;
+
+      // Klasifikasi Intent yang Akurat (Prioritas: Summarize / SEO / Security / Social / Table Docs / Table Sheets / Product / Article / QA)
+      const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
+      const isSeo = !isSummarize && /(?:seo|meta|kata kunci|keyword)/i.test(userPrompt);
+      const isSecurity = !isSummarize && /(?:keamanan|security|audit keamanan|ssl|https)/i.test(userPrompt);
+      const isSocialThread = !isSummarize && /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed)/i.test(userPrompt);
+
+      const hasTableCreationIntent = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan|tabel)/i.test(userPrompt);
+
+      // isDocsTableTask: jika tujuannya Google Docs dan ada perintah membuat tabel
+      const isDocsTableTask = !isSummarize && !isSeo && !isSecurity && !isSocialThread && isDocsTarget && hasTableCreationIntent;
+
+      // isSpreadsheetTask HANYA jika BUKAN Docs task, bukan summarize/seo/security, dan ada intent spreadsheet atau halaman sheets
+      const isSpreadsheetTask = !isSummarize && !isSeo && !isSecurity && !isSocialThread && !isDocsTableTask && (
+        /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|buatkan spreadsheet)/i.test(userPrompt) ||
+        (isSheetsSite && /(?:buat|isi|masukkan|tambahkan|tabel|data|baris|kolom)/i.test(userPrompt)) ||
+        (!isDocsTarget && hasTableCreationIntent)
+      );
+
+      const isProductResearch = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isSocialThread && /(?:riset produk|laptop|harga|rekomendasi produk|komparasi|spesifikasi|cari produk|tokopedia|shopee|produk)/i.test(userPrompt);
+      const isArticle = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt);
 
       let promptPayload = "";
-      if (isSpreadsheetTask) {
+      if (isDocsTableTask) {
+        promptPayload = `Bertindaklah sebagai MASTER DOCUMENT DESIGNER & SENIOR DATA ANALYST (Standar Dokumen Eksekutif Google Docs & Microsoft Word).
+
+[PERINTAH PEMBUATAN TABEL DI DOKUMEN]:
+${userPrompt}
+
+[KONTEKS DOKUMEN WEB SAAT INI (jika ada)]:
+Judul: ${pageTitle} | URL: ${pageUrl}
+${cleanText.substring(0, 3000)}
+
+PEDOMAN KETAT TABEL DOKUMEN GOOGLE DOCS:
+1. SAJIKAN TABEL DALAM FORMAT MARKDOWN TABLE RESMI:
+   - Header kolom harus jelas dan terisi penuh sesuai permintaan (contoh: | No | SKU | Nama Produk | Kategori | Harga Satuan (IDR) | Jumlah Terjual | Total Penjualan (IDR) |).
+   - Seluruh baris data harus diisi lengkap dengan data yang realistis (5 produk lengkap).
+   - Sertakan baris Total / Rata-rata di bagian bawah tabel jika relevan.
+2. Sertakan judul dokumen berbobot di baris pertama (# Judul).
+3. Berikan pengantar singkat sebelum tabel dan ringkasan eksekutif 1-2 paragraf setelah tabel yang membedah wawasan dari data tersebut.
+4. DILARANG menggunakan tanda kurung siku placeholder ([...]) atau template kosong.`;
+      } else if (isSpreadsheetTask) {
         promptPayload = `Bertindaklah sebagai MASTER SPREADSHEET & FINANCIAL DATA SCIENTIST EXPERT (Standar Senior Modeler & Excel Specialist).
 
 [PERINTAH & KEBUTUHAN DATA SPREADSHEET]:
@@ -3044,7 +3139,24 @@ Format laporan dalam Markdown:
 2. ### ⚠️ Temuan Potensi Kerentanan & Resiko
 3. ### 🔒 Rekomendasi Pengamanan Web`;
       } else if (isSummarize) {
-        promptPayload = `Tolong buat ringkasan komprehensif, rapi, dan mudah dipahami dari konten halaman web berikut:
+        if (isSheetsSite) {
+          promptPayload = `Tolong buat ringkasan eksekutif dan wawasan dari lembar kerja Google Spreadsheet / Excel berikut:
+
+Judul Dokumen: ${pageTitle}
+URL: ${pageUrl}
+
+[KONTEN & DATA LEMBAR KERJA]:
+${cleanText.substring(0, 7000) || "(Lembar kerja saat ini masih berupa spreadsheet kosong / belum memuat data sel)"}
+
+INSTRUKSI PERANGKUMAN SPREADSHEET:
+1. Jika lembar kerja berstatus kosong atau belum ada data entri, jelaskan secara ramah bahwa lembar kerja ini masih kosong dan berikan saran ringkas aksi yang dapat dilakukan (misal: meminta AI membuatkan tabel komparasi atau data penjualan).
+2. Jika lembar kerja memiliki data/tabel/angka, sajikan analisis poin-poin kunci:
+   - ### 📊 Ringkasan Dataset & Struktur Lembar Kerja
+   - ### 📌 Temuan Utama & Analisis Angka
+   - ### 💡 Kesimpulan & Rekomendasi
+3. DILARANG membuat artefak file spreadsheet atau format formula buatan jika dokumen kosong. Format dalam teks Markdown rapi.`;
+        } else {
+          promptPayload = `Tolong buat ringkasan komprehensif, rapi, dan mudah dipahami dari konten halaman web berikut:
 
 Judul: ${pageTitle}
 URL: ${pageUrl}
@@ -3061,6 +3173,7 @@ Format ringkasan dalam Markdown yang elegan:
 
 ### 💡 Kesimpulan & Tindak Lanjut
 (Penjelasan akhir yang aplikatif)`;
+        }
       } else {
         // Tanya Jawab / Pertanyaan Informasi umum tentang halaman web saat ini
         promptPayload = `Anda adalah asisten AI pintar. Jawablah pertanyaan pengguna berikut dengan tepat dan informatif berdasarkan halaman web yang sedang dibuka.
@@ -3083,18 +3196,18 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
 
       const aiReply = await callLLM("chat", promptPayload, { isSummarize: true });
 
-      const artType = (isSpreadsheetTask || isProductResearch) ? "table" : (isSocialThread ? "social" : (isArticle ? "doc" : "text"));
+      const artType = (isSpreadsheetTask || isProductResearch) ? "table" : (isSocialThread ? "social" : ((isArticle || isDocsTableTask) ? "doc" : "text"));
       const artTitle = (isSpreadsheetTask || isProductResearch)
         ? `Spreadsheet-${(userPrompt || "Data").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
         : (isSocialThread
             ? `Thread-${(userPrompt || "Sosmed").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.txt`
-            : `Draf-${(userPrompt || "Artikel").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`);
+            : `Draf-${(userPrompt || "Dokumen").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`);
 
-      const artifact = {
+      const artifact = (!isSummarize && (isSpreadsheetTask || isProductResearch || isSocialThread || isArticle || isDocsTableTask)) ? {
         artifactType: artType,
         name: artTitle,
         content: aiReply
-      };
+      } : null;
 
       const isDocsOrEditor = (pageUrl.includes("docs.google.com") && !pageUrl.includes("/spreadsheets")) ||
                              pageUrl.includes("word.office.com") ||
@@ -3108,29 +3221,96 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
                            pageUrl.includes("facebook.com") ||
                            pageUrl.includes("threads.net");
 
-      if (isSpreadsheetTask) {
+      if (isDocsTableTask) {
+        if (!isDocsSite) {
+          appendLog("Membuka lembar kerja Google Docs baru (docs.new)...");
+          showStatusIndicator("Membuka lembar kerja Google Docs...");
+          await sendToBackground({ action: "NAVIGATE_TAB", url: "https://docs.new" });
+
+          let docsReady = false;
+          for (let i = 0; i < 20; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            try {
+              const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+              if (tabs && tabs[0]?.url && tabs[0].url.includes("docs.google.com/document")) {
+                docsReady = true;
+                appendLog(`✓ Google Docs dimuat: ${tabs[0].title || "Dokumen"}`);
+                break;
+              }
+            } catch (_) {}
+          }
+
+          if (!docsReady) {
+            throw new Error("Google Docs tidak dapat dimuat dalam 20 detik. Periksa koneksi internet Anda.");
+          }
+
+          await new Promise(r => setTimeout(r, 2000));
+        }
+
+        showStatusIndicator("Menuliskan teks dan tabel langsung ke Google Docs...");
+        appendLog("📄 Menuliskan dokumen dan tabel ke Google Docs...");
+        await sendToContentScript({
+          type: "EXECUTE_ACTION",
+          actionData: {
+            action: "paste_text",
+            value: aiReply
+          }
+        }, 25000, 3);
+
+        addMessageToCurrentSession("assistant", `### 📝 Tabel Dokumen Berhasil Dibuat & Dituliskan ke Google Docs\n\n${aiReply}`, {
+          skipClean: true,
+          artifact
+        });
+      } else if (isSpreadsheetTask && !isSummarize) {
         if (!isSheetsSite) {
           appendLog("Membuka lembar kerja Google Sheets baru (sheets.new)...");
           showStatusIndicator("Membuka lembar kerja Google Sheets...");
           await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new" });
-          await new Promise(r => setTimeout(r, 4500));
-          await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
+
+          // Polling hingga tab aktif ter-redirect ke docs.google.com/spreadsheets (maksimal 20 detik)
+          let sheetsReady = false;
+          for (let i = 0; i < 20; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            try {
+              const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+              if (tabs && tabs[0]?.url && tabs[0].url.includes("docs.google.com/spreadsheets")) {
+                sheetsReady = true;
+                appendLog(`✓ Google Sheets dimuat: ${tabs[0].title || "Spreadsheet"}`);
+                break;
+              }
+            } catch (_) {}
+          }
+
+          if (!sheetsReady) {
+            throw new Error("Google Sheets tidak dapat dimuat dalam 20 detik. Periksa koneksi internet Anda.");
+          }
+
+          await new Promise(r => setTimeout(r, 2000));
         }
 
         showStatusIndicator("Mengisikan data tabel langsung ke Google Sheets...");
         appendLog("📊 Mengisikan baris & kolom data langsung ke Google Sheets...");
-        await sendToContentScript({
+
+        const tableData = typeof parseMarkdownTable === "function" ? parseMarkdownTable(aiReply) : null;
+
+        const fillResult = await sendToContentScript({
           type: "EXECUTE_ACTION",
           actionData: {
             action: "fill_spreadsheet_grid",
-            value: aiReply
+            value: aiReply,
+            tableData: tableData
           }
-        });
+        }, 25000, 3);
+
+        if (!fillResult.success) {
+          appendLog(`⚠️ Peringatan pengisian sel: ${fillResult.error || "Gagal mengisi sel otomatis"}`, "WARN");
+        }
+
         addMessageToCurrentSession("assistant", `### 📊 Data Berhasil Dibuat & Diisikan ke Google Sheets\n\n${aiReply}`, {
           skipClean: true,
           artifact
         });
-      } else if (isDocsOrEditor && !isSocialThread && !isProductResearch && !isSpreadsheetTask && (isArticle || /(?:tulis|buatkan|ketik|tempel|masukkan|isi|paragraf|artikel)/i.test(userPrompt))) {
+      } else if (isDocsOrEditor && !isSocialThread && !isProductResearch && !isSpreadsheetTask && !isSummarize && (isArticle || /(?:tulis|buatkan|ketik|tempel|masukkan|isi|paragraf|artikel)/i.test(userPrompt))) {
         showStatusIndicator("Menuliskan teks langsung ke Google Dokumen / editor...");
         appendLog("📄 Menuliskan teks langsung ke Google Dokumen / Lembar kerja aktif...");
         await sendToContentScript({
@@ -3144,7 +3324,7 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
           skipClean: true,
           artifact
         });
-      } else if (isSocialSite && isSocialThread) {
+      } else if (isSocialSite && isSocialThread && !isSummarize) {
         showStatusIndicator("Menempelkan thread ke postingan media sosial...");
         appendLog("📱 Menempelkan teks thread ke postingan media sosial aktif...");
         await sendToContentScript({
@@ -3163,7 +3343,11 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
           ? "### 📱 Thread Media Sosial Berhasil Dibuat"
           : (isProductResearch
               ? "### 📊 Laporan Riset Produk & Tabel Data (.CSV)"
-              : (isArticle ? "### 📝 Artikel Berhasil Dibuat" : ""));
+              : (isArticle
+                  ? "### 📝 Artikel Berhasil Dibuat"
+                  : (isSummarize
+                      ? (isSheetsSite ? "### 📊 Ringkasan Lembar Kerja Spreadsheet" : "### 📄 Ringkasan Halaman Web")
+                      : "")));
         const formattedReply = headerTitle ? `${headerTitle}\n\n${aiReply}` : aiReply;
         addMessageToCurrentSession("assistant", formattedReply, { skipClean: true, artifact });
       }
@@ -3211,7 +3395,8 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
 
       // 2. Cek tab aktif saat ini & tentukan apakah perlu switch tab
       const isCopywritingTask = /(copywriting|buatkan\s+(tulisan|artikel|konten|copy|penawaran|paragraf)|tulis\s+(copywriting|artikel|surat|penawaran|email|paragraf)|draft\s+|buat\s+(artikel|surat|email|copy|paragraf))/i.test(goal) ||
-                                /(?:tulis|ketik|buat|isi)\s+(?:\d+\s+)?paragraf/i.test(goal);
+                                /(?:tulis|ketik|buat|isi)\s+(?:\d+\s+)?paragraf/i.test(goal) ||
+                                /(?:tabel|table|data penjualan)/i.test(goal);
       let activeTabInfo = null;
       try {
         const at = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -3404,6 +3589,22 @@ Susun rencana subtask (maksimal 7) untuk mencapai goal di atas.
       const tabsCtx = await getTabsContext();
 
       if (shouldStopAgent) break;
+
+      // Fast path untuk Google Docs saat subtask meminta membuat / menyisipkan tabel
+      const isDocsPage = pageData?.url?.includes("docs.google.com") && !pageData?.url?.includes("/spreadsheets");
+      if (isDocsPage && /(?:tabel|table|sisipkan.*tabel|buat.*tabel|isi.*tabel)/i.test(sub.description || activeTask.goal)) {
+        appendLog(`📄 Menyusun tabel terstruktur dan menuliskan langsung ke Google Docs...`);
+        showStatusIndicator("Menuliskan tabel ke Google Docs...");
+        const tablePrompt = `Tolong buatkan dokumen dengan tabel yang rapi, lengkap, dan berbobot sesuai permintaan berikut:\n\n[PERINTAH]\n${activeTask.goal}\n\nSubtask: ${sub.description}\n\nFormat tabel dalam Markdown table standar dengan header jelas dan baris data lengkap.`;
+        const tableContent = await callLLM("chat", tablePrompt);
+        if (tableContent) {
+          await executeAgentAction({ action: "paste_text", value: tableContent });
+          markSubtask(sub.id, "done");
+          refreshTaskCard();
+          await finalizeTask("done", "✅ Tabel dan dokumen data berhasil dibuat ke Google Docs.");
+          return;
+        }
+      }
 
       // 2. Prompt Navigator
       const contextPrompt = typeof PesatContextEngine !== "undefined" && activeTask?.contextSources?.length

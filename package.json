@@ -1,0 +1,24 @@
+{
+  "name": "chrome-extension-pesat-agent",
+  "version": "1.0.0",
+  "description": "Chrome Extension (Manifest V3) berbasis AI Browser Automation yang terintegrasi dengan API AI Internal via Cloudflare Pages (Serverless Functions).",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Senna3011/pesat-ai-chrome-agent.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Senna3011/pesat-ai-chrome-agent/issues"
+  },
+  "homepage": "https://github.com/Senna3011/pesat-ai-chrome-agent#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}
