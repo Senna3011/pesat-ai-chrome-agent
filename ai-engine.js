@@ -144,7 +144,8 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
 
   const PesatAIEngine = {
     getTools() {
-      return AGENTIC_TOOLS;
+      const skillTools = globalThis.PesatSkillRegistry?.getAllTools?.() || [];
+      return [...AGENTIC_TOOLS, ...skillTools];
     },
 
     async testConnection(cfg = {}) {
@@ -215,7 +216,8 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
       const model = (config.modelName || "").trim() || "pesat-flash";
 
       const domContext = domTree ? `\n\n[STRUKTUR ELEMEN HALAMAN SAAT INI]:\n${domTree}` : "";
-      const fullSystemPrompt = SYSTEM_AGENTIC_PROMPT + domContext;
+      const skillPrompt = globalThis.PesatSkillRegistry?.getSystemPromptAdditions?.() || "";
+      const fullSystemPrompt = SYSTEM_AGENTIC_PROMPT + skillPrompt + domContext;
 
       const payloadMessages = [
         { role: "system", content: fullSystemPrompt },
@@ -227,6 +229,10 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
       }
 
       const maxTokens = Number(config.maxTokens || config.max_tokens) || 4096;
+      const combinedTools = [
+        ...AGENTIC_TOOLS,
+        ...(globalThis.PesatSkillRegistry?.getAllTools?.() || [])
+      ];
 
       if (apiKey) {
         const baseUrl = (config.apiBaseUrl || "").trim() || DEFAULT_PESATROUTER;
@@ -240,7 +246,7 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
         };
 
         if (useTools && phase !== "chat") {
-          requestBody.tools = AGENTIC_TOOLS;
+          requestBody.tools = combinedTools;
           requestBody.tool_choice = "auto";
         }
 

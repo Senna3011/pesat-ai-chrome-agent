@@ -1142,16 +1142,19 @@
       return placeholder;
     });
 
-    // 3. Bersihkan Plain Text yang rapi untuk dokumen
+    // 3. Bersihkan Plain Text yang rapi untuk dokumen (Hapus seluruh asterisk markdown bintang dan underscore)
     let cleanPlain = raw;
     tablesHtml.forEach((tHtml, idx) => {
       cleanPlain = cleanPlain.replace(`__HTML_TABLE_${idx}__`, md);
     });
     cleanPlain = cleanPlain
       .replace(/^#{1,6}\s+(.*$)/gm, "$1")
-      .replace(/\*\*(.*?)\*\*\s*:\s*/g, "$1: ")
+      .replace(/\*\*\*(.*?)\*\*\*/g, "$1")
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .replace(/\*(.*?)\*/g, "$1")
+      .replace(/___(.*?)___/g, "$1")
+      .replace(/__(.*?)__/g, "$1")
+      .replace(/_(.*?)_/g, "$1")
       .replace(/^>\s*/gm, "")
       .replace(/^\s*[\*\-]\s+/gm, "• ")
       .replace(/\n{3,}/g, "\n\n")
@@ -1162,8 +1165,12 @@
       .replace(/^### (.*$)/gim, '<h3>$1</h3>')
       .replace(/^## (.*$)/gim, '<h2>$1</h2>')
       .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+      .replace(/\*\*\*(.*?)\*\*\*/gim, '<b><i>$1</i></b>')
       .replace(/\*\*(.*?)\*\*/gim, '<b>$1</b>')
       .replace(/\*(.*?)\*/gim, '<i>$1</i>')
+      .replace(/___(.*?)___/gim, '<b><i>$1</i></b>')
+      .replace(/__(.*?)__/gim, '<b>$1</b>')
+      .replace(/_(.*?)_/gim, '<i>$1</i>')
       .replace(/^>\s*(.*$)/gim, '<blockquote style="border-left:3px solid #3b82f6;padding-left:12px;color:#475569;margin:8px 0;">$1</blockquote>')
       .replace(/^\s*[\*\-]\s+(.*$)/gim, '<li>$1</li>')
       .replace(/\n\n+/g, '</p><p>')
@@ -1852,6 +1859,128 @@
         message: `Data tabel (${rows.length} baris) berhasil disalin dan siap ditempelkan ke spreadsheet.`,
         stateChanged: true
       };
+    }
+
+    // ── Modular Skills (skills.sh) DOM Action Handlers ──
+    if (action === "extract_table_data") {
+      const selector = actionData.selector;
+      const targetTable = selector ? document.querySelector(selector) : (document.querySelector("table, [role='grid']") || document.querySelector(".waffle-grid"));
+      const columns = [];
+      const rows = [];
+
+      if (targetTable) {
+        const headerEls = targetTable.querySelectorAll("th, [role='columnheader']");
+        headerEls.forEach(th => columns.push(th.textContent.trim()));
+
+        const rowEls = targetTable.querySelectorAll("tbody tr, tr:not(:first-child), [role='row']");
+        const maxR = Math.min(rowEls.length, actionData.maxRows || 50);
+        for (let i = 0; i < maxR; i++) {
+          const cells = rowEls[i].querySelectorAll("td, [role='gridcell']");
+          if (cells.length > 0) {
+            rows.push(Array.from(cells).map(c => c.textContent.trim()));
+          }
+        }
+      }
+
+      if (rows.length === 0) {
+        const cards = document.querySelectorAll("[data-testid*='product' i], .product-card, .goods-item, article");
+        if (cards.length > 0) {
+          columns.push("Item", "Deskripsi / Info");
+          cards.forEach((card, idx) => {
+            if (idx < (actionData.maxRows || 30)) {
+              rows.push([
+                card.querySelector("h2, h3, h4, .title, a")?.textContent?.trim() || `Item ${idx+1}`,
+                card.textContent?.replace(/\s+/g, ' ').trim().slice(0, 100)
+              ]);
+            }
+          });
+        }
+      }
+
+      return {
+        success: true,
+        columns: columns.length > 0 ? columns : ["Data"],
+        rows: rows,
+        message: `Berhasil mengekstrak ${rows.length} baris data.`
+      };
+    }
+
+    if (action === "click_next_page") {
+      const nextBtn = document.querySelector("a[rel='next'], button[aria-label*='Next' i], button[aria-label*='Berikutnya' i], a[aria-label*='Next' i], a[aria-label*='Berikutnya' i], .pagination-next, .next-page, [data-testid*='next' i]");
+      if (nextBtn) {
+        nextBtn.click();
+        return { success: true, message: "Tombol halaman berikutnya berhasil diklik." };
+      }
+      return { success: false, error: "Tombol halaman berikutnya (Next) tidak ditemukan." };
+    }
+
+    if (action === "inspect_form_fields") {
+      const container = actionData.formSelector ? document.querySelector(actionData.formSelector) : document;
+      const inputs = (container || document).querySelectorAll("input:not([type='hidden']), textarea, select");
+      const fields = Array.from(inputs).map((el, idx) => {
+        let label = "";
+        if (el.id) {
+          const lblEl = document.querySelector(`label[for="${el.id}"]`);
+          if (lblEl) label = lblEl.textContent.trim();
+        }
+        if (!label) {
+          label = el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.name || `Field #${idx+1}`;
+        }
+        return {
+          id: el.id || null,
+          name: el.name || null,
+          type: el.type || el.tagName.toLowerCase(),
+          label,
+          placeholder: el.placeholder || null,
+          currentValue: el.value || null
+        };
+      });
+      return { success: true, fields, message: `Ditemukan ${fields.length} elemen form.` };
+    }
+
+    if (action === "autofill_form_batch") {
+      const fields = Array.isArray(actionData.fields) ? actionData.fields : [];
+      let filledCount = 0;
+
+      fields.forEach(f => {
+        const ident = (f.identifier || "").toLowerCase();
+        const val = f.value ?? "";
+        const el = Array.from(document.querySelectorAll("input:not([type='hidden']), textarea, select")).find(elem => {
+          const name = (elem.name || "").toLowerCase();
+          const id = (elem.id || "").toLowerCase();
+          const ph = (elem.placeholder || "").toLowerCase();
+          const aria = (elem.getAttribute("aria-label") || "").toLowerCase();
+          return name === ident || id === ident || ph.includes(ident) || aria.includes(ident);
+        });
+
+        if (el) {
+          setNativeInputValue(el, val);
+          filledCount++;
+        }
+      });
+
+      if (actionData.submitAfter) {
+        const submitBtn = document.querySelector("button[type='submit'], input[type='submit'], button.submit-btn");
+        if (submitBtn) setTimeout(() => submitBtn.click(), 300);
+      }
+
+      return {
+        success: true,
+        filledCount,
+        message: `Berhasil mengisi ${filledCount} field formulir.`
+      };
+    }
+
+    if (action === "click_canvas_text") {
+      const canvas = document.querySelector("canvas");
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        canvas.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }));
+        canvas.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }));
+        canvas.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }));
+        return { success: true, message: `Canvas berhasil diklik untuk '${actionData.text}'.` };
+      }
+      return { success: false, error: "Canvas tidak ditemukan pada halaman ini." };
     }
 
     // ── paste_text / insert_table / create_table: insert teks pada posisi kursor (Google Docs, Canvas, & Rich Editor friendly) ──
@@ -2879,6 +3008,22 @@
       } else {
         sendResponse({ success: false, error: "Tidak ditemukan elemen tabel atau data grid pada halaman ini." });
       }
+      return true;
+    }
+
+    if (request.type === "GET_CANVAS_RECTS") {
+      const canvases = Array.from(document.querySelectorAll("canvas")).map((c) => {
+        const r = c.getBoundingClientRect();
+        return {
+          top: r.top,
+          left: r.left,
+          width: r.width,
+          height: r.height,
+          ariaLabel: c.getAttribute("aria-label") || "",
+          className: c.className || ""
+        };
+      });
+      sendResponse({ success: true, rects: canvases });
       return true;
     }
 

@@ -2579,6 +2579,22 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       return result;
     }
 
+    // ── Eksekusi Modular Skills (skills.sh Registry) ──
+    if (globalThis.PesatSkillRegistry?.findSkillForTool?.(actionType)) {
+      appendLog(`🛠️ Mengeksekusi skill '${actionType}'...`);
+      const skillRes = await globalThis.PesatSkillRegistry.executeSkill(actionType, resObj, {
+        sendToContentScript,
+        sendToBackground,
+        appendLog,
+        showStatusIndicator
+      });
+      result.success = !!(skillRes && skillRes.success !== false);
+      result.message = skillRes?.message || skillRes?.error || `Skill ${actionType} dieksekusi.`;
+      result.stateChanged = skillRes?.stateChanged !== false;
+      Object.assign(result, skillRes);
+      return result;
+    }
+
     // ── Aksi otomatisasi Email Khusus (Gmail / Webmail) ──
     if (actionType === "send_email" || actionType === "compose_email") {
       let currentTab = null;
