@@ -298,11 +298,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     s = s.replace(/<iframe[\s\S]*?<\/iframe>/gi, "");
     s = s.replace(/\son\w+\s*=\s*(["\x27]).*?\1/gi, "");
 
-    // 10. Wrap tables in responsive containers
-    s = s.replace(/(<table[\s\S]*?<\/table>)/gi, `<div class="table-container">$1</div>`);
+    // 10. Wrap tables in responsive containers (jika belum dibungkus)
+    if (!s.includes('<div class="table-container">')) {
+      s = s.replace(/(<table[\s\S]*?<\/table>)/gi, `<div class="table-container">$1</div>`);
+    }
 
     return s;
   }
+  window.parseMarkdown = parseMarkdown;
 
   // ═══════════════════════════════════════════════════
   // STATUS INDICATOR
@@ -368,6 +371,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     saveSessions();
     renderCurrentSession();
     historyDrawer.classList.add("hidden");
+
+    // Reset prompt input UX
+    if (promptInput) {
+      promptInput.value = "";
+      promptInput.style.height = "auto";
+    }
+    updateSendButtonState();
 
     // Reset Token Tracker UI & background loop tracker
     try {
@@ -726,7 +736,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
         askHtml += `</div>`;
       } else if (msg.answered) {
-        askHtml += `<div style="font-size:12.5px;color:#34d399;margin-top:8px;">✔️ Dijawab: ${escapeHtml(msg.answered)}</div>`;
+        askHtml += `<div style="font-size:14px;color:#34d399;margin-top:8px;">✔️ Dijawab: ${escapeHtml(msg.answered)}</div>`;
       }
       askHtml += `
           </div>
@@ -738,7 +748,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       let confHtml = `
         <div class="confirm-card">
           <div class="confirm-title">🛡️ Konfirmasi Diperlukan — Aksi Berisiko</div>
-          <div style="font-size:13px;color:#cbd5e1;margin-bottom:8px;">${escapeHtml(c.description || "Aksi berikut akan dieksekusi:")}</div>
+          <div style="font-size:14px;color:#cbd5e1;margin-bottom:8px;">${escapeHtml(c.description || "Aksi berikut akan dieksekusi:")}</div>
           <div class="confirm-action-desc">${escapeHtml(c.detail || "")}</div>
       `;
       if (!c.resolved) {
@@ -750,7 +760,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           </div>
         `;
       } else {
-        confHtml += `<div style="font-size:12.5px;color:${c.approved ? "#34d399" : "#f87171"};">${c.approved ? "✔️ Disetujui pengguna" : "⛔ Ditolak pengguna"}</div>`;
+        confHtml += `<div style="font-size:14px;color:${c.approved ? "#34d399" : "#f87171"};">${c.approved ? "✔️ Disetujui pengguna" : "⛔ Ditolak pengguna"}</div>`;
       }
       confHtml += `</div>`;
       contentHtml = confHtml;
@@ -863,7 +873,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             <div class="agent-card-body">
               <div>${escapeHtml(navigator.description || navigator.action)}</div>
               ${navigator.elementId ? `<span class="target-badge">Target: [${escapeHtml(String(navigator.elementId))}]</span>` : ''}
-              ${navigator.status ? `<div style="font-size:13.5px; color:#c7d2fe; margin-top:4px;">Status: ${escapeHtml(navigator.status)}</div>` : ''}
+              ${navigator.status ? `<div style="font-size:14px; color:#c7d2fe; margin-top:4px;">Status: ${escapeHtml(navigator.status)}</div>` : ''}
               ${navigator.screenshot ? `<img class="screenshot-thumb" src="${navigator.screenshot}" alt="Bukti visual langkah" />` : ''}
             </div>
           </div>
@@ -1923,6 +1933,49 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
+  // Navigasi URL tab browser secara andal (langsung via chrome.tabs API atau background)
+  async function navigateToUrl(destUrl) {
+    if (!destUrl) return { success: false, error: "URL tidak valid" };
+    let dest = String(destUrl).trim();
+    if (!/^https?:\/\//i.test(dest)) {
+      dest = "https://" + dest;
+    }
+
+    // 1. Prioritas Utama: Navigasi langsung via chrome.tabs API di Tab Aktif
+    try {
+      if (typeof chrome !== "undefined" && chrome.tabs?.query && chrome.tabs?.update) {
+        const tabs = await new Promise((resolve) => {
+          chrome.tabs.query({ active: true, currentWindow: true }, (t) => resolve(t || []));
+        });
+        if (tabs && tabs.length > 0 && tabs[0].id) {
+          const tabId = tabs[0].id;
+          await chrome.tabs.update(tabId, { url: dest });
+          appendLog(`🌐 chrome.tabs.update berhasil membuka tab ${tabId}: ${dest}`);
+          return { success: true, url: dest, message: `Membuka URL: ${dest}` };
+        }
+      }
+    } catch (tabErr) {
+      appendLog(`⚠️ Gagal direct chrome.tabs.update (${tabErr.message}), mencoba fallback background...`, "WARN");
+    }
+
+    // 2. Fallback via background script NAVIGATE_TAB
+    const bgRes = await sendToBackground({ action: "NAVIGATE_TAB", url: dest });
+    if (bgRes && bgRes.success) {
+      return bgRes;
+    }
+
+    // 3. Fallback terakhir via content script jika memungkinkan
+    try {
+      const csRes = await sendToContentScript({
+        type: "EXECUTE_ACTION",
+        actionData: { action: "navigate", value: dest, url: dest }
+      }, 5000);
+      if (csRes && csRes.success) return csRes;
+    } catch (_) {}
+
+    return bgRes || { success: false, error: "Gagal menavigasi ke URL tujuan" };
+  }
+
   // ═══════════════════════════════════════════════════
   // TASK STATE MACHINE (Phase 1)
   // ═══════════════════════════════════════════════════
@@ -2181,7 +2234,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const combined = `${text}\n${userPrompt}`;
 
     const navRegex = /(?:buka|kunjungi|pergi ke|navigate to|open|go to)\s+(?:website|halaman|situs)?\s*[`"']?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s`"']*)?|https?:\/\/[^\s`"']+)[`"']?/i;
-    const searchRegex = /(?:cari|search|googling|temukan)\s+(?:di google|di internet)?\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i;
+    const searchRegex = /(?:cari|search|googling|temukan)\s+(?:di google|di internet|di tokopedia|di shopee|di amazon)\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i;
 
     const navMatch = combined.match(navRegex);
     if (navMatch) {
@@ -2367,7 +2420,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (card) {
               const actionsRow = card.querySelector(".plan-approval-actions");
               if (actionsRow) {
-                actionsRow.innerHTML = `<span style="color:#10b981; font-size:12px; font-weight:600; display:flex; align-items:center; gap:6px;">✅ Rencana Disetujui — Memulai Eksekusi...</span>`;
+                actionsRow.innerHTML = `<span style="color:#10b981; font-size:14px; font-weight:600; display:flex; align-items:center; gap:6px;">✅ Rencana Disetujui — Memulai Eksekusi...</span>`;
               }
             }
             if (planApprovalResolver) {
@@ -2382,7 +2435,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (card) {
               const actionsRow = card.querySelector(".plan-approval-actions");
               if (actionsRow) {
-                actionsRow.innerHTML = `<span style="color:#ef4444; font-size:12px; font-weight:600;">⛔ Rencana Dibatalkan</span>`;
+                actionsRow.innerHTML = `<span style="color:#ef4444; font-size:14px; font-weight:600;">⛔ Rencana Dibatalkan</span>`;
               }
             }
             if (planApprovalResolver) {
@@ -2679,9 +2732,9 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       return result;
     }
 
-    // ── Aksi via background ──
+    // ── Aksi via background / direct tabs ──
     if (actionType === "navigate") {
-      const r = await sendToBackground({ action: "NAVIGATE_TAB", url: resObj.url });
+      const r = await navigateToUrl(resObj.url || resObj.value);
       result.success = !!r.success;
       result.message = r.message || r.error;
       result.raw = r;
@@ -2879,16 +2932,33 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     let displayPrompt = userPrompt;
     if (contextSourcesToSend.length > 0) {
       const extraChips = contextSourcesToSend
-        .filter(s => s.type === "File" || s.type === "Image" || !userPrompt.includes(`@${s.name}`))
-        .map(s => s.type === "BrowserTab" ? `@${s.name}` : (s.type === "Connector" ? `@${s.name}` : `📎 ${s.name}`));
+        .filter(s => s && s.name && (s.type === "File" || s.type === "Image" || !userPrompt.includes(`@${s.name}`)))
+        .map(s => s.type === "BrowserTab" ? `@${s.name}` : (s.type === "Connector" ? `@${s.name}` : `📎 ${s.name}`))
+        .filter(c => c && !c.includes("undefined"));
       if (extraChips.length > 0) {
         displayPrompt = `${extraChips.join(" ")}\n${userPrompt}`;
       }
     }
     addMessageToCurrentSession("user", displayPrompt);
 
+    // Deteksi Koreksi Percakapan (misal: "loh carinya di cnn.com itu donk tadinya bukanya di cnn.com")
+    const correctionMatch = userPrompt.match(/(?:carinya\s+di|bukanya\s+di|maksud\s+saya\s+di|harus\s+di|pindah\s+ke)\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|[a-zA-Z0-9_-]+)/i);
+    if (correctionMatch) {
+      let targetSite = correctionMatch[1].trim();
+      if (!targetSite.includes(".")) targetSite += ".com";
+      if (!targetSite.startsWith("http")) targetSite = "https://" + targetSite;
+
+      appendLog(`🔄 Koreksi pengguna diterima: mengarahkan kembali ke ${targetSite}`);
+      showStatusIndicator(`Membuka kembali ${targetSite}...`);
+      await navigateToUrl(targetSite);
+      await new Promise(r => setTimeout(r, 1200));
+      addMessageToCurrentSession("assistant", `✅ Mengerti, saya telah mengarahkan kembali ke **${targetSite}**. Silakan beritahu apa yang ingin dicari atau dikerjakan di sini.`);
+      return;
+    }
+
     // Deteksi cerdas antara Perintah Aksi Fisik di Web vs Pembuatan Konten/Artikel/Analisis Langsung
     const isEmailAction = /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt);
+    const isFormAction = /(?:isi\s+form|isi\s+formulir|isi\s+field|login|sign\s*in|masuk|autofill|isi\s+email|isi\s+password|isi\s+kolom|masukkan\s+email|masukkan\s+password|isi\s+akun)/i.test(userPrompt);
 
     const isDocsTarget = /(?:google\s+docs?|docs\.new|di docs|ke docs|google\s+dokumen|di dokumen|ke dokumen)/i.test(userPrompt);
     const hasTableCreation = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan)/i.test(userPrompt);
@@ -2898,7 +2968,7 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
       hasTableCreation
     );
 
-    const isContentOrWriting = !isEmailAction && (
+    const isContentOrWriting = !isEmailAction && !isFormAction && (
       isSpreadsheetAction ||
       isDocsTarget ||
       hasTableCreation ||
@@ -2910,13 +2980,13 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
       /(?:cerita\s+(?:pendek|singkat|fiksi|rakyat|dongeng)|prosa|puisi|narasi)/i.test(userPrompt)
     );
 
-    const hasPhysicalActionVerb = isEmailAction || (!isContentOrWriting && (
-      /(?:^(?:buka|kunjungi|open|go to|navigate to|kirim|send|klik|click|select|pilih|hapus|delete|upload|download|login|masuk|daftar|register|pesan|checkout|scroll|jalankan|posting|post)\b)/i.test(userPrompt) ||
-      /(?:(?:dan|lalu|kemudian)\s+(?:buka|kirim|klik|pilih|posting|post))/i.test(userPrompt) ||
-      /(?:buka tab|buka x\.com|buka twitter|buka gmail|buka linkedin|posting ke|post ke|tweet ke)/i.test(userPrompt)
+    const hasPhysicalActionVerb = isEmailAction || isFormAction || (!isContentOrWriting && (
+      /(?:^(?:buka|kunjungi|open|go to|navigate to|kirim|send|klik|click|select|pilih|hapus|delete|upload|download|login|masuk|daftar|register|pesan|checkout|scroll|jalankan|posting|post|isi|fill|ketik|masukkan|input|autofill)\b)/i.test(userPrompt) ||
+      /(?:(?:dan|lalu|kemudian)\s+(?:buka|kirim|klik|pilih|posting|post|isi|ketik|masukkan))/i.test(userPrompt) ||
+      /(?:buka tab|buka x\.com|buka twitter|buka gmail|buka linkedin|posting ke|post ke|tweet ke|isi form|isi email|isi password)/i.test(userPrompt)
     ));
 
-    const isDirectAnalysisOnly = !isEmailAction && (isContentOrWriting || (!hasPhysicalActionVerb && (
+    const isDirectAnalysisOnly = !isEmailAction && !isFormAction && (isContentOrWriting || (!hasPhysicalActionVerb && (
       /(?:^(?:apa|apakah|siapa|bagaimana|mengapa|kenapa|dimana|berapa|kapan|jelaskan|terangkan|ceritakan|sebutkan|tolong jelaskan|info|informasi|what|who|how|why|where|when|which|is this|explain|tell me|ini apa|ini platform apa|ini website apa|halaman apa ini)\b)/i.test(userPrompt) ||
       /\?$/.test(userPrompt)
     )));
@@ -3484,13 +3554,126 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
         }).catch(() => {});
       }
 
-      // ══ FAST PATH FOR END-TO-END AUTOMATIONS (Spreadsheet, Email, & Social) ══
-      const isSpreadsheetGoal = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(goal);
-      if (isSpreadsheetGoal) {
-        appendLog("📊 Mengalihkan ke Spreadsheet Automation Engine...");
-        await runAnalysisFlow(goal);
-        return;
-      }
+	      // ══ FAST PATH FOR END-TO-END AUTOMATIONS (Spreadsheet, Email, & Social) ══
+	      const isSpreadsheetGoal = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(goal);
+	      if (isSpreadsheetGoal) {
+	        appendLog("📊 Mengalihkan ke Spreadsheet Automation Engine...");
+	        await runAnalysisFlow(goal);
+	        return;
+	      }
+
+	      // ══ FAST PATH FOR DIRECT NAVIGATION (Single clean step, no noisy ReAct loops) ══
+	      const directNavRegex = /^(?:tolong\s+|mohon\s+)?(?:buka|kunjungi|open|go\s*to|akses)\s+(?:website\s+|web\s+|situs\s+|halaman\s+|url\s+)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?|https?:\/\/[^\s]+)\s*$/i;
+	      const navMatch = goal.trim().match(directNavRegex);
+	      if (navMatch) {
+	        let dest = navMatch[1].trim();
+	        if (!dest.startsWith("http://") && !dest.startsWith("https://")) {
+	          dest = "https://" + dest;
+	        }
+		        showStatusIndicator(`Membuka ${dest}...`);
+		        appendLog(`🌐 Membuka langsung situs: ${dest}`);
+		        const navRes = await navigateToUrl(dest);
+		        if (navRes && navRes.success !== false) {
+		          await new Promise(r => setTimeout(r, 1200));
+		          addMessageToCurrentSession("assistant", `✅ Berhasil membuka [${dest}](${dest})`);
+		          await finalizeTask("done", `✅ Berhasil membuka ${dest}`);
+		        } else {
+		          addMessageToCurrentSession("assistant", `❌ Gagal membuka ${dest}: ${navRes?.error || "Gagal navigasi tab"}`);
+		          await finalizeTask("error", `Gagal membuka ${dest}`);
+		        }
+		        return;
+		      }
+
+		      // ══ FAST PATH FOR FORM AUTO-FILL (Direct credential & field filling) ══
+		      const isFormFillIntent = /(?:^(?:tolong\s+|mohon\s+)?(?:isi|masukkan|ketik|input|autofill)\b)/i.test(goal) &&
+		        /(?:email|password|sandi|user|nama|telepon|alamat|login|akun)/i.test(goal);
+
+		      if (isFormFillIntent) {
+		        const emailMatch = goal.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+		        const extractedFields = [];
+		        if (emailMatch) {
+		          extractedFields.push({ identifier: "email", value: emailMatch[1] });
+		        }
+
+		        // Ekstraksi nilai password
+		        const passMatch = goal.match(/(?:password|pass|sandi|kata sandi)\s*(?:login\s*ini)?\s*(?:dengan|adalah|:)?\s*([^\s,]+)/i);
+		        let passVal = passMatch ? passMatch[1].trim() : "";
+		        if (!passVal || passVal.includes("@")) {
+		          const tokens = goal.split(/\s+/).filter(t => t.length >= 3 && !t.includes("@") && !/^(?:isi|email|address|dan|password|login|ini|dengan|ke|di|tolong|mohon)$/i.test(t));
+		          if (tokens.length > 0) passVal = tokens[tokens.length - 1];
+		        }
+		        if (passVal && !passVal.includes("@")) {
+		          extractedFields.push({ identifier: "password", value: passVal });
+		        }
+
+		        if (extractedFields.length > 0) {
+		          showStatusIndicator("Mengisi formulir login...");
+		          appendLog(`📝 Mengisi ${extractedFields.length} field formulir secara otomatis...`);
+		          const fillRes = await sendToContentScript({
+		            type: "EXECUTE_ACTION",
+		            actionData: {
+		              action: "autofill_form_batch",
+		              fields: extractedFields
+		            }
+		          });
+
+		          if (fillRes && fillRes.success && fillRes.filledCount > 0) {
+		            const summaryStr = extractedFields.map(f => `${f.identifier}: ${f.value.includes("@") ? f.value : "••••••••"}`).join(", ");
+		            addMessageToCurrentSession("assistant", `✅ Berhasil mengisi formulir (${fillRes.filledCount} field terisi: ${summaryStr}).`);
+		            await finalizeTask("done", `Berhasil mengisi formulir.`);
+		            return;
+		          }
+		        }
+		      }
+
+		      // ══ PRE-EXECUTION GATE: THINK & PLAN DULU, KALAU RAGU INTERVIEW USER ══
+		      const isSearchIntent = /^(?:tolong\s+|mohon\s+)?(?:cari|search|temukan|carikan)\s+(.+)/i.test(goal.trim());
+		      const currentUrl = activeTabInfo?.url || "";
+		      const isContentSiteActive = currentUrl && !/^(?:chrome|about|edge):/i.test(currentUrl) && !/google\.com|bing\.com|duckduckgo\.com/i.test(currentUrl);
+
+		      if (isSearchIntent && isContentSiteActive) {
+		        let hostName = "";
+		        try {
+		          hostName = new URL(currentUrl).hostname.replace(/^www\./i, "");
+		        } catch (_) {}
+
+		        const rawSearchQuery = goal.trim()
+		          .replace(/^(?:tolong\s+|mohon\s+)?(?:cari|search|temukan|carikan)\s+/i, "")
+		          .replace(/(?:dan\s+)?(?:kasih\s+tau|beritahu|tampilkan|bacakan).*$/i, "")
+		          .trim();
+
+		        if (hostName && rawSearchQuery && !/di google/i.test(goal)) {
+		          appendLog(`🤔 Mendeteksi ambiguitas konteks pencarian antara ${hostName} vs Google Search. Mewawancarai pengguna...`);
+		          const userChoice = await requestAskUser(
+		            `Anda saat ini sedang membuka **${hostName}**.\nDi mana Anda ingin mencari berita/informasi tentang "**${rawSearchQuery}**"?`,
+		            [`🔍 Cari di ${hostName}`, `🌐 Cari di Google Search`]
+		          );
+
+		          if (shouldStopAgent || !userChoice) {
+		            await finalizeTask("cancelled", "⛔ Tugas dibatalkan.");
+		            return;
+		          }
+
+		          if (userChoice.includes("Google Search")) {
+		            const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(rawSearchQuery)}`;
+		            showStatusIndicator(`Mencari "${rawSearchQuery}" di Google...`);
+		            await navigateToUrl(googleUrl);
+		            await new Promise(r => setTimeout(r, 1200));
+		            addMessageToCurrentSession("assistant", `🔍 Telah membuka pencarian Google untuk: **${rawSearchQuery}**`);
+		            await finalizeTask("done", `Pencarian Google selesai.`);
+		            return;
+		          } else {
+		            showStatusIndicator(`Mencari "${rawSearchQuery}" di ${hostName}...`);
+		            appendLog(`🔎 Mencoba mencari "${rawSearchQuery}" di ${hostName}...`);
+		            const siteSearchUrl = `https://${hostName}/search?q=${encodeURIComponent(rawSearchQuery)}`;
+		            await navigateToUrl(siteSearchUrl);
+		            await new Promise(r => setTimeout(r, 1500));
+		            addMessageToCurrentSession("assistant", `🔍 Telah membuka hasil pencarian di **${hostName}** untuk: **${rawSearchQuery}**`);
+		            await finalizeTask("done", `Pencarian di ${hostName} selesai.`);
+		            return;
+		          }
+		        }
+		      }
 
       const fastAction = tryParseNaturalLanguageActions("", goal);
       if (fastAction && (fastAction.action === "send_email" || fastAction.action === "post_social")) {
@@ -4012,7 +4195,7 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
         activeTask._pendingScreenshot = exec.screenshotDataUrl;
       }
 
-      addMessageToCurrentSession("assistant", "", {
+      const agentCardPayload = {
         skipClean: true,
         multiAgent: {
           planner: resObj.planner ? resObj.planner : null,
@@ -4025,7 +4208,16 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
           },
           validator: null
         }
-      });
+      };
+
+      if (activeTask._multiAgentMsgIndex !== undefined && activeTask._multiAgentMsgIndex >= 0) {
+        updateMessageInSession(activeTask._multiAgentMsgIndex, agentCardPayload);
+      } else {
+        const curSession = getCurrentSession();
+        const curLen = curSession?.messages?.length || 0;
+        activeTask._multiAgentMsgIndex = curLen;
+        addMessageToCurrentSession("assistant", "", agentCardPayload);
+      }
 
       if (execActionType === "navigate" && exec.success) {
         lastNavigationWasRecent = true;
@@ -4045,7 +4237,8 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
 
         // Cegah finish prematur untuk tugas umum jika masih banyak subtask yang belum dijalankan
         const pendingSubs = (activeTask.plan || []).filter(s => s.id !== sub.id && s.status === "pending");
-        if (pendingSubs.length > 0 && stepNum <= 2) {
+        const isTrivialPending = pendingSubs.every(s => /tunggu|verifikasi|konfirmasi|selesai|cek/i.test(s.description || ""));
+        if (pendingSubs.length > 0 && stepNum <= 2 && !isTrivialPending) {
           appendLog(`⚠️ Navigator memanggil 'finish' terlalu dini pada langkah ke-${stepNum} (masih ada ${pendingSubs.length} subtask pending). Melanjutkan subtask.`, "WARN");
           activeTask.scratchpad.push({
             step: stepNum,
@@ -4930,6 +5123,18 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   });
   btnCancelSettings.addEventListener("click", () => {
     settingsPanel.classList.add("hidden");
+  });
+
+  // Global UX Keyboard Handler: Tutup dialog dengan tombol Escape
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (settingsPanel && !settingsPanel.classList.contains("hidden")) {
+        settingsPanel.classList.add("hidden");
+      }
+      if (historyDrawer && !historyDrawer.classList.contains("hidden")) {
+        historyDrawer.classList.add("hidden");
+      }
+    }
   });
 
   if (logToggle && logContent) {

@@ -1304,8 +1304,8 @@ function generateAutonomousAction(rawPrompt, messages, userRawInput = "") {
     });
   }
 
-  // 5. Deteksi Perintah Search / Cari di Google
-  const searchMatch = cleanUserQuery.match(/^(?:cari|search|googling|temukan)\s+(?:di google|di internet)?\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i);
+  // 5. Deteksi Perintah Search / Cari di Google (Hanya jika eksplisit meminta di google/internet)
+  const searchMatch = cleanUserQuery.match(/^(?:cari|search|googling|temukan)\s+(?:di google|di internet)\s*[:=]?\s*[`"']?([^`"'\n]+)[`"']?/i);
   if (searchMatch) {
     const query = searchMatch[1].trim();
     const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;

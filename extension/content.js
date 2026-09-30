@@ -275,26 +275,8 @@
   }
 
   function triggerScanningBeam() {
-    const root = getOrCreatePesatShadowRoot();
-    const existing = root.querySelector("#pesat-scanning-beam");
-    if (existing) existing.remove();
-
-    const beam = document.createElement("div");
-    beam.id = "pesat-scanning-beam";
-    beam.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 3px;
-      background: linear-gradient(90deg, transparent 0%, rgba(56, 189, 248, 0.85) 20%, rgba(168, 85, 247, 1) 50%, rgba(56, 189, 248, 0.85) 80%, transparent 100%);
-      box-shadow: 0 0 18px 4px rgba(56, 189, 248, 0.75), 0 0 36px 8px rgba(168, 85, 247, 0.45);
-      pointer-events: none;
-      z-index: 2147483647;
-      animation: pesatSweepLaser 0.9s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-    `;
-    root.appendChild(beam);
-    setTimeout(() => { if (beam.parentNode) beam.remove(); }, 1000);
+    // Muted to eliminate distracting visual laser sweeps across the webpage
+    return;
   }
 
   let pesatHudTimer = null;
@@ -319,7 +301,7 @@
       backdrop-filter: blur(12px);
       color: #f8fafc;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 12.5px;
+      font-size: 14px;
       font-weight: 600;
       padding: 7px 18px;
       border-radius: 9999px;
@@ -388,7 +370,7 @@
     header.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;";
 
     const titleSpan = document.createElement("span");
-    titleSpan.style.cssText = "font-size:12px; font-weight:700; color:#38bdf8; display:flex; align-items:center; gap:5px;";
+    titleSpan.style.cssText = "font-size:14px; font-weight:700; color:#38bdf8; display:flex; align-items:center; gap:5px;";
     titleSpan.textContent = "⚡ Petunjuk Marker AI (#ID)";
 
     const closeBtn = document.createElement("button");
@@ -408,7 +390,7 @@
     legend.appendChild(header);
 
     const grid = document.createElement("div");
-    grid.style.cssText = "display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:11px; color:#cbd5e1;";
+    grid.style.cssText = "display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:14px; color:#cbd5e1;";
 
     const legendItems = [
       { color: "#1d4ed8", text: "📝 Input / Form" },
@@ -435,7 +417,7 @@
     legend.appendChild(grid);
 
     const footer = document.createElement("div");
-    footer.style.cssText = "font-size:10px; color:#94a3b8; margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:6px; line-height:1.3;";
+    footer.style.cssText = "font-size:14px; color:#94a3b8; margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:6px; line-height:1.3;";
     footer.textContent = "💡 Nomor (#1, #2...) adalah ID tombol/input yang sedang dibaca dan dikontrol AI.";
     legend.appendChild(footer);
 
@@ -534,7 +516,7 @@
     `;
 
     const badgeContainer = document.createElement("div");
-    badgeContainer.style.cssText = "display: flex; align-items: center; gap: 10px; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(99, 102, 241, 0.45); box-shadow: 0 12px 32px rgba(0,0,0,0.65), 0 0 16px rgba(99, 102, 241, 0.2); padding: 8px 16px; border-radius: 9999px; color: #f8fafc; font-size: 12px; font-weight: 500; pointer-events: auto; cursor: default; animation: pesatShieldPulse 1.8s infinite alternate;";
+    badgeContainer.style.cssText = "display: flex; align-items: center; gap: 10px; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(99, 102, 241, 0.45); box-shadow: 0 12px 32px rgba(0,0,0,0.65), 0 0 16px rgba(99, 102, 241, 0.2); padding: 8px 16px; border-radius: 9999px; color: #f8fafc; font-size: 14px; font-weight: 500; pointer-events: auto; cursor: default; animation: pesatShieldPulse 1.8s infinite alternate;";
 
     const dot = document.createElement("span");
     dot.style.cssText = "width: 8px; height: 8px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 8px #6366f1; flex-shrink: 0;";
@@ -546,7 +528,7 @@
 
     const unlockBtn = document.createElement("button");
     unlockBtn.id = "pesat-shield-unlock-btn";
-    unlockBtn.style.cssText = "background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; margin-left: 4px; transition: background 0.15s;";
+    unlockBtn.style.cssText = "background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; border-radius: 6px; padding: 4px 10px; font-size: 14px; cursor: pointer; margin-left: 4px; transition: background 0.15s;";
     unlockBtn.title = "Buka kunci halaman manual";
     unlockBtn.textContent = "Buka Kunci";
 
@@ -608,8 +590,7 @@
 
     // Tampilkan laser sweep & floating HUD untuk memberitahukan proses pemindaian secara visual halus
     if (showOverlay) {
-      triggerScanningBeam();
-      showReadingHUD("⚡ Pesat AI: Membaca struktur & elemen halaman...");
+      // Routine scans are silent to prevent distracting HUD notifications on the user web page
     }
 
     const selector = [
@@ -717,7 +698,7 @@
           left: -3px;
           background: ${theme.bg};
           color: #ffffff;
-          font-size: 10.5px;
+          font-size: 14px;
           font-weight: 700;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
           padding: 1px 6px;
@@ -857,8 +838,7 @@
   function getReadableContent(showVisual = true) {
     try {
       if (showVisual) {
-        showReadingHUD("📖 Pesat AI: Membaca teks artikel...");
-        triggerScanningBeam();
+        // Keep content extraction silent without laser beam or HUD spam
       }
 
       // Prioritas 1: Jika di situs e-commerce, ekstrak katalog produk terstruktur
@@ -1151,7 +1131,7 @@
         }
       }
 
-      let tHtml = `<table style="border-collapse: collapse; width: 100%; border: 1px solid #cbd5e1; margin: 16px 0; font-family: Arial, sans-serif; font-size: 13px;">\n<thead>\n<tr style="background-color: #f1f5f9;">\n`;
+      let tHtml = `<table style="border-collapse: collapse; width: 100%; border: 1px solid #cbd5e1; margin: 16px 0; font-family: Arial, sans-serif; font-size: 14px;">\n<thead>\n<tr style="background-color: #f1f5f9;">\n`;
       headers.forEach(h => {
         tHtml += `  <th style="border: 1px solid #cbd5e1; padding: 10px 14px; font-weight: bold; text-align: left; color: #0f172a; background-color: #f1f5f9;">${h}</th>\n`;
       });
@@ -1471,9 +1451,10 @@
     }
 
     if (action === "navigate") {
-      if (value && value.startsWith("http")) {
-        window.location.href = value;
-        return { success: true, message: `Membuka URL: ${value}`, stateChanged: true };
+      const targetUrl = (value || actionData.url || "").trim();
+      if (targetUrl && (targetUrl.startsWith("http://") || targetUrl.startsWith("https://"))) {
+        window.location.href = targetUrl;
+        return { success: true, message: `Membuka URL: ${targetUrl}`, stateChanged: true };
       }
       return { success: false, error: "URL tidak valid. Format wajib: https://", errorType: "NAVIGATION_FAILED" };
     }
@@ -1976,17 +1957,73 @@
     if (action === "autofill_form_batch") {
       const fields = Array.isArray(actionData.fields) ? actionData.fields : [];
       let filledCount = 0;
+      const allElements = Array.from(document.querySelectorAll("input:not([type='hidden']), textarea, select"));
 
-      fields.forEach(f => {
-        const ident = (f.identifier || "").toLowerCase();
-        const val = f.value ?? "";
-        const el = Array.from(document.querySelectorAll("input:not([type='hidden']), textarea, select")).find(elem => {
+      function findMatchingField(ident, elements) {
+        if (!ident) return null;
+        const normIdent = ident.toLowerCase().trim();
+
+        // 1. Semantic type match
+        if (/email|surel/i.test(normIdent)) {
+          const emailEl = elements.find(e => e.type === "email" || e.autocomplete === "email");
+          if (emailEl) return emailEl;
+        }
+        if (/pass|password|sandi|kata sandi/i.test(normIdent)) {
+          const passEl = elements.find(e => e.type === "password" || (e.autocomplete && e.autocomplete.includes("password")));
+          if (passEl) return passEl;
+        }
+
+        // 2. Exact match on name, id, placeholder, aria-label
+        let found = elements.find(elem => {
           const name = (elem.name || "").toLowerCase();
           const id = (elem.id || "").toLowerCase();
           const ph = (elem.placeholder || "").toLowerCase();
           const aria = (elem.getAttribute("aria-label") || "").toLowerCase();
-          return name === ident || id === ident || ph.includes(ident) || aria.includes(ident);
+          return name === normIdent || id === normIdent || ph === normIdent || aria === normIdent;
         });
+        if (found) return found;
+
+        // 3. Substring match
+        found = elements.find(elem => {
+          const name = (elem.name || "").toLowerCase();
+          const id = (elem.id || "").toLowerCase();
+          const ph = (elem.placeholder || "").toLowerCase();
+          const aria = (elem.getAttribute("aria-label") || "").toLowerCase();
+          return (name && (name.includes(normIdent) || normIdent.includes(name))) ||
+                 (id && (id.includes(normIdent) || normIdent.includes(id))) ||
+                 (ph && (ph.includes(normIdent) || normIdent.includes(ph))) ||
+                 (aria && (aria.includes(normIdent) || normIdent.includes(aria)));
+        });
+        if (found) return found;
+
+        // 4. Match via label text
+        found = elements.find(elem => {
+          let labelText = "";
+          if (elem.id) {
+            const lbl = document.querySelector(`label[for="${elem.id}"]`);
+            if (lbl) labelText = lbl.textContent.toLowerCase();
+          }
+          if (!labelText) {
+            const parentLbl = elem.closest("label");
+            if (parentLbl) labelText = parentLbl.textContent.toLowerCase();
+          }
+          if (!labelText && elem.parentElement) {
+            const prev = elem.previousElementSibling;
+            if (prev && prev.tagName === "LABEL") labelText = prev.textContent.toLowerCase();
+          }
+          if (!labelText && elem.parentElement?.parentElement) {
+            const lblInsideParent = elem.parentElement.parentElement.querySelector("label");
+            if (lblInsideParent) labelText = lblInsideParent.textContent.toLowerCase();
+          }
+          return labelText && (labelText.includes(normIdent) || normIdent.includes(labelText.trim()));
+        });
+        return found || null;
+      }
+
+      fields.forEach(f => {
+        const ident = (f.identifier || f.name || f.field || "").toLowerCase().trim();
+        const val = f.value ?? "";
+        const el = findMatchingField(ident, allElements);
 
         if (el) {
           setNativeInputValue(el, val);

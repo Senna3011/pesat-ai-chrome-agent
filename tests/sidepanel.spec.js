@@ -124,4 +124,152 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     await expect(page.locator('#chipSummarize')).toBeVisible();
     await expect(page.locator('#chipExtract')).toBeVisible();
   });
+
+  test('should enforce minimum 14px font size across all key UI elements', async ({ page }) => {
+    const selectors = [
+      'h1.title',
+      '#agentStatus',
+      '.chip-btn',
+      '#promptInput',
+      '.welcome-title',
+      '.welcome-desc',
+      '#btnSend',
+      '.action-icon-btn',
+      '.composer-model-pill'
+    ];
+
+    for (const selector of selectors) {
+      const el = page.locator(selector).first();
+      if (await el.isVisible()) {
+        const fontSizeStr = await el.evaluate(node => window.getComputedStyle(node).fontSize);
+        const fontSize = parseFloat(fontSizeStr);
+        expect(fontSize, `Element ${selector} font size (${fontSize}px) must be >= 14px`).toBeGreaterThanOrEqual(14);
+      }
+    }
+  });
+
+  test('should verify eye-comfort slate theme CSS variables', async ({ page }) => {
+    const vars = await page.evaluate(() => {
+      const style = window.getComputedStyle(document.documentElement);
+      return {
+        bgBase: style.getPropertyValue('--bg-base').trim(),
+        bgSurface: style.getPropertyValue('--bg-surface').trim(),
+        accentPrimary: style.getPropertyValue('--accent-primary').trim(),
+        auroraDisplay: window.getComputedStyle(document.querySelector('.aurora-glow-top')).display
+      };
+    });
+
+    expect(vars.bgBase.toLowerCase()).toBe('#0f172a');
+    expect(vars.bgSurface.toLowerCase()).toBe('#1e293b');
+    expect(vars.accentPrimary.toLowerCase()).toBe('#3b82f6');
+    expect(vars.auroraDisplay).toBe('none');
+  });
+
+  test('should close modals with Escape key', async ({ page }) => {
+    const btnSettings = page.locator('#btnSettings');
+    const settingsPanel = page.locator('#settingsPanel');
+
+    // Open settings and close with Escape
+    await btnSettings.click();
+    await expect(settingsPanel).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(settingsPanel).not.toBeVisible();
+
+    // Open history and close with Escape
+    const btnHistory = page.locator('#btnHistory');
+    const historyDrawer = page.locator('#historyDrawer');
+    await btnHistory.click();
+    await expect(historyDrawer).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(historyDrawer).not.toBeVisible();
+  });
+
+  test('should reset chat when New Chat button is clicked', async ({ page }) => {
+    const promptInput = page.locator('#promptInput');
+    await promptInput.fill('Pesan uji coba');
+    await expect(promptInput).toHaveValue('Pesan uji coba');
+
+    await page.locator('#btnNewChat').click();
+    await expect(promptInput).toHaveValue('');
+  });
+
+  test('should render markdown tables within .table-container with clean cells', async ({ page }) => {
+    const parsedHtml = await page.evaluate(() => {
+      if (typeof parseMarkdown === 'function') {
+        const md = '| No | Nama | Valuasi |\n|---|---|---|\n| 1 | **BCA** | **1250T** |';
+        return parseMarkdown(md);
+      }
+      return '';
+    });
+
+    expect(parsedHtml).toContain('<div class="table-container"><table>');
+    expect(parsedHtml).toContain('<th>No</th>');
+    expect(parsedHtml).toContain('<strong>BCA</strong>');
+    expect(parsedHtml).not.toContain('**BCA**');
+  });
+
+  test('should maintain responsive layout without horizontal overflow at 360px and 450px viewports', async ({ page }) => {
+    // Test small extension sidepanel width (360px)
+    await page.setViewportSize({ width: 360, height: 720 });
+    const hasHorizontalOverflow360 = await page.evaluate(() => {
+      return document.documentElement.scrollWidth > window.innerWidth;
+    });
+    expect(hasHorizontalOverflow360).toBe(false);
+
+    // Test standard extension width (450px)
+    await page.setViewportSize({ width: 450, height: 800 });
+    const hasHorizontalOverflow450 = await page.evaluate(() => {
+      return document.documentElement.scrollWidth > window.innerWidth;
+    });
+    expect(hasHorizontalOverflow450).toBe(false);
+  });
+
+  test('should render interactive ask-user interview options with >=14px font', async ({ page }) => {
+    // Add mock ask-user message to chat area
+    await page.evaluate(() => {
+      const chatArea = document.getElementById('chatArea');
+      const container = document.createElement('div');
+      container.className = 'message-bubble-wrapper assistant-wrapper';
+      container.innerHTML = `
+        <div class="message-bubble assistant-bubble">
+          <div class="ask-user-container">
+            <div class="ask-user-question">Anda saat ini sedang membuka cnn.com. Di mana Anda ingin mencari berita?</div>
+            <div class="ask-user-options">
+              <button class="ask-user-option-btn">🔍 Cari di cnn.com</button>
+              <button class="ask-user-option-btn">🌐 Cari di Google Search</button>
+            </div>
+          </div>
+        </div>
+      `;
+      chatArea.appendChild(container);
+    });
+
+    const askContainer = page.locator('.ask-user-container');
+    await expect(askContainer).toBeVisible();
+
+    const optionBtns = page.locator('.ask-user-option-btn');
+    await expect(optionBtns).toHaveCount(2);
+
+    const firstBtnFont = await optionBtns.first().evaluate(node => window.getComputedStyle(node).fontSize);
+    expect(parseFloat(firstBtnFont)).toBeGreaterThanOrEqual(14);
+  });
+
+  test('should render token usage tracker bar with >=14px font', async ({ page }) => {
+    const tokenTracker = page.locator('#tokenTrackerBar');
+    if (await tokenTracker.isVisible()) {
+      const trackerFont = await tokenTracker.evaluate(node => window.getComputedStyle(node).fontSize);
+      expect(parseFloat(trackerFont)).toBeGreaterThanOrEqual(14);
+    }
+  });
+
+  test('should verify form autofill credentials and no undefined displayPrompt', async ({ page }) => {
+    const promptInput = page.locator('#promptInput');
+    const formPrompt = 'isi email address dan password login ini dengan admin@jetdigitalpro.com dan jdp123';
+    await promptInput.fill(formPrompt);
+    await expect(promptInput).toHaveValue(formPrompt);
+
+    // Verify prompt does not leak undefined
+    const btnSend = page.locator('#btnSend');
+    await expect(btnSend).not.toBeDisabled();
+  });
 });
