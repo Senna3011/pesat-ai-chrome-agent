@@ -210,14 +210,24 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
       }
     },
 
-    async callLLMDirect({ phase, prompt, messages = [], taskState = null, domTree = "", config = {}, signal, useTools = true }) {
+    async callLLMDirect({ phase, prompt, messages = [], taskState = null, domTree = "", config = {}, signal, useTools = true, isSummarize = false }) {
       const promptText = prompt || "";
       const apiKey = (config.apiKey || "").trim();
       const model = (config.modelName || "").trim() || "pesat-flash";
 
       const domContext = domTree ? `\n\n[STRUKTUR ELEMEN HALAMAN SAAT INI]:\n${domTree}` : "";
       const skillPrompt = globalThis.PesatSkillRegistry?.getSystemPromptAdditions?.() || "";
-      const fullSystemPrompt = SYSTEM_AGENTIC_PROMPT + skillPrompt + domContext;
+
+      let basePrompt = SYSTEM_AGENTIC_PROMPT;
+      if (phase === "chat" && !isSummarize) {
+        basePrompt = `Kamu adalah Pesat AI Assistant - Asisten cerdas, analitis, dan profesional untuk analisis data finansial/pasar, pembuatan tabel terstruktur, dan penulisan dokumen eksekutif.
+Pedoman Respon:
+1. Jawab pertanyaan dan instruksi secara langsung, mendalam, dan terstruktur rapi menggunakan format Markdown.
+2. Jika pengguna meminta tabel: sajikan tabel Markdown lengkap (| Header |) dengan baris data riil, akurat, dan realistis tanpa placeholder [...]. Sertakan analisis dan ringkasan eksekutif berbobot di bawah tabel.
+3. DILARANG menggunakan format JSON action peramban untuk respons percakapan langsung ini.`;
+      }
+
+      const fullSystemPrompt = basePrompt + (phase === "chat" ? "" : (skillPrompt + domContext));
 
       const payloadMessages = [
         { role: "system", content: fullSystemPrompt },
@@ -295,7 +305,8 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
             phase: phase,
             model: model,
             max_tokens: maxTokens,
-            domTree: domTree
+            domTree: domTree,
+            isSummarize: isSummarize
           }),
           signal: signal
         });

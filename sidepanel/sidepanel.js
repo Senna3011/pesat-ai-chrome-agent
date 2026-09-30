@@ -254,18 +254,29 @@ document.addEventListener("DOMContentLoaded", async () => {
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         if (line.startsWith("|") && line.endsWith("|")) {
-          if (!inTable) { inTable = true; isFirstRow = true; res += "<table>"; }
-          if (line.includes("---")) { isFirstRow = false; continue; }
+          if (!inTable) { inTable = true; isFirstRow = true; res += '<div class="table-container"><table>'; }
+          if (/^\|[-:\s|]+\|$/.test(line)) { isFirstRow = false; continue; }
           const cells = line.split("|").filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
           const tag = isFirstRow ? "th" : "td";
-          res += "<tr>" + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join("") + "</tr>";
+          res += "<tr>" + cells.map(c => {
+            let clean = c.trim();
+            clean = clean.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
+            clean = clean.replace(/\*\*\*(.*?)\*\*\*/g, "<strong><em>$1</em></strong>");
+            clean = clean.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+            clean = clean.replace(/\*(.*?)\*/g, "<em>$1</em>");
+            clean = clean.replace(/___(.*?)___/g, "<strong><em>$1</em></strong>");
+            clean = clean.replace(/__(.*?)__/g, "<strong>$1</strong>");
+            clean = clean.replace(/_(.*?)_/g, "<em>$1</em>");
+            clean = clean.replace(/(?:^\*+|\*+$)/g, "").trim();
+            return `<${tag}>${clean}</${tag}>`;
+          }).join("") + "</tr>";
           if (isFirstRow) isFirstRow = false;
         } else {
-          if (inTable) { inTable = false; res += "</table>\n"; }
+          if (inTable) { inTable = false; res += "</table></div>\n"; }
           res += line + "\n";
         }
       }
-      if (inTable) res += "</table>\n";
+      if (inTable) res += "</table></div>\n";
       s = res;
     }
 
@@ -2058,7 +2069,8 @@ document.addEventListener("DOMContentLoaded", async () => {
           apiKey: getApiKey(),
           modelName: getModelName()
         },
-        signal: activeAbortController.signal
+        signal: activeAbortController.signal,
+        isSummarize: isSummarize
       });
 
       if (res.visionFallback) {
@@ -3003,41 +3015,43 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
       const isArticle = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt);
 
       let promptPayload = "";
-      if (isDocsTableTask) {
-        promptPayload = `Bertindaklah sebagai MASTER DOCUMENT DESIGNER & SENIOR DATA ANALYST (Standar Dokumen Eksekutif Google Docs & Microsoft Word).
+	      if (isDocsTableTask) {
+	        const isDocsOrWordEditor = isDocsSite || pageUrl.includes("docs.google.com") || pageUrl.includes("office.com");
+	        const refSnippet = (!isDocsOrWordEditor && cleanText && cleanText.length > 50)
+	          ? `\n\n[REFERENSI DOKUMEN / SUMBER WEB]:\nJudul: ${pageTitle}\n${cleanText.substring(0, 2500)}`
+	          : "";
+
+	        promptPayload = `Bertindaklah sebagai MASTER DOCUMENT DESIGNER & SENIOR DATA ANALYST (Standar Dokumen Eksekutif Google Docs & Microsoft Word).
 
 [PERINTAH PEMBUATAN TABEL DI DOKUMEN]:
-${userPrompt}
+${userPrompt}${refSnippet}
 
-[KONTEKS DOKUMEN WEB SAAT INI (jika ada)]:
-Judul: ${pageTitle} | URL: ${pageUrl}
-${cleanText.substring(0, 3000)}
+	PEDOMAN KETAT TABEL DOKUMEN GOOGLE DOCS:
+	1. SAJIKAN TABEL DALAM FORMAT MARKDOWN TABLE RESMI:
+	   - Header kolom dan setiap sel harus secara presisi, akurat, dan lengkap menjawab topik perintah pengguna (contoh untuk daftar perusahaan/finansial: | No | Nama Perusahaan | Sektor / Industri | Estimasi Kekayaan / Valuasi Pasar (2026) | Catatan / Aset Utama |).
+	   - Seluruh baris data harus diisi lengkap dengan data yang realistis dan faktual (DILARANG menggunakan placeholder [...] atau template kosong).
+	   - DILARANG membubuhkan tanda khusus Markdown seperti bintang ganda (**), asterisk (*), atau backtick di dalam sel tabel (tulis langsung teks atau nilainya secara bersih, contoh: tulis 'Total' bukan '**Total**', tulis '4.260 Triliun' bukan '**4.260 Triliun**').
+	   - Sertakan baris Total / Rata-rata di bagian paling bawah jika relevan dengan metrik numerik.
+	2. Sertakan judul dokumen berbobot di baris pertama (# Judul Dokumen).
+	3. Berikan pengantar singkat sebelum tabel dan ringkasan eksekutif serta analisis mendalam (1-2 paragraf) setelah tabel yang membedah wawasan, tren, dan faktor penggerak dari data tersebut.`;
+	      } else if (isSpreadsheetTask) {
+	        promptPayload = `Bertindaklah sebagai MASTER SPREADSHEET & FINANCIAL DATA SCIENTIST EXPERT (Standar Senior Modeler & Excel Specialist).
 
-PEDOMAN KETAT TABEL DOKUMEN GOOGLE DOCS:
-1. SAJIKAN TABEL DALAM FORMAT MARKDOWN TABLE RESMI:
-   - Header kolom harus jelas dan terisi penuh sesuai permintaan (contoh: | No | SKU | Nama Produk | Kategori | Harga Satuan (IDR) | Jumlah Terjual | Total Penjualan (IDR) |).
-   - Seluruh baris data harus diisi lengkap dengan data yang realistis (5 produk lengkap).
-   - Sertakan baris Total / Rata-rata di bagian bawah tabel jika relevan.
-2. Sertakan judul dokumen berbobot di baris pertama (# Judul).
-3. Berikan pengantar singkat sebelum tabel dan ringkasan eksekutif 1-2 paragraf setelah tabel yang membedah wawasan dari data tersebut.
-4. DILARANG menggunakan tanda kurung siku placeholder ([...]) atau template kosong.`;
-      } else if (isSpreadsheetTask) {
-        promptPayload = `Bertindaklah sebagai MASTER SPREADSHEET & FINANCIAL DATA SCIENTIST EXPERT (Standar Senior Modeler & Excel Specialist).
+	[PERINTAH & KEBUTUHAN DATA SPREADSHEET]:
+	${userPrompt}
 
-[PERINTAH & KEBUTUHAN DATA SPREADSHEET]:
-${userPrompt}
+	[KONTEKS WEB SAAT INI (jika ada)]:
+	Judul: ${pageTitle} | URL: ${pageUrl}
+	${cleanText.substring(0, 4000)}
 
-[KONTEKS WEB SAAT INI (jika ada)]:
-Judul: ${pageTitle} | URL: ${pageUrl}
-${cleanText.substring(0, 4000)}
-
-PEDOMAN KETAT OUTPUT SPREADSHEET:
-1. SAJIKAN TABEL DATA LENGKAP DALAM FORMAT MARKDOWN TABLE (WAJIB):
-   - Kolom-kolom harus rapi, terisi penuh, dan presisi sesuai yang diminta pengguna (contoh: | No | Nama Laptop | Prosesor | Layar | Estimasi Harga |).
-   - Tuliskan data riil, akurat, dan bersih tanpa placeholder [...].
-   - Jika terdapat kolom harga atau nilai numerik, sertakan baris FORMULA / TOTAL / AVERAGE di baris paling bawah jika relevan (misal: | | Rata-rata Harga | | | =AVERAGE(E2:E4) |).
-2. Pastikan tabel Markdown menggunakan format standar (| baris | baris |) yang mudah di-parse dan di-paste langsung ke Google Sheets atau Excel.
-3. Sertakan 1 paragraf ringkasan singkat analisis di bawah tabel.`;
+	PEDOMAN KETAT OUTPUT SPREADSHEET:
+	1. SAJIKAN TABEL DATA LENGKAP DALAM FORMAT MARKDOWN TABLE (WAJIB):
+	   - Kolom-kolom harus rapi, terisi penuh, dan presisi sesuai yang diminta pengguna.
+	   - Tuliskan data riil, akurat, dan bersih tanpa placeholder [...].
+	   - DILARANG membubuhkan tanda khusus Markdown seperti bintang ganda (**), asterisk (*), atau backtick di dalam sel tabel data (tulis langsung teks atau nilainya secara bersih, contoh: tulis 'Total' bukan '**Total**').
+	   - Jika terdapat kolom harga atau nilai numerik, sertakan baris FORMULA / TOTAL / AVERAGE di baris paling bawah jika relevan (misal: | | Rata-rata Harga | | | =AVERAGE(E2:E4) |).
+	2. Pastikan tabel Markdown menggunakan format standar (| baris | baris |) yang mudah di-parse dan di-paste langsung ke Google Sheets atau Excel.
+	3. Sertakan 1 paragraf ringkasan singkat analisis di bawah tabel.`;
       } else if (isProductResearch) {
         promptPayload = `Lakukan RISET DAN ANALISIS KOMPARASI PRODUK MENDALAM & PROFESIONAL berdasarkan data katalog produk berikut:
 
@@ -3210,7 +3224,7 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
 
       showStatusIndicator();
 
-      const aiReply = await callLLM("chat", promptPayload, { isSummarize: true });
+      const aiReply = await callLLM("chat", promptPayload, { isSummarize: isSummarize });
 
       const artType = (isSpreadsheetTask || isProductResearch) ? "table" : (isSocialThread ? "social" : ((isArticle || isDocsTableTask) ? "doc" : "text"));
       const artTitle = (isSpreadsheetTask || isProductResearch)

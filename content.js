@@ -1095,9 +1095,38 @@
     raw = raw.replace(/\n\s*---\s*\n\s*(?:Thread Ringkas|Tweet|Twitter|#)[\s\S]*$/i, "");
     raw = raw.replace(/\n\s*---\s*\n/g, "\n\n");
 
+    function cleanTableCellText(text) {
+      let s = String(text || "").trim();
+      s = s.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
+      s = s.replace(/\*\*\*(.*?)\*\*\*/g, "$1");
+      s = s.replace(/\*\*(.*?)\*\*/g, "$1");
+      s = s.replace(/\*(.*?)\*/g, "$1");
+      s = s.replace(/___(.*?)___/g, "$1");
+      s = s.replace(/__(.*?)__/g, "$1");
+      s = s.replace(/_(.*?)_/g, "$1");
+      s = s.replace(/`([^`]+)`/g, "$1");
+      s = s.replace(/^\*+|\*+$/g, "").trim();
+      return s;
+    }
+
+    function formatTableCellHtml(text) {
+      let s = String(text || "").trim();
+      s = s.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
+      s = s.replace(/\*\*\*(.*?)\*\*\*/g, "<b><i>$1</i></b>");
+      s = s.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+      s = s.replace(/\*(.*?)\*/g, "<i>$1</i>");
+      s = s.replace(/___(.*?)___/g, "<b><i>$1</i></b>");
+      s = s.replace(/__(.*?)__/g, "<b>$1</b>");
+      s = s.replace(/_(.*?)_/g, "<i>$1</i>");
+      s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+      s = s.replace(/(?:^\*+|\*+$)/g, "").trim();
+      return s;
+    }
+
     // 2. Convert Markdown Tables to real HTML <table> elements (Google Docs & Word Native Table Conversion)
     const tableRegex = /((?:^[ \t]*\|[^\n]+\|[ \t]*(?:\r?\n|$))+)/gm;
     const tablesHtml = [];
+    const cleanPlainTables = [];
     raw = raw.replace(tableRegex, (match) => {
       const lines = match.trim().split(/\r?\n/).map(l => l.trim()).filter(l => l.startsWith("|") && l.endsWith("|"));
       if (lines.length < 2) return match;
@@ -1114,7 +1143,7 @@
       }
       if (separatorIndex === -1) return match;
 
-      headers = lines[0].slice(1, -1).split("|").map(c => c.trim());
+      headers = lines[0].slice(1, -1).split("|").map(c => cleanTableCellText(c));
       for (let i = separatorIndex + 1; i < lines.length; i++) {
         const cells = lines[i].slice(1, -1).split("|").map(c => c.trim());
         if (cells.some(c => c.length > 0)) {
@@ -1131,23 +1160,25 @@
         const bg = idx % 2 === 1 ? "background-color: #f8fafc;" : "background-color: #ffffff;";
         tHtml += `<tr style="${bg}">\n`;
         r.forEach(c => {
-          tHtml += `  <td style="border: 1px solid #cbd5e1; padding: 10px 14px; color: #1e293b;">${c}</td>\n`;
+          tHtml += `  <td style="border: 1px solid #cbd5e1; padding: 10px 14px; color: #1e293b;">${formatTableCellHtml(c)}</td>\n`;
         });
         tHtml += `</tr>\n`;
       });
       tHtml += `</tbody>\n</table>\n`;
 
-      const placeholder = `__HTML_TABLE_${tablesHtml.length}__`;
+      let cleanTable = `| ${headers.join(" | ")} |\n| ${headers.map(() => "---").join(" | ")} |\n`;
+      rows.forEach(r => {
+        cleanTable += `| ${r.map(cleanTableCellText).join(" | ")} |\n`;
+      });
+
+      const placeholder = `PESATTABLEPLACEHOLDER${tablesHtml.length}END`;
       tablesHtml.push(tHtml);
-      return placeholder;
+      cleanPlainTables.push(cleanTable.trim());
+      return "\n\n" + placeholder + "\n\n";
     });
 
     // 3. Bersihkan Plain Text yang rapi untuk dokumen (Hapus seluruh asterisk markdown bintang dan underscore)
-    let cleanPlain = raw;
-    tablesHtml.forEach((tHtml, idx) => {
-      cleanPlain = cleanPlain.replace(`__HTML_TABLE_${idx}__`, md);
-    });
-    cleanPlain = cleanPlain
+    let cleanPlain = raw
       .replace(/^#{1,6}\s+(.*$)/gm, "$1")
       .replace(/\*\*\*(.*?)\*\*\*/g, "$1")
       .replace(/\*\*(.*?)\*\*/g, "$1")
@@ -1159,6 +1190,10 @@
       .replace(/^\s*[\*\-]\s+/gm, "• ")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
+
+    cleanPlainTables.forEach((tPlain, idx) => {
+      cleanPlain = cleanPlain.replace(`PESATTABLEPLACEHOLDER${idx}END`, tPlain);
+    });
 
     // 4. HTML Rich Text untuk Clipboard
     let cleanHtml = raw
@@ -1180,8 +1215,8 @@
 
     // Restore HTML tables
     tablesHtml.forEach((tHtml, idx) => {
-      cleanHtml = cleanHtml.replace(`<p>__HTML_TABLE_${idx}__</p>`, tHtml);
-      cleanHtml = cleanHtml.replace(`__HTML_TABLE_${idx}__`, tHtml);
+      cleanHtml = cleanHtml.replace(new RegExp(`<p>\\s*PESATTABLEPLACEHOLDER${idx}END\\s*<\\/p>`, "g"), tHtml);
+      cleanHtml = cleanHtml.replace(new RegExp(`PESATTABLEPLACEHOLDER${idx}END`, "g"), tHtml);
     });
 
     cleanHtml = `<html><body><!--StartFragment-->${cleanHtml}<!--EndFragment--></body></html>`;

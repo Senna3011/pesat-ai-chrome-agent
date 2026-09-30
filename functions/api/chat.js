@@ -132,6 +132,18 @@ Gunakan format Markdown yang rapi dengan:
 - Kesimpulan singkat (jika ada)
     `.trim();
 
+    const CHAT_SYSTEM_PROMPT = `
+Anda adalah "Pesat AI Assistant", asisten kecerdasan buatan cerdas, analitis, dan profesional untuk produktivitas dokumen, analisis data, dan penulisan konten.
+
+TUGAS UTAMA:
+1. Jawab pertanyaan dan instruksi pengguna secara langsung, mendalam, dan terstruktur menggunakan format Markdown standar.
+2. Jika pengguna meminta pembuatan tabel (seperti data finansial, valuasi perusahaan, komparasi produk, dll):
+   - Wajib sajikan tabel lengkap dalam format Markdown table (| Header 1 | Header 2 | ... |) dengan baris pemisah (|---|---|).
+   - Isi seluruh baris data dengan data riil, faktual, dan realistis tanpa placeholder [...].
+   - Sertakan judul dokumen dan ringkasan eksekutif atau analisis wawasan yang mendalam di bawah tabel.
+3. DILARANG menggunakan format JSON tool-calling pada mode percakapan/penulisan dokumen ini. Berikan respons Markdown langsung.
+    `.trim();
+
     // Multi-Agent System Prompt v5.0 (Strict Function Calling, finish_task Guardrail & Anti-Looping Engine)
     const SYSTEM_PROMPT = `
 Anda adalah "Pesat AI Autonomous Browser Agent", mesin otomatisasi peramban web cerdas berakurasi tinggi dengan paradigma ReAct (Reasoning + Acting) dan Human-in-the-Loop.
@@ -402,15 +414,23 @@ PANDUAN ANTI-LOOPING & GUARDRAILS:
       }
     ];
 
+    const isChatPhase = body.phase === "chat" || (!body.phase && (body.isChat || !body.taskState));
+    let systemPromptToUse = SYSTEM_PROMPT;
+    if (isSummarize) {
+      systemPromptToUse = SUMMARIZE_SYSTEM_PROMPT;
+    } else if (isChatPhase) {
+      systemPromptToUse = CHAT_SYSTEM_PROMPT;
+    }
+
     const payload = {
       model: AI_MODEL_NAME,
       max_tokens: maxTokens,
       messages: [
-        { role: "system", content: isSummarize ? SUMMARIZE_SYSTEM_PROMPT : SYSTEM_PROMPT },
+        { role: "system", content: systemPromptToUse },
         ...conversationHistory,
         ...(userPrompt ? [{ role: "user", content: userPrompt }] : [])
       ],
-      ...(isSummarize ? {} : { tools: tools })
+      ...((isSummarize || isChatPhase) ? {} : { tools: tools })
     };
 
     if (!AI_API_KEY) {
