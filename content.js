@@ -1072,7 +1072,7 @@
     let raw = String(md || "").trim();
 
     // 1. Bersihkan sisa-sisa divider markdown atau section medsos jika terlampir tidak sengaja
-    raw = raw.replace(/\n\s*---\s*\n\s*(?:Thread Ringkas|Tweet|Twitter|#)[\s\S]*$/i, "");
+    raw = raw.replace(/\n\s*---\s*\n\s*(?:Thread Ringkas|Tweet|Twitter)\b[\s\S]*$/i, "");
     raw = raw.replace(/\n\s*---\s*\n/g, "\n\n");
 
     function cleanTableCellText(text) {
@@ -1146,10 +1146,7 @@
       });
       tHtml += `</tbody>\n</table>\n`;
 
-      let cleanTable = `| ${headers.join(" | ")} |\n| ${headers.map(() => "---").join(" | ")} |\n`;
-      rows.forEach(r => {
-        cleanTable += `| ${r.map(cleanTableCellText).join(" | ")} |\n`;
-      });
+      let cleanTable = headers.join("\t") + "\n" + rows.map(r => r.map(cleanTableCellText).join("\t")).join("\n");
 
       const placeholder = `PESATTABLEPLACEHOLDER${tablesHtml.length}END`;
       tablesHtml.push(tHtml);
@@ -1159,7 +1156,7 @@
 
     // 3. Bersihkan Plain Text yang rapi untuk dokumen (Hapus seluruh asterisk markdown bintang dan underscore)
     let cleanPlain = raw
-      .replace(/^#{1,6}\s+(.*$)/gm, "$1")
+      .replace(/^#{1,6}\s*(?:[📊🏆📋⚡💡📝📌]\s*)?(.*$)/gm, "$1")
       .replace(/\*\*\*(.*?)\*\*\*/g, "$1")
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .replace(/\*(.*?)\*/g, "$1")

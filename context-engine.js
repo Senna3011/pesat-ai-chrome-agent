@@ -5,32 +5,46 @@
       const q = (query || "").toLowerCase().trim();
       const tabsResult = [];
       const connectorsResult = [
-        { id: "active-tab", title: "Tab Aktif Saat Ini", icon: "🌐", type: "active_tab", subtitle: "Konteks halaman yang sedang Anda lihat" },
-        { id: "google-workspace", title: "Google Docs / Sheets", icon: "📊", type: "workspace", subtitle: "Otomasi dokumen & spreadsheet Google" },
-        { id: "email-client", title: "Email (Gmail / Webmail)", icon: "✉️", type: "email", subtitle: "Bantu draft & kirim email" },
-        { id: "social-media", title: "Sosial Media (Twitter/LinkedIn)", icon: "📱", type: "social", subtitle: "Bantu buat & jadwalkan postingan" },
-        { id: "code-editor", title: "Editor Kode (GitHub / Live Web)", icon: "💻", type: "code", subtitle: "Bantu analisa & fix coding di browser" }
+        { id: "active-tab", name: "tab-aktif", title: "Tab Aktif Saat Ini", icon: "🌐", type: "Connector", subtitle: "Konteks halaman yang sedang Anda lihat", metadata: { title: "Tab Aktif", icon: "🌐", description: "Halaman web yang sedang dibuka" } },
+        { id: "google-workspace", name: "google-workspace", title: "Google Docs / Sheets", icon: "📊", type: "Connector", subtitle: "Otomasi dokumen & spreadsheet Google", metadata: { title: "Google Workspace", icon: "📊", description: "Otomasi dokumen & spreadsheet" } },
+        { id: "email-client", name: "gmail", title: "Email (Gmail / Webmail)", icon: "✉️", type: "Connector", subtitle: "Bantu draft & kirim email", metadata: { title: "Email", icon: "✉️", description: "Draf & kirim pesan" } },
+        { id: "social-media", name: "sosmed", title: "Sosial Media (Twitter/LinkedIn)", icon: "📱", type: "Connector", subtitle: "Bantu buat & jadwalkan postingan", metadata: { title: "Sosial Media", icon: "📱", description: "Postingan media sosial" } },
+        { id: "code-editor", name: "code-editor", title: "Editor Kode (GitHub / Live Web)", icon: "💻", type: "Connector", subtitle: "Bantu analisa & fix coding di browser", metadata: { title: "Editor Kode", icon: "💻", description: "Analisis & fix coding" } }
       ];
 
       try {
         if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
           const allTabs = await chrome.tabs.query({ currentWindow: true });
-          for (const tab of allTabs) {
-            if (!tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://")) continue;
+          allTabs.forEach((tab, idx) => {
+            if (!tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://")) return;
             const title = tab.title || "Tab";
             const url = tab.url;
-            if (!q || title.toLowerCase().includes(q) || url.toLowerCase().includes(q)) {
+            const tabName = `tab${idx + 1}`;
+            let domain = "";
+            try { domain = new URL(url).hostname; } catch (_) {}
+
+            if (!q || tabName.includes(q) || title.toLowerCase().includes(q) || url.toLowerCase().includes(q) || domain.toLowerCase().includes(q)) {
               tabsResult.push({
                 id: `tab-${tab.id}`,
                 tabId: tab.id,
-                title: title,
+                name: tabName,
+                title: `[@${tabName}] ${title}`,
                 url: url,
                 icon: tab.favIconUrl || "🌐",
-                type: "tab",
-                subtitle: url.length > 45 ? url.substring(0, 42) + "..." : url
+                type: "BrowserTab",
+                subtitle: domain ? `${domain} — ${title}` : (url.length > 45 ? url.substring(0, 42) + "..." : url),
+                metadata: {
+                  tabId: tab.id,
+                  title: title,
+                  url: url,
+                  domain: domain,
+                  active: !!tab.active,
+                  favIconUrl: tab.favIconUrl,
+                  index: idx + 1
+                }
               });
             }
-          }
+          });
         }
       } catch (err) {
         console.warn("[ContextEngine] Tab query failed:", err);

@@ -377,7 +377,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       promptInput.value = "";
       promptInput.style.height = "auto";
     }
-    updateSendButtonState();
 
     // Reset Token Tracker UI & background loop tracker
     try {
@@ -2921,6 +2920,38 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     attachedContextSources = [];
     renderComposerChips();
 
+    // Auto-detect dan resolve mention tab inline (misal "@tab1", "@tab2") jika diketik langsung oleh user
+    const tabMentions = userPrompt.match(/@tab(\d+)/gi);
+    if (tabMentions && typeof chrome !== "undefined" && chrome.tabs) {
+      try {
+        const allTabs = await new Promise(res => chrome.tabs.query({ currentWindow: true }, res));
+        for (const tm of tabMentions) {
+          const tIdx = parseInt(tm.replace(/@tab/i, ""), 10);
+          if (tIdx >= 1 && tIdx <= allTabs.length) {
+            const targetTab = allTabs[tIdx - 1];
+            if (!contextSourcesToSend.some(s => s.metadata?.tabId === targetTab.id || s.id === `tab-${targetTab.id}`)) {
+              contextSourcesToSend.push({
+                id: `tab-${targetTab.id}`,
+                tabId: targetTab.id,
+                name: `tab${tIdx}`,
+                title: `[@tab${tIdx}] ${targetTab.title || "Tab"}`,
+                url: targetTab.url || "",
+                type: "BrowserTab",
+                metadata: {
+                  tabId: targetTab.id,
+                  title: targetTab.title,
+                  url: targetTab.url,
+                  index: tIdx
+                }
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[Sidepanel] Inline @tab resolve error:", err);
+      }
+    }
+
     promptInput.value = "";
     promptInput.style.height = "38px";
     shouldStopAgent = false;
@@ -2960,7 +2991,7 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     const isEmailAction = /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt);
     const isFormAction = /(?:isi\s+form|isi\s+formulir|isi\s+field|login|sign\s*in|masuk|autofill|isi\s+email|isi\s+password|isi\s+kolom|masukkan\s+email|masukkan\s+password|isi\s+akun)/i.test(userPrompt);
 
-    const isDocsTarget = /(?:google\s+docs?|docs\.new|di docs|ke docs|google\s+dokumen|di dokumen|ke dokumen)/i.test(userPrompt);
+    const isDocsTarget = /(?:google\s+docs?|docs\.new|di docs|ke docs|dalam.*docs|google\s+dokumen|di dokumen|ke dokumen|dalam.*dokumen|lembar kerja)/i.test(userPrompt);
     const hasTableCreation = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan)/i.test(userPrompt);
 
     const isSpreadsheetAction = !isDocsTarget && (
@@ -2992,7 +3023,7 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     )));
 
     if (isDirectAnalysisOnly) {
-      await runAnalysisFlow(userPrompt);
+      await runAnalysisFlow(userPrompt, contextSourcesToSend);
       return;
     }
 
@@ -3021,7 +3052,7 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     return rows.length > 0 ? rows : null;
   }
 
-  async function runAnalysisFlow(userPrompt) {
+  async function runAnalysisFlow(userPrompt, contextSources = []) {
     // Guard: Jika ada proses analisis/task yang sedang berjalan, tolak pemanggilan ganda
     if (isAgentRunning) {
       appendLog("⚠️ Analisis sudah berjalan, permintaan duplikat diabaikan.", "WARN");
@@ -3038,16 +3069,39 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
         if (tabs && tabs[0]) activeTabInfo = tabs[0];
       } catch (_) {}
 
-      const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
-      let cleanText = textRes?.text || "";
-      let pageTitle = activeTabInfo?.title || textRes?.title || "Halaman Web";
-      let pageUrl = activeTabInfo?.url || textRes?.url || "";
+      // 1. Cek apakah ada referensi BrowserTab yang dilampirkan atau di-mention (@tab1, @tab2, dll.)
+      const referencedTab = (contextSources || []).find(s => s && (s.type === "BrowserTab" || s.type === "tab") && s.metadata?.tabId);
 
-      if (!cleanText || cleanText.length < 20) {
-        const scanFallback = await sendToContentScript({ type: "SCAN_DOM", showOverlay: false });
-        cleanText = scanFallback?.data?.pageContent || "";
-        pageTitle = activeTabInfo?.title || scanFallback?.data?.title || pageTitle;
-        pageUrl = activeTabInfo?.url || scanFallback?.data?.url || pageUrl;
+      let cleanText = "";
+      let pageTitle = activeTabInfo?.title || "Halaman Web";
+      let pageUrl = activeTabInfo?.url || "";
+
+      if (referencedTab && referencedTab.metadata?.tabId) {
+        appendLog(`📖 Membaca referensi dari [${referencedTab.name || 'Tab'}] ${referencedTab.metadata.title || referencedTab.title}...`);
+        const tabTextRes = await sendToBackground({
+          action: "GET_READABLE_TEXT",
+          tabId: referencedTab.metadata.tabId
+        });
+        if (tabTextRes && tabTextRes.text && tabTextRes.text.length > 20) {
+          cleanText = tabTextRes.text;
+          pageTitle = tabTextRes.title || referencedTab.metadata.title || referencedTab.name;
+          pageUrl = tabTextRes.url || referencedTab.metadata.url || "";
+        }
+      }
+
+      // Jika belum ada cleanText dari referensi tab, ambil dari tab aktif saat ini
+      if (!cleanText) {
+        const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
+        cleanText = textRes?.text || "";
+        pageTitle = activeTabInfo?.title || textRes?.title || pageTitle;
+        pageUrl = activeTabInfo?.url || textRes?.url || pageUrl;
+
+        if (!cleanText || cleanText.length < 20) {
+          const scanFallback = await sendToContentScript({ type: "SCAN_DOM", showOverlay: false });
+          cleanText = scanFallback?.data?.pageContent || "";
+          pageTitle = activeTabInfo?.title || scanFallback?.data?.title || pageTitle;
+          pageUrl = activeTabInfo?.url || scanFallback?.data?.url || pageUrl;
+        }
       }
 
       const isSheetsSite = pageUrl.includes("/spreadsheets") ||
@@ -3061,50 +3115,81 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
                          pageTitle.includes("Google Docs") ||
                          pageUrl.includes("word.office.com");
 
-      const isDocsTarget = /(?:google\s+docs?|docs\.new|di docs|ke docs|google\s+dokumen|di dokumen|ke dokumen)/i.test(userPrompt) || isDocsSite;
+      const userExplicitDocs = /(?:google\s+docs?|docs\.new|di docs|ke docs|dalam.*docs|google\s+dokumen|di dokumen|ke dokumen|dalam.*dokumen|lembar kerja)/i.test(userPrompt);
+      const userExplicitSheets = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|buatkan spreadsheet)/i.test(userPrompt);
+      const isDocsTarget = userExplicitDocs || isDocsSite;
 
-      // Klasifikasi Intent yang Akurat (Prioritas: Summarize / SEO / Security / Social / Table Docs / Table Sheets / Product / Article / QA)
+      // Klasifikasi Intent yang Akurat (Prioritas: Summarize / SEO / Security / Social / Table Docs / Table Sheets / Table General / Docs Article / Product / Article / QA)
       const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
       const isSeo = !isSummarize && /(?:seo|meta|kata kunci|keyword)/i.test(userPrompt);
       const isSecurity = !isSummarize && /(?:keamanan|security|audit keamanan|ssl|https)/i.test(userPrompt);
       const isSocialThread = !isSummarize && /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed)/i.test(userPrompt);
 
-      const hasTableCreationIntent = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan|tabel)/i.test(userPrompt);
+      const hasTableCreationIntent = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan|tabel\b)/i.test(userPrompt);
 
-      // isDocsTableTask: jika tujuannya Google Docs dan ada perintah membuat tabel
+      // 1. isDocsTableTask: jika tujuannya Google Docs dan ada perintah membuat tabel
       const isDocsTableTask = !isSummarize && !isSeo && !isSecurity && !isSocialThread && isDocsTarget && hasTableCreationIntent;
 
-      // isSpreadsheetTask HANYA jika BUKAN Docs task, bukan summarize/seo/security, dan ada intent spreadsheet atau halaman sheets
+      // 2. isSpreadsheetTask: jika pengguna eksplisit meminta Sheets atau sedang berada di tab Sheets
       const isSpreadsheetTask = !isSummarize && !isSeo && !isSecurity && !isSocialThread && !isDocsTableTask && (
-        /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|buatkan spreadsheet)/i.test(userPrompt) ||
-        (isSheetsSite && /(?:buat|isi|masukkan|tambahkan|tabel|data|baris|kolom)/i.test(userPrompt)) ||
-        (!isDocsTarget && hasTableCreationIntent)
+        userExplicitSheets || (isSheetsSite && hasTableCreationIntent)
       );
 
-      const isProductResearch = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isSocialThread && /(?:riset produk|laptop|harga|rekomendasi produk|komparasi|spesifikasi|cari produk|tokopedia|shopee|produk)/i.test(userPrompt);
-      const isArticle = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt);
+      // 3. isGeneralTableTask: jika pengguna meminta tabel tapi bukan khusus Google Docs dan bukan khusus Google Sheets
+      const isGeneralTableTask = !isSummarize && !isSeo && !isSecurity && !isSocialThread && !isDocsTableTask && !isSpreadsheetTask && hasTableCreationIntent;
+
+      const isProductResearch = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isGeneralTableTask && !isSocialThread && /(?:riset produk|laptop|harga|rekomendasi produk|komparasi|spesifikasi|cari produk|tokopedia|shopee|produk)/i.test(userPrompt);
+
+      // 4. isDocsArticleTask: jika tujuannya Google Docs dan meminta artikel/berita/top N/copywriting
+      const isDocsArticleTask = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isSocialThread && isDocsTarget && (
+        /(?:artikel|tulis|buatkan|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt)
+      );
+
+      const isArticle = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isDocsArticleTask && !isGeneralTableTask && !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt);
 
       let promptPayload = "";
-	      if (isDocsTableTask) {
-	        const isDocsOrWordEditor = isDocsSite || pageUrl.includes("docs.google.com") || pageUrl.includes("office.com");
-	        const refSnippet = (!isDocsOrWordEditor && cleanText && cleanText.length > 50)
-	          ? `\n\n[REFERENSI DOKUMEN / SUMBER WEB]:\nJudul: ${pageTitle}\n${cleanText.substring(0, 2500)}`
-	          : "";
+      if (isDocsTableTask) {
+        const isDocsOrWordEditor = isDocsSite || pageUrl.includes("docs.google.com") || pageUrl.includes("office.com");
+        const refSnippet = (!isDocsOrWordEditor && cleanText && cleanText.length > 50)
+          ? `\n\n[REFERENSI DOKUMEN / SUMBER WEB]:\nJudul: ${pageTitle}\n${cleanText.substring(0, 2500)}`
+          : "";
 
-	        promptPayload = `Bertindaklah sebagai MASTER DOCUMENT DESIGNER & SENIOR DATA ANALYST (Standar Dokumen Eksekutif Google Docs & Microsoft Word).
+        promptPayload = `Bertindaklah sebagai MASTER DOCUMENT DESIGNER & SENIOR DATA ANALYST (Standar Dokumen Eksekutif Google Docs & Microsoft Word).
 
 [PERINTAH PEMBUATAN TABEL DI DOKUMEN]:
 ${userPrompt}${refSnippet}
 
-	PEDOMAN KETAT TABEL DOKUMEN GOOGLE DOCS:
-	1. SAJIKAN TABEL DALAM FORMAT MARKDOWN TABLE RESMI:
-	   - Header kolom dan setiap sel harus secara presisi, akurat, dan lengkap menjawab topik perintah pengguna (contoh untuk daftar perusahaan/finansial: | No | Nama Perusahaan | Sektor / Industri | Estimasi Kekayaan / Valuasi Pasar (2026) | Catatan / Aset Utama |).
-	   - Seluruh baris data harus diisi lengkap dengan data yang realistis dan faktual (DILARANG menggunakan placeholder [...] atau template kosong).
-	   - DILARANG membubuhkan tanda khusus Markdown seperti bintang ganda (**), asterisk (*), atau backtick di dalam sel tabel (tulis langsung teks atau nilainya secara bersih, contoh: tulis 'Total' bukan '**Total**', tulis '4.260 Triliun' bukan '**4.260 Triliun**').
-	   - Sertakan baris Total / Rata-rata di bagian paling bawah jika relevan dengan metrik numerik.
-	2. Sertakan judul dokumen berbobot di baris pertama (# Judul Dokumen).
-	3. Berikan pengantar singkat sebelum tabel dan ringkasan eksekutif serta analisis mendalam (1-2 paragraf) setelah tabel yang membedah wawasan, tren, dan faktor penggerak dari data tersebut.`;
-	      } else if (isSpreadsheetTask) {
+PEDOMAN KETAT TABEL DOKUMEN GOOGLE DOCS:
+1. SAJIKAN TABEL DALAM FORMAT MARKDOWN TABLE RESMI:
+   - Header kolom dan setiap sel harus secara presisi, akurat, dan lengkap menjawab topik perintah pengguna (contoh untuk daftar perusahaan/finansial: | No | Nama Perusahaan | Sektor / Industri | Estimasi Kekayaan / Valuasi Pasar (2026) | Catatan / Aset Utama |).
+   - Seluruh baris data harus diisi lengkap dengan data yang realistis dan faktual (DILARANG menggunakan placeholder [...] atau template kosong).
+   - DILARANG membubuhkan tanda khusus Markdown seperti bintang ganda (**), asterisk (*), atau backtick di dalam sel tabel (tulis langsung teks atau nilainya secara bersih, contoh: tulis 'Total' bukan '**Total**', tulis '4.260 Triliun' bukan '**4.260 Triliun**').
+   - Sertakan baris Total / Rata-rata di bagian paling bawah jika relevan dengan metrik numerik.
+2. Sertakan judul dokumen berbobot di baris pertama (# Judul Dokumen).
+3. Berikan pengantar singkat sebelum tabel dan ringkasan eksekutif serta analisis mendalam (1-2 paragraf) setelah tabel yang membedah wawasan, tren, dan faktor penggerak dari data tersebut.`;
+      } else if (isDocsArticleTask) {
+        const paragraphMatch = userPrompt.match(/(?:tulis|buatkan|buat|ketik|isi)\s+(\d+)\s+paragraf/i);
+        const paragraphCount = paragraphMatch ? parseInt(paragraphMatch[1], 10) : null;
+
+        promptPayload = `Bertindaklah sebagai MASTER JOURNALIST & PRINCIPAL ESSAYIST KELAS DUNIA (Standar Publikasi Dokumen Resmi Google Docs).
+
+[PERINTAH & TOPIK]:
+${userPrompt}
+
+[REFERENSI DARI WEB / TAB TERLAMPIR]:
+Judul: ${pageTitle} | URL: ${pageUrl}
+${cleanText.substring(0, 4500) || "(Gunakan instruksi pengguna sebagai referensi)"}
+
+PEDOMAN KETAT PENULISAN DOKUMEN GOOGLE DOCS:
+1. TULISKAN KONTEN / ARTIKEL LENGKAP UTUH yang langsung siap dipublikasikan ke lembar kerja Google Docs.
+2. DILARANG KERAS memberikan instruksi manual atau panduan (seperti "Buka Google Docs...", "Langkah 1:...", dll.). LANGSUNG TULISKAN KONTEN ARTIKEL/BERITANYA DARI DATA REFERENSI!
+3. Format dokumen:
+   - Judul Dokumen yang Otoritatif di baris pertama (# Judul Berita / Artikel)
+   - Lead / Paragraf pengantar
+   - Rincian butir-butir utama (contoh: ## 1. Judul Berita, dengan 2-3 paragraf ulasan tajam dan fakta pendukung dari data web referensi)
+   - Analisis implikasi dan kesimpulan
+4. Gaya bahasa: Tajam, bernas, berwawasan mendalam, dan bebas klise robotik AI.${paragraphCount ? `\n5. Pengguna meminta tepat ${paragraphCount} paragraf: Patuhi secara presisi!` : ""}`;
+      } else if (isSpreadsheetTask) {
 	        promptPayload = `Bertindaklah sebagai MASTER SPREADSHEET & FINANCIAL DATA SCIENTIST EXPERT (Standar Senior Modeler & Excel Specialist).
 
 	[PERINTAH & KEBUTUHAN DATA SPREADSHEET]:
@@ -3184,9 +3269,33 @@ FORMAT STRUKTUR OUTPUT:
 **Tweet 4:**
 (Kalimat penutup reflektif + ajakan diskusi + 1 hashtag relevan)
 
----
-### 💼 FORMAT LINKEDIN (Long-form Post):
-(Format Hook Otoritatif $\\to$ Konteks Strategis $\\to$ 3 Key Takeaways $\\to$ Pertanyaan Diskusi)`;
+	---
+	### 💼 FORMAT LINKEDIN (Long-form Post):
+	(Format Hook Otoritatif $\\to$ Konteks Strategis $\\to$ 3 Key Takeaways $\\to$ Pertanyaan Diskusi)`;
+      } else if (isDocsArticleTask || (isArticle && isDocsTarget)) {
+        const paragraphMatch = userPrompt.match(/(?:tulis|buatkan|buat|ketik|isi)\s+(\d+)\s+paragraf/i);
+        const paragraphCount = paragraphMatch ? parseInt(paragraphMatch[1], 10) : null;
+
+        promptPayload = `Bertindaklah sebagai JURNALIS PROFESIONAL & EDITOR KONTEN DOKUMEN GOOGLE DOCS.
+
+[PERINTAH & TOPIK DARI PENGGUNA]:
+${userPrompt}
+
+[REFERENSI SUMBER DARI WEB / TAB TERLAMPIR]:
+Judul: ${pageTitle} | URL: ${pageUrl}
+${cleanText.substring(0, 4500) || "(Gunakan instruksi pengguna sebagai referensi)"}
+
+PEDOMAN KETAT PENULISAN DOKUMEN GOOGLE DOCS:
+1. TULISKAN KONTEN SESUAI PERMINTAAN SECARA MENDALAM, MENARIK, DAN FAKTUAL (Jika diminta 5 berita terviral, sajikan 5 berita terpopuler/terviral secara lengkap dengan ulasan faktual dan gaya bahasa jurnalistik menarik!).
+2. DILARANG KERAS memberikan instruksi manual atau panduan (seperti "Buka Google Docs...", "Langkah 1:...", dll.). LANGSUNG TULISKAN KONTEN ARTIKEL/BERITANYA DARI DATA REFERENSI!
+3. DILARANG membuat format briefing militer/intelijen kecuali pengguna secara eksplisit memintanya.
+4. JANGAN menyertakan tabel Markdown jika pengguna tidak meminta tabel.
+5. Format dokumen yang rapi:
+   - Judul Dokumen di baris pertama (# Judul)
+   - Lead / Paragraf pengantar
+   - Rincian 5 berita / butir pembahasan utama (## 1. Judul Berita, ## 2. Judul Berita, dst. dengan paragraf ulasan padat)
+   - Kesimpulan atau penutup yang relevan
+6. Gaya bahasa: Mengalir alami, tajam, bernas, dan bebas klise robotik AI.${paragraphCount ? `\n7. Pengguna meminta tepat ${paragraphCount} paragraf: Patuhi secara presisi!` : ""}`;
       } else if (isArticle) {
         const paragraphMatch = userPrompt.match(/(?:tulis|buatkan|buat|ketik|isi)\s+(\d+)\s+paragraf/i);
         const paragraphCount = paragraphMatch ? parseInt(paragraphMatch[1], 10) : null;
@@ -3296,14 +3405,15 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
 
       const aiReply = await callLLM("chat", promptPayload, { isSummarize: isSummarize });
 
-      const artType = (isSpreadsheetTask || isProductResearch) ? "table" : (isSocialThread ? "social" : ((isArticle || isDocsTableTask) ? "doc" : "text"));
-      const artTitle = (isSpreadsheetTask || isProductResearch)
-        ? `Spreadsheet-${(userPrompt || "Data").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
+      const isDocsOutput = isDocsTableTask || isDocsArticleTask || (isDocsTarget && (isArticle || isDocsTableTask));
+      const artType = (isSpreadsheetTask || isGeneralTableTask || isProductResearch) ? "table" : (isSocialThread ? "social" : ((isArticle || isDocsOutput) ? "doc" : "text"));
+      const artTitle = (isSpreadsheetTask || isGeneralTableTask || isProductResearch)
+        ? `Tabel-${(userPrompt || "Data").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
         : (isSocialThread
             ? `Thread-${(userPrompt || "Sosmed").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.txt`
             : `Draf-${(userPrompt || "Dokumen").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`);
 
-      const artifact = (!isSummarize && (isSpreadsheetTask || isProductResearch || isSocialThread || isArticle || isDocsTableTask)) ? {
+      const artifact = (!isSummarize && (isSpreadsheetTask || isGeneralTableTask || isProductResearch || isSocialThread || isArticle || isDocsOutput)) ? {
         artifactType: artType,
         name: artTitle,
         content: aiReply
@@ -3321,7 +3431,7 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
                            pageUrl.includes("facebook.com") ||
                            pageUrl.includes("threads.net");
 
-      if (isDocsTableTask) {
+      if (isDocsOutput) {
         if (!isDocsSite) {
           appendLog("Membuka lembar kerja Google Docs baru (docs.new)...");
           showStatusIndicator("Membuka lembar kerja Google Docs...");
@@ -3347,8 +3457,8 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
           await new Promise(r => setTimeout(r, 2000));
         }
 
-        showStatusIndicator("Menuliskan teks dan tabel langsung ke Google Docs...");
-        appendLog("📄 Menuliskan dokumen dan tabel ke Google Docs...");
+        showStatusIndicator("Menuliskan dokumen langsung ke Google Docs...");
+        appendLog("📄 Menuliskan dokumen ke Google Docs...");
         await sendToContentScript({
           type: "EXECUTE_ACTION",
           actionData: {
@@ -3357,7 +3467,7 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
           }
         }, 25000, 3);
 
-        addMessageToCurrentSession("assistant", `### 📝 Tabel Dokumen Berhasil Dibuat & Dituliskan ke Google Docs\n\n${aiReply}`, {
+        addMessageToCurrentSession("assistant", `### 📝 Dokumen Berhasil Dibuat & Dituliskan ke Google Docs\n\n${aiReply}`, {
           skipClean: true,
           artifact
         });
@@ -3554,13 +3664,13 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
         }).catch(() => {});
       }
 
-	      // ══ FAST PATH FOR END-TO-END AUTOMATIONS (Spreadsheet, Email, & Social) ══
-	      const isSpreadsheetGoal = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(goal);
-	      if (isSpreadsheetGoal) {
-	        appendLog("📊 Mengalihkan ke Spreadsheet Automation Engine...");
-	        await runAnalysisFlow(goal);
-	        return;
-	      }
+		      // ══ FAST PATH FOR END-TO-END AUTOMATIONS (Spreadsheet, Email, & Social) ══
+		      const isSpreadsheetGoal = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(goal);
+		      if (isSpreadsheetGoal) {
+		        appendLog("📊 Mengalihkan ke Spreadsheet Automation Engine...");
+		        await runAnalysisFlow(goal, contextSources);
+		        return;
+		      }
 
 	      // ══ FAST PATH FOR DIRECT NAVIGATION (Single clean step, no noisy ReAct loops) ══
 	      const directNavRegex = /^(?:tolong\s+|mohon\s+)?(?:buka|kunjungi|open|go\s*to|akses)\s+(?:website\s+|web\s+|situs\s+|halaman\s+|url\s+)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?|https?:\/\/[^\s]+)\s*$/i;
@@ -4634,9 +4744,10 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     attachedContextSources.forEach((src, idx) => {
       const chip = document.createElement("span");
       chip.className = "context-chip";
-      const icon = src.type === "Connector" ? (src.metadata?.icon || "⚡") : (src.type === "BrowserTab" ? "🌐" : (src.type === "CurrentPage" ? "📄" : (src.type === "Image" ? "🖼️" : "📎")));
-      const label = src.name.length > 24 ? src.name.slice(0, 22) + "…" : src.name;
-      chip.title = `${src.name} (${src.type})`;
+      const icon = src.type === "Connector" ? (src.metadata?.icon || "⚡") : ((src.type === "BrowserTab" || src.type === "tab") ? "🌐" : (src.type === "CurrentPage" ? "📄" : (src.type === "Image" ? "🖼️" : "📎")));
+      const displayName = src.name || src.title || src.metadata?.title || "Konteks";
+      const label = displayName.length > 24 ? displayName.slice(0, 22) + "…" : displayName;
+      chip.title = `${displayName} (${src.type || "Tab"})`;
       chip.innerHTML = `<span class="chip-label">${icon} ${escapeHtml(label)}</span><button type="button" class="chip-remove" title="Hapus">×</button>`;
       chip.querySelector(".chip-remove")?.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -4652,8 +4763,8 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       const emoji = src.metadata?.icon || "⚡";
       return `<div class="mention-item-icon-wrap"><span class="mention-icon-emoji">${emoji}</span></div>`;
     }
-    const favUrl = src.metadata?.favIconUrl;
-    if (favUrl && !favUrl.startsWith("chrome://")) {
+    const favUrl = src.metadata?.favIconUrl || src.icon;
+    if (favUrl && typeof favUrl === "string" && !favUrl.startsWith("chrome://") && favUrl !== "🌐") {
       return `<div class="mention-item-icon-wrap"><img src="${escapeHtml(favUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';" /><span class="mention-icon-fallback" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
     }
     return `<div class="mention-item-icon-wrap"><span class="mention-icon-fallback"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
@@ -4682,9 +4793,11 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
         item.className = `mention-picker-item${flatIdx === 0 ? " active" : ""}`;
         item.setAttribute("data-flat-index", flatIdx);
 
-        const titleText = src.metadata?.title || src.name;
-        const subText = src.metadata?.domain || src.metadata?.description || "";
-        const badge = src.type === "BrowserTab" ? (src.metadata?.active ? "Aktif" : "Tab") : (src.type === "Connector" ? "Konektor" : "");
+        const titleText = src.title || src.metadata?.title || src.name;
+        const subText = src.metadata?.domain || src.subtitle || src.metadata?.description || src.url || "";
+        const badge = (src.type === "BrowserTab" || src.type === "tab")
+          ? (src.metadata?.active ? "Aktif" : (src.name ? `@${src.name}` : "Tab"))
+          : (src.type === "Connector" ? "Konektor" : "");
 
         item.innerHTML = `
           ${renderMentionItemIcon(src)}
@@ -4775,17 +4888,18 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     const val = promptInput.value;
     const pos = promptInput.selectionStart ?? val.length;
     const trigger = findMentionTrigger();
+    const mentionName = source.name || (source.metadata?.index ? `tab${source.metadata.index}` : (source.title || "tab").replace(/\s+/g, "_"));
 
     let before, after, insertText;
     if (trigger) {
       before = val.slice(0, trigger.atPos);
       after = val.slice(pos);
-      insertText = `@${source.name} `;
+      insertText = `@${mentionName} `;
     } else {
       before = val.slice(0, pos);
       after = val.slice(pos);
       const needSpace = pos > 0 && !/\s/.test(val[pos - 1]);
-      insertText = `${needSpace ? " " : ""}@${source.name} `;
+      insertText = `${needSpace ? " " : ""}@${mentionName} `;
     }
 
     if (insertText.endsWith(" ") && after.startsWith(" ")) {

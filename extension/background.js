@@ -145,8 +145,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  // Ambil teks murni artikel (Readable Text) secara langsung dari tab aktif
+  // Ambil teks murni artikel (Readable Text) secara langsung dari tab aktif atau tab spesifik (tabId)
   if (request.action === "GET_READABLE_TEXT" || request.type === "GET_READABLE_TEXT") {
+    const targetTabId = request.tabId || request.payload?.tabId;
+    if (targetTabId) {
+      getReadableTextFromTab(Number(targetTabId))
+        .then(res => sendResponse(res))
+        .catch(err => sendResponse({ success: false, text: "", error: err.message }));
+      return true;
+    }
+
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       if (!tabs || tabs.length === 0 || !tabs[0].id) {
         sendResponse({ success: false, error: "Tidak ada tab aktif yang ditemukan." });
