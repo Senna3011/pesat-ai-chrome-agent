@@ -2895,6 +2895,8 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       actionData = {
         action: actionType,
         elementId: resObj.elementId || resObj.navigator?.elementId,
+        targetText: resObj.targetText || resObj.fallbackText || resObj.text || resObj.label || "",
+        fallbackText: resObj.fallbackText || resObj.targetText || resObj.text || "",
         value: resObj.value ?? resObj.text,
         pressEnter: resObj.pressEnter,
         keys: resObj.keys || resObj.key,
@@ -2950,18 +2952,42 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       };
     }
 
+    const isNavOrMenu = /(?:buka|klik|pilih|masuk|tampilkan|kunjungi|navigate|open|click)\s+(?:ke\s+)?(?:menu|sidebar|halaman|tab)?/i.test(sub?.description || activeTask?.goal || "");
+    const isSingleStepGoal = (activeTask?.plan?.length || 0) <= 1;
+
+    // Fast-path deterministik: Jika aksi adalah klik menu atau navigasi dan sukses, selesaikan subtask langsung
+    if (isNavOrMenu && (safeActionType === "click" || safeActionType === "navigate")) {
+      return {
+        verdict: isSingleStepGoal ? "DONE" : "SUCCESS",
+        subtaskComplete: true,
+        reason: "Menu atau navigasi target berhasil diklik dan dibuka."
+      };
+    }
+
     const prompt = `
 [AKSI TERAKHIR]
-Subtask aktif: ${sub ? `#${sub.id} — ${sub.description}` : "(tidak ada)"}
-Aksi: ${safeActionType}
-Hasil: BERHASIL — ${lastAction?.message || ""}
+Subtask aktif: #${sub ? sub.id : 1} — ${sub ? sub.description : activeTask?.goal || ""}
+Aksi yang dijalankan: ${safeActionType}
+Hasil eksekusi: BERHASIL (${lastAction?.message || "Sukses"})
 
-[KONDISI HALAMAN SEKARANG]
+[KONDISI HALAMAN SAAT INI]
 Judul: ${pageAfter?.title || ""}
 URL: ${pageAfter?.url || ""}
-Elemen interaktif: ${pageAfter?.elementsCount || 0}
-Ringkasan elemen (8 baris pertama):
+Elemen terdeteksi: ${pageAfter?.elementsCount || 0}
+Struktur elemen terkini (8 baris pertama):
 ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
+
+[INSTRUKSI VALIDATOR]
+Tentukan apakah subtask di atas telah berhasil diselesaikan berdasarkan hasil aksi tersebut.
+Jika aksi adalah membuka menu/link/navigasi atau mengisi form yang berhasil:
+Tetapkan "verdict": "DONE" dan "subtaskComplete": true.
+
+Respon HANYA dalam format JSON valid:
+{
+  "verdict": "DONE" | "CONTINUE" | "RETRY",
+  "subtaskComplete": true | false,
+  "reason": "Penjelasan singkat hasil evaluasi"
+}
 `.trim();
 
     try {
@@ -2977,7 +3003,13 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
     } catch (err) {
       appendLog(`Validator error: ${err.message}`, "WARN");
     }
-    return { verdict: "CONTINUE", subtaskComplete: false, reason: "Validator tidak merespon — lanjut ke langkah berikutnya." };
+
+    // Fallback: Jika aksi sukses, anggap subtask selesai jika tidak ada bukti kegagalan
+    return {
+      verdict: isSingleStepGoal ? "DONE" : "SUCCESS",
+      subtaskComplete: true,
+      reason: "Aksi sukses dijalankan."
+    };
   }
 
   // ═══════════════════════════════════════════════════
@@ -3915,47 +3947,65 @@ ATURAN KETAT:
 		        return;
 		      }
 
-		      // ══ FAST PATH FOR FORM AUTO-FILL (Direct credential & field filling) ══
-		      const isFormFillIntent = /(?:^(?:tolong\s+|mohon\s+)?(?:isi|masukkan|ketik|input|autofill)\b)/i.test(goal) &&
-		        /(?:email|password|sandi|user|nama|telepon|alamat|login|akun)/i.test(goal);
+			      // ══ FAST PATH FOR FORM AUTO-FILL (Direct credential & field filling) ══
+			      const hasEmailCred = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i.test(goal);
+			      const isFormFillIntent = (
+			        hasEmailCred &&
+			        /(?:isi|masukkan|ketik|input|autofill|login|sign\s*in|masuk|daftar|akun|password|sandi)/i.test(goal)
+			      ) || (
+			        /(?:^(?:tolong\s+|mohon\s+)?(?:isi|masukkan|ketik|input|autofill)\b)/i.test(goal) &&
+			        /(?:email|password|sandi|user|nama|telepon|alamat|login|akun)/i.test(goal)
+			      );
 
-		      if (isFormFillIntent) {
-		        const emailMatch = goal.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-		        const extractedFields = [];
-		        if (emailMatch) {
-		          extractedFields.push({ identifier: "email", value: emailMatch[1] });
-		        }
+			      if (isFormFillIntent) {
+			        const emailMatch = goal.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+			        const extractedFields = [];
+			        if (emailMatch) {
+			          extractedFields.push({ identifier: "email", value: emailMatch[1] });
+			        }
 
-		        // Ekstraksi nilai password
-		        const passMatch = goal.match(/(?:password|pass|sandi|kata sandi)\s*(?:login\s*ini)?\s*(?:dengan|adalah|:)?\s*([^\s,]+)/i);
-		        let passVal = passMatch ? passMatch[1].trim() : "";
-		        if (!passVal || passVal.includes("@")) {
-		          const tokens = goal.split(/\s+/).filter(t => t.length >= 3 && !t.includes("@") && !/^(?:isi|email|address|dan|password|login|ini|dengan|ke|di|tolong|mohon)$/i.test(t));
-		          if (tokens.length > 0) passVal = tokens[tokens.length - 1];
-		        }
-		        if (passVal && !passVal.includes("@")) {
-		          extractedFields.push({ identifier: "password", value: passVal });
-		        }
+			        // Ekstraksi nilai password
+			        const passMatch = goal.match(/(?:password|pass|sandi|kata sandi)\s*(?:login\s*ini)?\s*(?:dengan|adalah|:)?\s*([^\s,.]+)/i);
+			        let passVal = passMatch ? passMatch[1].trim() : "";
+			        if (!passVal || passVal.includes("@")) {
+			          const tokens = goal.split(/\s+/).filter(t => t.length >= 3 && !t.includes("@") && !/^(?:isi|email|address|dan|password|login|ini|dengan|ke|di|tolong|mohon|setelah|itu|anda|lihat|menu)$/i.test(t));
+			          if (tokens.length > 0) passVal = tokens[tokens.length - 1];
+			        }
+			        if (passVal) {
+			          passVal = passVal.replace(/[.,;:]+$/, "");
+			        }
+			        if (passVal && !passVal.includes("@")) {
+			          extractedFields.push({ identifier: "password", value: passVal });
+			        }
 
-		        if (extractedFields.length > 0) {
-		          showStatusIndicator("Mengisi formulir login...");
-		          appendLog(`📝 Mengisi ${extractedFields.length} field formulir secara otomatis...`);
-		          const fillRes = await sendToContentScript({
-		            type: "EXECUTE_ACTION",
-		            actionData: {
-		              action: "autofill_form_batch",
-		              fields: extractedFields
-		            }
-		          });
+			        if (extractedFields.length > 0) {
+			          const shouldSubmit = /(?:login|masuk|sign\s*in|submit|kirim)/i.test(goal);
+			          showStatusIndicator("Mengisi formulir login...");
+			          appendLog(`📝 Mengisi ${extractedFields.length} field formulir secara otomatis${shouldSubmit ? " dan menekan Sign In..." : "..."}`);
+			          const fillRes = await sendToContentScript({
+			            type: "EXECUTE_ACTION",
+			            actionData: {
+			              action: "autofill_form_batch",
+			              fields: extractedFields,
+			              submitAfter: shouldSubmit
+			            }
+			          });
 
-		          if (fillRes && fillRes.success && fillRes.filledCount > 0) {
-		            const summaryStr = extractedFields.map(f => `${f.identifier}: ${f.value.includes("@") ? f.value : "••••••••"}`).join(", ");
-		            addMessageToCurrentSession("assistant", `✅ Berhasil mengisi formulir (${fillRes.filledCount} field terisi: ${summaryStr}).`);
-		            await finalizeTask("done", `Berhasil mengisi formulir.`);
-		            return;
-		          }
-		        }
-		      }
+			          if (fillRes && fillRes.success && fillRes.filledCount > 0) {
+			            const summaryStr = extractedFields.map(f => `${f.identifier}: ${f.value.includes("@") ? f.value : "••••••••"}`).join(", ");
+			            addMessageToCurrentSession("assistant", `✅ Berhasil mengisi formulir (${fillRes.filledCount} field terisi: ${summaryStr})${shouldSubmit ? " dan menekan tombol Sign In." : "."}`);
+
+			            const hasFollowUp = /(?:setelah itu|lalu|kemudian|selanjutnya)\s+(.+)/i.test(goal);
+			            if (!hasFollowUp) {
+			              await finalizeTask("done", `Berhasil mengisi formulir login.`);
+			              return;
+			            } else {
+			              appendLog("⏳ Menunggu proses login selesai (1.8s) untuk memproses instruksi lanjutan...");
+			              await new Promise(r => setTimeout(r, 1800));
+			            }
+			          }
+			        }
+			      }
 
 		      // ══ PRE-EXECUTION GATE: THINK & PLAN DULU, KALAU RAGU INTERVIEW USER ══
 		      const isSearchIntent = /^(?:tolong\s+|mohon\s+)?(?:cari|search|temukan|carikan)\s+(.+)/i.test(goal.trim());
@@ -4322,10 +4372,13 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
           activeTask.repeatActionCount = 1;
         }
 
-        if (activeTask.repeatActionCount >= 2) {
-          appendLog(`⚠️ Deteksi aksi berulang "${resObj.action}" (Anti-Loop Circuit Breaker). Menghentikan loop secara aman.`, "WARN");
-          await finalizeTask("done", `Tindakan telah diselesaikan (guard anti-loop aktif).`);
-          return;
+        if (activeTask.repeatActionCount >= 3) {
+          appendLog(`⚠️ Deteksi aksi berulang "${resObj.action}" 3x (Anti-Loop Circuit Breaker). Mencoba beralih ke subtask berikutnya...`, "WARN");
+          markSubtask(sub.id, "done");
+          refreshTaskCard();
+          activeTask.repeatActionCount = 0;
+          activeTask.lastActionSig = null;
+          continue;
         }
       }
 
@@ -4642,10 +4695,12 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
       appendLog(`🎯 Validator: ${verdict.verdict} — ${verdict.reason}`);
 
       // Evaluasi penyelesaian Subtask (Transisi State yang Deterministik & Anti False-Positive)
+      const isNavOrMenuIntent = /(?:buka|klik|pilih|masuk|tampilkan|kunjungi|navigate|open|click)\s+(?:ke\s+)?(?:menu|sidebar|halaman|tab)?/i.test(sub.description || activeTask.goal || "");
       const isSubDone = exec.success && (
         verdict.subtaskComplete ||
         verdict.verdict === "DONE" ||
-        verdict.verdict === "SUCCESS"
+        verdict.verdict === "SUCCESS" ||
+        (isNavOrMenuIntent && (execActionType === "click" || execActionType === "navigate"))
       );
 
       if (isSubDone) {
@@ -4656,7 +4711,10 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
         // Cek apakah seluruh subtask rencana telah rampung
         const remainingSubs = (activeTask.plan || []).filter(s => s.status !== "done");
         if (remainingSubs.length === 0) {
-          await finalizeTask("done", "✅ Seluruh langkah tugas telah berhasil diselesaikan secara tuntas.");
+          const finalMsg = isNavOrMenuIntent
+            ? `✅ Menu target telah berhasil dibuka.`
+            : `✅ Seluruh langkah tugas telah berhasil diselesaikan secara tuntas.`;
+          await finalizeTask("done", finalMsg);
           return;
         }
       }

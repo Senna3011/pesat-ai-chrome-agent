@@ -4,6 +4,11 @@
 // paste_text (Google Docs/canvas friendly), click_coords (vision grounding).
 
 (() => {
+  if (window.__PESAT_CONTENT_SCRIPT_INITIALIZED__) {
+    return;
+  }
+  window.__PESAT_CONTENT_SCRIPT_INITIALIZED__ = true;
+
   let markersOverlay = null;
   let activeElementsMap = new Map();
   const capturedPageErrors = [];
@@ -47,6 +52,41 @@
     const vh = window.innerHeight || document.documentElement.clientHeight;
     const vw = window.innerWidth || document.documentElement.clientWidth;
     return rect.top <= vh + 150 && rect.bottom >= -150 && rect.left <= vw + 150 && rect.right >= -150;
+  }
+
+  function isElementInViewport(el) {
+    if (!el || !(el instanceof HTMLElement)) return false;
+    const rect = el.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    return rect.top >= 0 && rect.bottom <= vh && rect.left >= 0 && rect.right <= vw;
+  }
+
+  // Traversal rekursif Shadow DOM untuk menemukan elemen di dalam Web Components
+  function collectElementsDeep(selector, root = document) {
+    const results = [];
+    try {
+      results.push(...Array.from(root.querySelectorAll(selector)));
+    } catch (_) {}
+
+    try {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
+        acceptNode(node) {
+          if (node.id === "pesat-ai-agent-host-root" || node.tagName?.toLowerCase() === "pesat-ai-agent-host") {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return node.shadowRoot ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+        }
+      });
+      let host;
+      while ((host = walker.nextNode())) {
+        if (host.shadowRoot && host.id !== "pesat-ai-agent-host-root") {
+          results.push(...collectElementsDeep(selector, host.shadowRoot));
+        }
+      }
+    } catch (_) {}
+
+    return results;
   }
 
   function checkOcclusion(el) {
@@ -110,7 +150,7 @@
     const type = (el.getAttribute("type") || "").toLowerCase();
 
     if (tag === "button" || (tag === "input" && (type === "button" || type === "submit" || type === "reset"))) return "button";
-    if (tag === "a" && el.hasAttribute("href")) return "link";
+    if (tag === "a") return "link";
     if (tag === "input") {
       if (type === "search") return "searchbox";
       if (type === "checkbox") return "checkbox";
@@ -122,6 +162,7 @@
     if (tag === "select") return "combobox";
     if (tag === "summary") return "button";
     if (el.isContentEditable) return "textbox";
+    if (el.closest?.("nav, aside, [class*='sidebar' i], [class*='menu' i], [role='navigation']")) return "menuitem";
 
     return tag;
   }
@@ -789,7 +830,7 @@
     }
 
     const selector = [
-      "a[href]",
+      "a",
       "button",
       "input:not([type='hidden'])",
       "textarea",
@@ -803,13 +844,47 @@
       "[role='searchbox']",
       "[role='textbox']",
       "[role='menuitem']",
+      "[role='treeitem']",
+      "[role='option']",
       "[tabindex='0']",
       "[contenteditable='true']",
       "[gh='cm']",
-      "summary"
+      "summary",
+      // Elemen menu navigasi / sidebar non-tombol (dashboard admin & SPA)
+      "nav li",
+      "aside li",
+      "[class*='sidebar' i] li",
+      "[class*='sidebar' i] a",
+      "[class*='sidebar-item' i]",
+      "[class*='sidebar-link' i]",
+      "[class*='menu-item' i]",
+      "[class*='menu-link' i]",
+      "[class*='nav-item' i]",
+      "[class*='nav-link' i]",
+      "[data-sidebar]",
+      "[data-menu]",
+      "[data-menu-item]",
+      "[onclick]"
     ].join(", ");
 
-    let candidateElements = Array.from(document.querySelectorAll(selector));
+    const rawCandidates = collectElementsDeep(selector, document);
+    const seenElements = new Set();
+    const candidateSet = new Set(rawCandidates);
+    let candidateElements = [];
+
+    for (const el of rawCandidates) {
+      if (seenElements.has(el)) continue;
+      seenElements.add(el);
+
+      const tag = el.tagName.toLowerCase();
+      if (tag === "li" || tag === "ul" || tag === "div") {
+        const childClickable = el.querySelector("button, a, [role='button'], [role='menuitem']");
+        if (childClickable && candidateSet.has(childClickable)) {
+          continue; // Prioritaskan elemen anak yang lebih spesifik
+        }
+      }
+      candidateElements.push(el);
+    }
 
     // Prioritaskan elemen di dalam dialog/modal aktif (misal dialog Compose Gmail atau popup form) di urutan pertama
     const activeDialog = document.querySelector('div[role="dialog"]') || document.querySelector('[aria-modal="true"]') || document.querySelector('.modal.show') || document.querySelector('table.Ao.Il');
@@ -820,6 +895,13 @@
     }
 
     const visibleElements = candidateElements.filter(isElementVisible);
+
+    // Dynamic viewport prioritization: elemen yang saat ini tampak di viewport diproses terlebih dahulu
+    visibleElements.sort((a, b) => {
+      const aInView = isElementInViewport(a) ? 1 : 0;
+      const bInView = isElementInViewport(b) ? 1 : 0;
+      return bInView - aInView;
+    });
 
     if (!showOverlay) {
       clearVisualMarkers();
@@ -845,7 +927,7 @@
     let idCounter = 1;
 
     for (const el of visibleElements) {
-      if (idCounter > 75) break; // Batas token hemat
+      if (idCounter > 120) break; // Batas seimbang token & coverage komprehensif
 
       const elementId = idCounter++;
       el.setAttribute("data-pesat-id", elementId);
@@ -1258,11 +1340,49 @@
   // ─────────────────────────────────────────────────────
   function findElementByFuzzy(hintText, action) {
     if (!hintText) return null;
-    const q = String(hintText).toLowerCase().replace(/^@e/, "").trim();
+    const rawQ = String(hintText).toLowerCase().replace(/^@e/, "").trim();
+    const q = rawQ.replace(/[-_]/g, " ").replace(/\s+/g, " ");
+
+    const clickPoolSelector = [
+      "button",
+      "a",
+      "[role='button']",
+      "[role='link']",
+      "[role='menuitem']",
+      "[role='treeitem']",
+      "[role='tab']",
+      "[role='option']",
+      "input[type='submit']",
+      "input[type='button']",
+      "summary",
+      // Non-button custom menu & sidebar items
+      "nav li",
+      "aside li",
+      "nav a",
+      "aside a",
+      "[class*='sidebar' i] li",
+      "[class*='sidebar' i] a",
+      "[class*='sidebar' i] div",
+      "[class*='sidebar' i] span",
+      "[class*='menu' i] li",
+      "[class*='menu' i] a",
+      "[class*='menu' i] div",
+      "[class*='menu-item' i]",
+      "[class*='menu-link' i]",
+      "[class*='sidebar-item' i]",
+      "[class*='sidebar-link' i]",
+      "[class*='nav-item' i]",
+      "[class*='nav-link' i]",
+      "[data-sidebar]",
+      "[data-menu]",
+      "[data-menu-item]",
+      "[tabindex='0']",
+      "[onclick]"
+    ].join(", ");
 
     const pool = action === "click"
-      ? Array.from(document.querySelectorAll("button, a[href], [role='button'], input[type='submit'], input[type='button'], summary"))
-      : Array.from(document.querySelectorAll("input, textarea, select, [contenteditable='true']"));
+      ? collectElementsDeep(clickPoolSelector)
+      : collectElementsDeep("input, textarea, select, [contenteditable='true']");
 
     const scored = pool
       .filter(isElementVisible)
@@ -1272,12 +1392,15 @@
           el.innerText || "",
           el.getAttribute("placeholder") || "",
           el.getAttribute("name") || "",
-          el.getAttribute("value") || ""
-        ].map((s) => s.toLowerCase().trim());
+          el.getAttribute("value") || "",
+          el.getAttribute("aria-label") || "",
+          el.getAttribute("title") || ""
+        ].map((s) => s.toLowerCase().replace(/[-_]/g, " ").replace(/\s+/g, " ").trim());
 
         const score = candidates.reduce((acc, c) => {
-          if (c === q) return acc + 100;
-          if (c.includes(q)) return acc + 50;
+          if (!c) return acc;
+          if (c === q || c === rawQ) return acc + 100;
+          if (c.includes(q) || (q.length > 3 && q.includes(c))) return acc + 50;
           if (q.includes(c) && c.length > 2) return acc + 25;
           return acc;
         }, 0);
@@ -1287,7 +1410,24 @@
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score);
 
-    return scored.length > 0 ? scored[0].el : null;
+    if (scored.length > 0) {
+      return scored[0].el;
+    }
+
+    // Deep text search fallback: jika menu dibuat dengan elemen generik (misal span atau div di dalam nav/aside)
+    if (action === "click") {
+      const textElements = collectElementsDeep("nav *, aside *, [class*='sidebar' i] *, [class*='menu' i] *, span, div, li, p");
+      for (const el of textElements) {
+        if (!isElementVisible(el)) continue;
+        const txt = (el.innerText || el.textContent || "").toLowerCase().replace(/[-_]/g, " ").replace(/\s+/g, " ").trim();
+        if (txt === q || txt === rawQ || (txt.length > 2 && q.includes(txt))) {
+          const clickable = el.closest("a, button, [role='button'], [role='menuitem'], li, [class*='item' i], [class*='link' i]") || el;
+          return clickable;
+        }
+      }
+    }
+
+    return null;
   }
 
   // ─────────────────────────────────────────────────────
@@ -1436,6 +1576,11 @@
   // REACT / VUE COMPATIBLE VALUE SETTER
   // ─────────────────────────────────────────────────────
   function setNativeInputValue(el, value) {
+    try {
+      el.focus?.();
+      el.dispatchEvent(new Event("focus", { bubbles: true }));
+    } catch (_) {}
+
     if (el.isContentEditable || el.getAttribute("contenteditable") === "true") {
       el.focus();
       try {
@@ -1463,14 +1608,14 @@
           el.textContent = value;
         }
       }
-    } else if (el instanceof HTMLInputElement) {
+    } else if (el instanceof HTMLInputElement || el.tagName === "INPUT") {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
       if (setter) {
         setter.call(el, value);
       } else {
         el.value = value;
       }
-    } else if (el instanceof HTMLTextAreaElement) {
+    } else if (el instanceof HTMLTextAreaElement || el.tagName === "TEXTAREA") {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
       if (setter) {
         setter.call(el, value);
@@ -1485,8 +1630,111 @@
       }
     }
 
+    try {
+      el.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: value }));
+    } catch (_) {}
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
+    try {
+      el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
+    } catch (_) {}
+    try {
+      el.blur?.();
+      el.dispatchEvent(new Event("blur", { bubbles: true }));
+    } catch (_) {}
+  }
+
+  // Eksekusi urutan event klik komprehensif (Pointer, Mouse, Native click, & Form submit)
+  function triggerFullClickSequence(targetEl) {
+    if (!targetEl) return false;
+    try {
+      targetEl.scrollIntoView?.({ behavior: "auto", block: "center", inline: "center" });
+      targetEl.focus?.();
+    } catch (_) {}
+
+    const rect = targetEl.getBoundingClientRect();
+    const clientX = Math.round(rect.left + rect.width / 2);
+    const clientY = Math.round(rect.top + rect.height / 2);
+    const screenX = window.screenX + clientX;
+    const screenY = window.screenY + clientY;
+
+    const eventInit = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      view: window,
+      detail: 1,
+      clientX: clientX,
+      clientY: clientY,
+      screenX: screenX,
+      screenY: screenY,
+      button: 0,
+      buttons: 1
+    };
+
+    targetEl.dispatchEvent(new PointerEvent("pointerdown", eventInit));
+    targetEl.dispatchEvent(new MouseEvent("mousedown", eventInit));
+    eventInit.buttons = 0;
+    targetEl.dispatchEvent(new PointerEvent("pointerup", eventInit));
+    targetEl.dispatchEvent(new MouseEvent("mouseup", eventInit));
+    targetEl.dispatchEvent(new MouseEvent("click", eventInit));
+    try { targetEl.click?.(); } catch (_) {}
+
+    // Handling parent clickable jika target klik adalah elemen anak (span teks, ikon SVG di dalam menu sidebar)
+    const clickableParent = targetEl.closest?.('a, button, [role="button"], [role="menuitem"], [role="treeitem"], [role="tab"], [gh="cm"], li, [class*="nav" i], [class*="menu" i], [class*="sidebar" i], [class*="item" i], [tabindex], [onclick], [data-to], [data-href]');
+    if (clickableParent && clickableParent !== targetEl) {
+      clickableParent.dispatchEvent(new PointerEvent("pointerdown", eventInit));
+      clickableParent.dispatchEvent(new MouseEvent("mousedown", eventInit));
+      clickableParent.dispatchEvent(new PointerEvent("pointerup", eventInit));
+      clickableParent.dispatchEvent(new MouseEvent("mouseup", eventInit));
+      clickableParent.dispatchEvent(new MouseEvent("click", eventInit));
+      try { clickableParent.click?.(); } catch (_) {}
+    }
+
+    // Handling child link/button jika target adalah container (li/div menu sidebar)
+    const childClickable = targetEl.querySelector?.('a, button, [role="button"], [role="menuitem"]');
+    if (childClickable && childClickable !== targetEl) {
+      childClickable.dispatchEvent(new PointerEvent("pointerdown", eventInit));
+      childClickable.dispatchEvent(new MouseEvent("mousedown", eventInit));
+      childClickable.dispatchEvent(new PointerEvent("pointerup", eventInit));
+      childClickable.dispatchEvent(new MouseEvent("mouseup", eventInit));
+      childClickable.dispatchEvent(new MouseEvent("click", eventInit));
+      try { childClickable.click?.(); } catch (_) {}
+    }
+
+    // Navigasi fallback jika elemen memiliki tautan href / data-href / data-to
+    const hrefVal = targetEl.getAttribute?.("href") || clickableParent?.getAttribute?.("href") || childClickable?.getAttribute?.("href") ||
+                    targetEl.getAttribute?.("data-to") || clickableParent?.getAttribute?.("data-to") ||
+                    targetEl.getAttribute?.("data-href") || clickableParent?.getAttribute?.("data-href");
+    if (hrefVal && typeof hrefVal === "string" && !hrefVal.startsWith("#") && !hrefVal.startsWith("javascript:")) {
+      const initialUrl = window.location.href;
+      setTimeout(() => {
+        try {
+          if (window.location.href === initialUrl) {
+            if (hrefVal.startsWith("http://") || hrefVal.startsWith("https://")) {
+              window.location.href = hrefVal;
+            } else if (hrefVal.startsWith("/")) {
+              window.location.pathname = hrefVal;
+            }
+          }
+        } catch (_) {}
+      }, 300);
+    }
+
+    // Form submit fallback untuk form login / autentikasi web
+    const formEl = targetEl.closest?.("form") || document.querySelector("form");
+    const isSubmitLike = targetEl.type === "submit" || /submit|login|sign\s*in|masuk|kirim/i.test(targetEl.innerText || targetEl.value || targetEl.getAttribute("aria-label") || "");
+    if (formEl && isSubmitLike) {
+      try {
+        if (typeof formEl.requestSubmit === "function") {
+          formEl.requestSubmit(targetEl instanceof HTMLButtonElement || targetEl instanceof HTMLInputElement ? targetEl : undefined);
+        } else {
+          formEl.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        }
+      } catch (_) {}
+    }
+
+    return true;
   }
 
   // ─────────────────────────────────────────────────────
@@ -1578,7 +1826,7 @@
 
     if (!targetEl && selector) {
       try {
-        const found = document.querySelector(selector);
+        const found = document.querySelector(selector) || collectElementsDeep(selector, document)[0];
         if (found && isElementVisible(found)) targetEl = found;
       } catch (e) {}
     }
@@ -2190,13 +2438,15 @@
       function findMatchingField(ident, elements) {
         if (!ident) return null;
         const normIdent = ident.toLowerCase().trim();
+        const isEmailIdent = /email|surel|user|username|akun/i.test(normIdent);
+        const isPassIdent = /pass|password|sandi|kata sandi/i.test(normIdent);
 
         // 1. Semantic type match
-        if (/email|surel/i.test(normIdent)) {
-          const emailEl = elements.find(e => e.type === "email" || e.autocomplete === "email");
+        if (isEmailIdent) {
+          const emailEl = elements.find(e => e.type === "email" || e.autocomplete === "email" || e.autocomplete === "username");
           if (emailEl) return emailEl;
         }
-        if (/pass|password|sandi|kata sandi/i.test(normIdent)) {
+        if (isPassIdent) {
           const passEl = elements.find(e => e.type === "password" || (e.autocomplete && e.autocomplete.includes("password")));
           if (passEl) return passEl;
         }
@@ -2224,7 +2474,7 @@
         });
         if (found) return found;
 
-        // 4. Match via label text
+        // 4. Match via label / container text (span, div, p, label)
         found = elements.find(elem => {
           let labelText = "";
           if (elem.id) {
@@ -2236,16 +2486,33 @@
             if (parentLbl) labelText = parentLbl.textContent.toLowerCase();
           }
           if (!labelText && elem.parentElement) {
-            const prev = elem.previousElementSibling;
-            if (prev && prev.tagName === "LABEL") labelText = prev.textContent.toLowerCase();
+            labelText = (elem.parentElement.innerText || elem.parentElement.textContent || "").toLowerCase();
           }
           if (!labelText && elem.parentElement?.parentElement) {
-            const lblInsideParent = elem.parentElement.parentElement.querySelector("label");
-            if (lblInsideParent) labelText = lblInsideParent.textContent.toLowerCase();
+            labelText = (elem.parentElement.parentElement.innerText || elem.parentElement.parentElement.textContent || "").toLowerCase();
           }
-          return labelText && (labelText.includes(normIdent) || normIdent.includes(labelText.trim()));
+          return labelText && (
+            labelText.includes(normIdent) ||
+            (isEmailIdent && /email|surel|address|alamat/i.test(labelText)) ||
+            (isPassIdent && /pass|password|sandi/i.test(labelText))
+          );
         });
-        return found || null;
+        if (found) return found;
+
+        // 5. Intelligent Fallback for Standard Auth / Login Forms
+        if (isEmailIdent) {
+          const fallbackEmail = elements.find(e => {
+            const t = (e.type || "text").toLowerCase();
+            return (t === "text" || t === "email" || !t) && !e.disabled && e.offsetParent !== null;
+          });
+          if (fallbackEmail) return fallbackEmail;
+        }
+        if (isPassIdent) {
+          const fallbackPass = elements.find(e => (e.type || "").toLowerCase() === "password" && !e.disabled);
+          if (fallbackPass) return fallbackPass;
+        }
+
+        return null;
       }
 
       fields.forEach(f => {
@@ -2260,8 +2527,33 @@
       });
 
       if (actionData.submitAfter) {
-        const submitBtn = document.querySelector("button[type='submit'], input[type='submit'], button.submit-btn");
-        if (submitBtn) setTimeout(() => submitBtn.click(), 300);
+        // Tunggu reactive frameworks (React, Vue, Formik, React Hook Form) menuntaskan validasi input
+        await new Promise(r => setTimeout(r, 200));
+
+        let submitBtn = collectElementsDeep("button[type='submit'], input[type='submit'], button.submit-btn, [role='button'][type='submit']")[0];
+
+        if (!submitBtn) {
+          const candidates = collectElementsDeep("button, [role='button'], input[type='button'], input[type='submit'], a.btn, a[role='button']");
+          submitBtn = candidates.find(b => {
+            const txt = (b.innerText || b.textContent || b.value || b.getAttribute("aria-label") || "").trim().toLowerCase();
+            return /^(?:sign\s*in|login|masuk|log\s*in|submit|kirim|lanjutkan|next|continue)$/i.test(txt) ||
+                   /(?:sign\s*in|login|masuk)/i.test(txt);
+          });
+        }
+
+        if (submitBtn) {
+          triggerFullClickSequence(submitBtn);
+          await new Promise(r => setTimeout(r, 300));
+        } else {
+          const form = document.querySelector("form");
+          if (form) {
+            try {
+              if (typeof form.requestSubmit === "function") form.requestSubmit();
+              else form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+            } catch (_) {}
+            await new Promise(r => setTimeout(r, 300));
+          }
+        }
       }
 
       return {
@@ -2275,10 +2567,22 @@
       const canvas = document.querySelector("canvas");
       if (canvas) {
         const rect = canvas.getBoundingClientRect();
-        canvas.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }));
-        canvas.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }));
-        canvas.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }));
-        return { success: true, message: `Canvas berhasil diklik untuk '${actionData.text}'.` };
+        const clientX = Number.isFinite(actionData.x)
+          ? actionData.x
+          : Number.isFinite(actionData.relX)
+            ? rect.left + rect.width * actionData.relX
+            : rect.left + rect.width / 2;
+        const clientY = Number.isFinite(actionData.y)
+          ? actionData.y
+          : Number.isFinite(actionData.relY)
+            ? rect.top + rect.height * actionData.relY
+            : rect.top + rect.height / 2;
+
+        const eventInit = { bubbles: true, cancelable: true, view: window, clientX, clientY };
+        canvas.dispatchEvent(new MouseEvent("mousedown", eventInit));
+        canvas.dispatchEvent(new MouseEvent("mouseup", eventInit));
+        canvas.dispatchEvent(new MouseEvent("click", eventInit));
+        return { success: true, message: `Canvas berhasil diklik pada koordinat (${Math.round(clientX)}, ${Math.round(clientY)}) untuk '${actionData.text || ""}'.` };
       }
       return { success: false, error: "Canvas tidak ditemukan pada halaman ini." };
     }
@@ -2532,7 +2836,7 @@
     targetEl.style.transition = "outline 0.2s ease, box-shadow 0.2s ease";
     targetEl.style.outline = `2.5px solid ${glowColor}`;
     targetEl.style.boxShadow = `0 0 16px ${glowColor}66`;
-    targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    targetEl.scrollIntoView({ behavior: "auto", block: "center", inline: "center" });
 
     const elLabel = getAccessibleName(targetEl) || getSemanticRole(targetEl) || "";
     showReadingHUD(`🎯 Target #${cleanId}: ${action} ${elLabel ? `("${elLabel.slice(0, 26)}")` : ""}`);
@@ -2551,46 +2855,7 @@
 
     try {
       if (action === "click" || action === "click_element") {
-        targetEl.focus();
-
-        const rect = targetEl.getBoundingClientRect();
-        const clientX = Math.round(rect.left + rect.width / 2);
-        const clientY = Math.round(rect.top + rect.height / 2);
-        const screenX = window.screenX + clientX;
-        const screenY = window.screenY + clientY;
-
-        const eventInit = {
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          view: window,
-          detail: 1,
-          clientX: clientX,
-          clientY: clientY,
-          screenX: screenX,
-          screenY: screenY,
-          button: 0,
-          buttons: 1
-        };
-
-        targetEl.dispatchEvent(new PointerEvent("pointerdown", eventInit));
-        targetEl.dispatchEvent(new MouseEvent("mousedown", eventInit));
-        eventInit.buttons = 0;
-        targetEl.dispatchEvent(new PointerEvent("pointerup", eventInit));
-        targetEl.dispatchEvent(new MouseEvent("mouseup", eventInit));
-        targetEl.dispatchEvent(new MouseEvent("click", eventInit));
-        try { targetEl.click(); } catch (_) {}
-
-        // Special handling for Google / Gmail jsaction buttons
-        const buttonParent = targetEl.closest('[role="button"], [gh="cm"], button, a');
-        if (buttonParent && buttonParent !== targetEl) {
-          buttonParent.dispatchEvent(new PointerEvent("pointerdown", eventInit));
-          buttonParent.dispatchEvent(new MouseEvent("mousedown", eventInit));
-          buttonParent.dispatchEvent(new PointerEvent("pointerup", eventInit));
-          buttonParent.dispatchEvent(new MouseEvent("mouseup", eventInit));
-          buttonParent.dispatchEvent(new MouseEvent("click", eventInit));
-          try { buttonParent.click(); } catch (_) {}
-        }
+        triggerFullClickSequence(targetEl);
 
         // Khusus tombol Tulis/Compose di Gmail: pastikan form compose terbuka
         const isComposeBtn = /tulis|compose/i.test(targetEl.innerText || targetEl.getAttribute("aria-label") || targetEl.getAttribute("data-tooltip") || "") || targetEl.getAttribute("gh") === "cm" || targetEl.closest('[gh="cm"]');

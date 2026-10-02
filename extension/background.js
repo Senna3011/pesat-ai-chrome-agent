@@ -26,6 +26,42 @@ let taskTokenUsage = {
   total_tokens: 0
 };
 
+// Persistent session storage across MV3 Service Worker terminations
+async function hydrateSWState() {
+  try {
+    const storageArea = chrome.storage?.session || chrome.storage?.local;
+    if (storageArea) {
+      const data = await storageArea.get(["pesat_sw_token_usage", "pesat_sw_action_history"]);
+      if (data.pesat_sw_token_usage) {
+        taskTokenUsage = { ...taskTokenUsage, ...data.pesat_sw_token_usage };
+      }
+      if (data.pesat_sw_action_history && typeof data.pesat_sw_action_history === "object") {
+        for (const [k, v] of Object.entries(data.pesat_sw_action_history)) {
+          actionHistoryPerTab.set(Number(k), v);
+        }
+      }
+    }
+  } catch (_) {}
+}
+
+async function persistSWState() {
+  try {
+    const storageArea = chrome.storage?.session || chrome.storage?.local;
+    if (storageArea) {
+      const historyObj = {};
+      for (const [k, v] of actionHistoryPerTab.entries()) {
+        historyObj[k] = v;
+      }
+      await storageArea.set({
+        pesat_sw_token_usage: taskTokenUsage,
+        pesat_sw_action_history: historyObj
+      });
+    }
+  } catch (_) {}
+}
+
+hydrateSWState();
+
 // Buka side panel otomatis ketika ikon ekstensi di-klik di toolbar
 chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
@@ -117,8 +153,13 @@ async function sendTabMessageSafe(tabId, payload) {
         target: { tabId },
         files: ["content.js"]
       });
-      // Delay singkat memastikan content script siap mendengarkan listener
-      await new Promise((r) => setTimeout(r, 120));
+      // Polling tunggu sampai content script siap mendengarkan listener (maksimal 1.5 detik)
+      for (let i = 0; i < 5; i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        try {
+          return await chrome.tabs.sendMessage(tabId, payload);
+        } catch (_) {}
+      }
       return await chrome.tabs.sendMessage(tabId, payload);
     } catch (injectErr) {
       throw new Error(`Komunikasi tab gagal (${tabId}): ${injectErr.message || err.message}`);
@@ -287,6 +328,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Abort Agent Loop Signal Handler
   if (request.action === "ABORT_AGENT_LOOP" || request.type === "ABORT_AGENT_LOOP") {
     actionHistoryPerTab.clear();
+    persistSWState();
     bgLog("WARN", "AGENT_ABORTED", `Siklus AI dihentikan secara paksa: ${request.reason || "Permintaan pengguna"}`, null);
 
     // Buka lock shield & bersihkan markers di tab aktif
@@ -305,6 +347,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "RESET_LOOP_TRACKER" || request.type === "RESET_LOOP_TRACKER") {
     actionHistoryPerTab.clear();
     taskTokenUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+    persistSWState();
     sendResponse({ success: true, taskTokenUsage });
     return true;
   }
@@ -315,6 +358,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     taskTokenUsage.prompt_tokens += (Number(usage.prompt_tokens) || 0);
     taskTokenUsage.completion_tokens += (Number(usage.completion_tokens) || 0);
     taskTokenUsage.total_tokens += (Number(usage.total_tokens) || ((Number(usage.prompt_tokens) || 0) + (Number(usage.completion_tokens) || 0)));
+    persistSWState();
 
     // Broadcast update token ke seluruh view yang aktif
     try {
@@ -748,6 +792,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Handler jika AI memanggil finish_task: langsung sukses dan hentikan loop
         if (actionName === "finish_task" || actionName === "finish") {
           actionHistoryPerTab.delete(activeTabId);
+          persistSWState();
           bgLog("ACTION", "FINISH_TASK", `finish_task dieksekusi: ${actData.message || 'Selesai'}`, actData, activeTabId);
           sendResponse({
             success: true,
@@ -769,6 +814,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (hist.length > 8) {
           hist.shift();
         }
+        persistSWState();
 
         // Circuit Breaker Cerdas:
         // 1. Hanya terpicu jika aksi 100% IDENTIK diulang >= 4 kali berturut-turut (toleran untuk 1-3x retry normal)

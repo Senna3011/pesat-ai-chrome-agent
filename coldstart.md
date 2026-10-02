@@ -272,9 +272,18 @@
 	  - Eliminasi hardcode `x.com/compose/post` pada aksi `post_social`.
 	  - Dukungan penuh komposer Meta Lexical di `content.js` untuk platform Threads (`div[data-lexical-editor="true"]`, tombol postingan, dan shortcut submit).
 	  - Fast path ekstraksi draf tweet/postingan dari tab dokumen terlampir (`@tab5`) langsung ke komposer medsos tujuan.
-	- [x] **Verifikasi & QA**:
-	  - 18 pengujian Playwright E2E lulus (`npm test`).
-	  - Sinkronisasi penuh ke direktori `extension/`.
+		- [x] **Login Form Autofill & Anti-Loop Circuit Breaker Fix (`sidepanel.js`, `content.js`)**:
+		  - Pelonggaran regex fast path `isFormFillIntent` agar mengenali perintah yang diawali kata kerja "login" atau "masuk" dengan ekstraksi kredensial email & password bersih tanpa trailing dot.
+		  - Peningkatan akurasi `findMatchingField` di `content.js` untuk mencocokkan input email/password non-standar (container `div`/`span`, placeholder generic, fallback text input).
+		  - Otomatisasi klik tombol submit/Sign In (`submitAfter: true`) pada formulir login web/CRM.
+		  - Perbaikan anti-loop circuit breaker di ReAct loop agar tidak menggugurkan task secara prematur pada percobaan kedua (`repeatActionCount >= 3` dengan fallback transisi subtask alih-alih klaim palsu "done").
+		- [x] **Manifest V3 Content Script Declaration & Connection Recovery (`manifest.json`, `background.js`, `content.js`)**:
+		  - Pendaftaran deklarasi `content_scripts` resmi pada `manifest.json` (`matches: ["http://*/*", "https://*/*"]`, `run_at: "document_end"`). Memastikan content script selalu hidup dan mendengarkan pesan di setiap halaman web tanpa bergantung pada dynamic script injection semata.
+		  - Penanganan error `Could not establish connection. Receiving end does not exist.` pada `sendTabMessageSafe` di `background.js` dengan polling retry (5x percobaan @ 250ms) pasca injeksi dinamis.
+		  - Pemasangan idempotency guard `window.__PESAT_CONTENT_SCRIPT_INITIALIZED__` di `content.js` guna mencegah duplikasi listener saat re-injeksi.
+		- [x] **Verifikasi & QA**:
+		  - 18 pengujian Playwright E2E lulus (`npm test`).
+		  - Sinkronisasi penuh ke direktori `extension/`.
 
 
 

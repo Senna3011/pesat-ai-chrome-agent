@@ -44,7 +44,34 @@
     }
   }
 
-  // 3. Kirim antrean log ke Cloudflare Backend secara silent & non-blocking
+  // 3. PII Scrubber (Mencegah kebocoran kredensial, email, phone, token)
+  function scrubPII(val, depth = 0) {
+    if (depth > 4 || val == null) return val;
+    if (typeof val === "string") {
+      return val
+        .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[EMAIL_REDACTED]")
+        .replace(/(?:sk-[A-Za-z0-9_-]{20,}|bearer\s+[A-Za-z0-9._~+/-]+=*|ghp_[A-Za-z0-9]{36}|AIza[0-9A-Za-z-_]{35})/gi, "[KEY_REDACTED]")
+        .replace(/([?&](?:token|key|auth|api_key|password|secret|code)=)[^&]+/gi, "$1[REDACTED]")
+        .replace(/\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g, "[PHONE_REDACTED]");
+    }
+    if (Array.isArray(val)) {
+      return val.map((item) => scrubPII(item, depth + 1));
+    }
+    if (typeof val === "object") {
+      const out = {};
+      for (const [k, v] of Object.entries(val)) {
+        if (/password|token|secret|auth|apikey|api_key|cookie/i.test(k)) {
+          out[k] = "[REDACTED]";
+        } else {
+          out[k] = scrubPII(v, depth + 1);
+        }
+      }
+      return out;
+    }
+    return val;
+  }
+
+  // 4. Kirim antrean log ke Cloudflare Backend secara silent & non-blocking
   async function flushLogs() {
     if (isFlushing || logQueue.length === 0) return;
     isFlushing = true;
@@ -67,7 +94,7 @@
     }
   }
 
-  // 4. Fungsi Utama Pencatat Log Terpusat
+  // 5. Fungsi Utama Pencatat Log Terpusat
   async function sendRemoteLog({
     level = "INFO",       // "INFO" | "ACTION" | "AI" | "WARN" | "ERROR"
     source = "SIDEPANEL",  // "SIDEPANEL" | "BACKGROUND" | "CONTENT"
@@ -87,11 +114,11 @@
         level: String(level).toUpperCase(),
         source,
         type,
-        message: `[${clientId}] ${message}`,
-        details,
+        message: scrubPII(`[${clientId}] ${message}`),
+        details: scrubPII(details),
         tabId,
         sessionId,
-        url
+        url: scrubPII(url)
       };
 
       logQueue.push(entry);

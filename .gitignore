@@ -48,3 +48,6 @@ dist/
 build/
 .cache/
 .zcode/
+
+# Internal Roadmaps & Benchmarks
+ROADMAP_AITOPIA_BENCHMARK.md
