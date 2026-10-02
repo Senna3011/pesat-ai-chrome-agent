@@ -270,6 +270,201 @@
         0% { transform: scale(1); }
         100% { transform: scale(1.015); }
       }
+      #pesat-fab-toggle {
+        position: fixed !important;
+        bottom: 24px !important;
+        right: 24px !important;
+        width: 48px !important;
+        height: 48px !important;
+        border-radius: 50% !important;
+        background: #0f172a !important;
+        border: 2px solid #38bdf8 !important;
+        color: #38bdf8 !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 12px rgba(56, 189, 248, 0.4) !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        z-index: 2147483647 !important;
+        pointer-events: auto !important;
+        transition: transform 0.2s, box-shadow 0.2s !important;
+      }
+      #pesat-fab-toggle:hover {
+        transform: scale(1.1) !important;
+        box-shadow: 0 6px 24px rgba(56, 189, 248, 0.6) !important;
+      }
+      #pesat-selection-toolbar {
+        position: absolute !important;
+        display: none;
+        background: #0f172a !important;
+        border: 1px solid rgba(56, 189, 248, 0.5) !important;
+        border-radius: 8px !important;
+        padding: 4px !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+        z-index: 2147483647 !important;
+        pointer-events: auto !important;
+        gap: 4px !important;
+        align-items: center !important;
+      }
+      .pesat-tb-btn {
+        background: #1e293b !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: #f8fafc !important;
+        padding: 5px 9px !important;
+        border-radius: 6px !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+        transition: background 0.15s !important;
+      }
+      .pesat-tb-btn:hover {
+        background: #334155 !important;
+        color: #38bdf8 !important;
+      }
+      .pesat-tb-ask {
+        background: #0284c7 !important;
+        color: #ffffff !important;
+        border-color: #38bdf8 !important;
+      }
+      .pesat-tb-ask:hover {
+        background: #0369a1 !important;
+      }
+      #pesat-selection-popover {
+        position: absolute !important;
+        display: none;
+        width: 360px !important;
+        max-width: 90vw !important;
+        background: #0f172a !important;
+        border: 1px solid #38bdf8 !important;
+        border-radius: 10px !important;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7) !important;
+        z-index: 2147483647 !important;
+        pointer-events: auto !important;
+        overflow: hidden !important;
+        font-size: 14px !important;
+      }
+      .pesat-popover-header {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        background: #1e293b !important;
+        padding: 8px 12px !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+      }
+      .pesat-popover-title {
+        font-weight: 600 !important;
+        color: #38bdf8 !important;
+        font-size: 13px !important;
+      }
+      .pesat-popover-actions {
+        display: flex !important;
+        gap: 6px !important;
+      }
+      .pesat-popover-copy, .pesat-popover-close {
+        background: #334155 !important;
+        border: none !important;
+        color: #f8fafc !important;
+        padding: 3px 8px !important;
+        border-radius: 4px !important;
+        font-size: 12px !important;
+        cursor: pointer !important;
+      }
+      .pesat-popover-close:hover {
+        background: #ef4444 !important;
+      }
+      .pesat-popover-body {
+        padding: 12px !important;
+        max-height: 280px !important;
+        overflow-y: auto !important;
+        color: #f1f5f9 !important;
+        line-height: 1.5 !important;
+        font-size: 13.5px !important;
+      }
+      .pesat-popover-loading {
+        color: #94a3b8 !important;
+        font-style: italic !important;
+      }
+      #pesat-search-copilot {
+        position: fixed !important;
+        top: 130px !important;
+        right: 24px !important;
+        width: 360px !important;
+        max-width: calc(100vw - 48px) !important;
+        max-height: 75vh !important;
+        background: #0b0f19 !important;
+        border: 1px solid rgba(56, 189, 248, 0.4) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 15px rgba(56, 189, 248, 0.2) !important;
+        z-index: 2147483646 !important;
+        pointer-events: auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+      }
+      .pesat-copilot-header {
+        background: #111827 !important;
+        padding: 10px 14px !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+      }
+      .pesat-copilot-title-row {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+      }
+      .pesat-copilot-badge {
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.05em !important;
+        color: #38bdf8 !important;
+      }
+      .pesat-copilot-close {
+        background: transparent !important;
+        border: none !important;
+        color: #94a3b8 !important;
+        cursor: pointer !important;
+        font-size: 14px !important;
+      }
+      .pesat-copilot-query {
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: #f8fafc !important;
+        margin-top: 4px !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+      }
+      .pesat-copilot-body {
+        padding: 12px !important;
+        overflow-y: auto !important;
+        color: #e2e8f0 !important;
+        font-size: 13.5px !important;
+        line-height: 1.55 !important;
+        flex: 1 !important;
+      }
+      .pesat-copilot-footer {
+        display: flex !important;
+        gap: 8px !important;
+        padding: 10px 14px !important;
+        background: #0f172a !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+      }
+      .pesat-copilot-btn {
+        flex: 1 !important;
+        background: #1e293b !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: #f8fafc !important;
+        padding: 6px 10px !important;
+        border-radius: 6px !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
+        transition: background 0.15s !important;
+      }
+      .pesat-copilot-sidepanel {
+        background: #0284c7 !important;
+        border-color: #38bdf8 !important;
+      }
     `;
     root.appendChild(style);
   }
@@ -835,10 +1030,42 @@
     return null;
   }
 
+  function extractYouTubeVideoContext() {
+    if (!window.location.hostname.includes("youtube.com") || !window.location.pathname.includes("/watch")) {
+      return null;
+    }
+    const titleEl = document.querySelector("h1.ytd-watch-metadata, #title h1, h1.title");
+    const title = titleEl ? titleEl.innerText.trim() : document.title;
+    const channelEl = document.querySelector("#channel-name, ytd-channel-name");
+    const channel = channelEl ? channelEl.innerText.trim() : "";
+    const descEl = document.querySelector("#description-inline-expander, #description");
+    const description = descEl ? descEl.innerText.trim().slice(0, 3000) : "";
+
+    const transcriptSegments = document.querySelectorAll("ytd-transcript-segment-renderer");
+    let transcriptText = "";
+    if (transcriptSegments.length > 0) {
+      transcriptText = Array.from(transcriptSegments)
+        .map(s => {
+          const time = s.querySelector(".segment-timestamp")?.innerText?.trim() || "";
+          const text = s.querySelector(".segment-text")?.innerText?.trim() || "";
+          return time ? `[${time}] ${text}` : text;
+        })
+        .join("\n");
+    }
+
+    return `[YOUTUBE VIDEO INFORMATION]\nJudul: ${title}\nChannel: ${channel}\n\n[DESKRIPSI VIDEO]:\n${description}\n\n${transcriptText ? `[TRANSKRIP VIDEO]:\n${transcriptText.slice(0, 8000)}` : "(Transkrip otomatis belum dibuka; deskripsi video di atas digunakan sebagai dasar analisis)"}`;
+  }
+
   function getReadableContent(showVisual = true) {
     try {
       if (showVisual) {
         // Keep content extraction silent without laser beam or HUD spam
+      }
+
+      // Prioritas 0: Jika di halaman video YouTube, ekstrak transkrip/metadata
+      const ytData = extractYouTubeVideoContext();
+      if (ytData) {
+        return ytData;
       }
 
       // Prioritas 1: Jika di situs e-commerce, ekstrak katalog produk terstruktur
@@ -1071,8 +1298,9 @@
   function convertMarkdownToRichDoc(md = "") {
     let raw = String(md || "").trim();
 
-    // 1. Bersihkan sisa-sisa divider markdown atau section medsos jika terlampir tidak sengaja
-    raw = raw.replace(/\n\s*---\s*\n\s*(?:Thread Ringkas|Tweet|Twitter)\b[\s\S]*$/i, "");
+    // 0. Eliminasi total semua simbol blockquote '>' di awal baris
+    // Mencegah Google Docs menampilkan karakter '>' pada teks dokumen
+    raw = raw.replace(/^[ \t]*>[ \t]*/gm, "");
     raw = raw.replace(/\n\s*---\s*\n/g, "\n\n");
 
     function cleanTableCellText(text) {
@@ -1183,7 +1411,7 @@
       .replace(/___(.*?)___/gim, '<b><i>$1</i></b>')
       .replace(/__(.*?)__/gim, '<b>$1</b>')
       .replace(/_(.*?)_/gim, '<i>$1</i>')
-      .replace(/^>\s*(.*$)/gim, '<blockquote style="border-left:3px solid #3b82f6;padding-left:12px;color:#475569;margin:8px 0;">$1</blockquote>')
+      .replace(/^>\s*(.*$)/gim, '<p style="margin:4px 0 4px 12px;color:#334155;">$1</p>')
       .replace(/^\s*[\*\-]\s+(.*$)/gim, '<li>$1</li>')
       .replace(/\n\n+/g, '</p><p>')
       .replace(/\n/g, '<br>');
@@ -1195,6 +1423,9 @@
       cleanHtml = cleanHtml.replace(new RegExp(`<p>\\s*PESATTABLEPLACEHOLDER${idx}END\\s*<\\/p>`, "g"), tHtml);
       cleanHtml = cleanHtml.replace(new RegExp(`PESATTABLEPLACEHOLDER${idx}END`, "g"), tHtml);
     });
+
+    cleanPlain = cleanPlain.replace(/^[ \t]*>[ \t]*/gm, "");
+    cleanHtml = cleanHtml.replace(/<blockquote>([\s\S]*?)<\/blockquote>/gi, '<p style="margin:4px 0 4px 12px;color:#334155;">$1</p>');
 
     cleanHtml = `<html><body><!--StartFragment-->${cleanHtml}<!--EndFragment--></body></html>`;
 
@@ -2811,15 +3042,22 @@
       return selectorFn();
     }
 
-    // 1. Cari kotak postingan Twitter / X / LinkedIn / Facebook / Threads
+    // 1. Cari kotak postingan Twitter / X / Threads / LinkedIn / Facebook
     let composeBox = await waitForElement(() => {
       return document.querySelector('div[data-testid="tweetTextarea_0"]') ||
              document.querySelector('div[role="textbox"][data-testid*="tweetTextarea"]') ||
              document.querySelector('div[data-testid="tweetTextarea_0_label"]') ||
+             document.querySelector('div[data-lexical-editor="true"]') ||
              document.querySelector('.ql-editor') ||
              document.querySelector('div[role="textbox"][aria-label*="Post text" i]') ||
              document.querySelector('div[role="textbox"][aria-label*="Tweet text" i]') ||
              document.querySelector('div[role="textbox"][aria-label*="Teks postingan" i]') ||
+             document.querySelector('div[role="textbox"][aria-label*="Say something" i]') ||
+             document.querySelector('div[role="textbox"][aria-label*="Start a thread" i]') ||
+             document.querySelector('div[role="textbox"][aria-label*="Mulai utas" i]') ||
+             document.querySelector('div[role="textbox"][aria-label*="Ada kabar apa" i]') ||
+             document.querySelector('div[aria-placeholder*="Start a thread" i]') ||
+             document.querySelector('div[aria-placeholder*="Mulai utas" i]') ||
              document.querySelector('div[role="textbox"][aria-label*="Apa yang Anda pikirkan" i]') ||
              document.querySelector('div[role="textbox"][aria-label*="What do you want to talk about" i]') ||
              document.querySelector('div[role="textbox"][contenteditable="true"]') ||
@@ -2827,9 +3065,18 @@
     }, 4500);
 
     if (!composeBox) {
-      const startPostBtn = document.querySelector('a[data-testid="SideNav_NewTweet_Button"]') ||
+      const startPostBtn = document.querySelector('div[role="button"][aria-label*="New thread" i]') ||
+                           document.querySelector('div[role="button"][aria-label*="Utas baru" i]') ||
+                           document.querySelector('svg[aria-label*="New thread" i]')?.closest('[role="button"]') ||
+                           document.querySelector('svg[aria-label*="Utas baru" i]')?.closest('[role="button"]') ||
+                           document.querySelector('div[aria-placeholder*="Start a thread" i]') ||
+                           document.querySelector('div[aria-placeholder*="Mulai utas" i]') ||
+                           document.querySelector('a[data-testid="SideNav_NewTweet_Button"]') ||
                            document.querySelector('button[aria-label*="Start a post" i]') ||
                            document.querySelector('button[aria-label*="Mulai posting" i]') ||
+                           findElementByFuzzy("Start a thread", "click") ||
+                           findElementByFuzzy("Mulai utas", "click") ||
+                           findElementByFuzzy("Ada kabar apa", "click") ||
                            findElementByFuzzy("Post", "click") ||
                            findElementByFuzzy("Posting", "click");
       if (startPostBtn) {
@@ -2837,6 +3084,8 @@
         composeBox = await waitForElement(() => {
           return document.querySelector('div[data-testid="tweetTextarea_0"]') ||
                  document.querySelector('div[role="textbox"][data-testid*="tweetTextarea"]') ||
+                 document.querySelector('div[data-lexical-editor="true"]') ||
+                 document.querySelector('div[role="textbox"][contenteditable="true"]') ||
                  document.querySelector('div[contenteditable="true"]');
         }, 3500);
       }
@@ -2895,6 +3144,8 @@
         return document.querySelector('button[data-testid="tweetButtonInline"]') ||
                document.querySelector('button[data-testid="tweetButton"]') ||
                document.querySelector('button[role="button"][data-testid*="tweetButton"]') ||
+               document.querySelector('div[role="button"][aria-label*="Post" i]') ||
+               document.querySelector('div[role="button"][aria-label*="Posting" i]') ||
                document.querySelector('button[aria-label*="Post" i]') ||
                document.querySelector('button.share-actions__primary-action') ||
                findElementByFuzzy("Post", "click") ||
@@ -3148,4 +3399,241 @@
       return true;
     }
   });
+
+  // ─────────────────────────────────────────────────────
+  // IN-PAGE QUICK ASSISTANCE & SEARCH ENGINE COPILOT
+  // ─────────────────────────────────────────────────────
+  let pesatSelectionToolbar = null;
+  let pesatSelectionPopover = null;
+  let pesatFab = null;
+
+  function escapeHtmlText(str) {
+    if (!str) return "";
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function initInPageAssistance() {
+    try {
+      const root = getOrCreatePesatShadowRoot();
+      if (!root.querySelector("#pesat-fab-toggle")) {
+        pesatFab = document.createElement("button");
+        pesatFab.id = "pesat-fab-toggle";
+        pesatFab.title = "Buka Pesat AI Agent (Klik untuk Sidepanel)";
+        pesatFab.innerHTML = `<span style="font-size:22px;line-height:1;">⚡</span>`;
+        pesatFab.addEventListener("click", (e) => {
+          e.stopPropagation();
+          chrome.runtime.sendMessage({ action: "TOGGLE_SIDEPANEL" }).catch(() => {});
+        });
+        root.appendChild(pesatFab);
+      }
+
+      document.addEventListener("mouseup", handleTextSelection);
+      document.addEventListener("mousedown", (e) => {
+        if (pesatHostElement && pesatHostElement.contains(e.target)) return;
+        if (pesatSelectionToolbar) pesatSelectionToolbar.style.display = "none";
+      });
+    } catch (_) {}
+  }
+
+  function handleTextSelection() {
+    setTimeout(() => {
+      const selection = window.getSelection();
+      const text = selection ? selection.toString().trim() : "";
+      if (!text || text.length < 3) {
+        if (pesatSelectionToolbar && !pesatSelectionPopover?.matches(":hover")) {
+          pesatSelectionToolbar.style.display = "none";
+        }
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      if (!rect || rect.width === 0 || rect.height === 0) return;
+
+      const root = getOrCreatePesatShadowRoot();
+      if (!pesatSelectionToolbar) {
+        pesatSelectionToolbar = document.createElement("div");
+        pesatSelectionToolbar.id = "pesat-selection-toolbar";
+        pesatSelectionToolbar.innerHTML = `
+          <button class="pesat-tb-btn" data-action="summarize" title="Rangkum teks">📖 Rangkum</button>
+          <button class="pesat-tb-btn" data-action="translate" title="Terjemahkan teks">🌐 Terjemahkan</button>
+          <button class="pesat-tb-btn" data-action="explain" title="Jelaskan konsep">💡 Jelaskan</button>
+          <button class="pesat-tb-btn" data-action="polish" title="Perbaiki tata bahasa">✏️ Perbaiki</button>
+          <button class="pesat-tb-btn pesat-tb-ask" data-action="ask" title="Tanyakan di Sidepanel">⚡ Tanya AI</button>
+        `;
+
+        pesatSelectionToolbar.addEventListener("click", (ev) => {
+          const btn = ev.target.closest(".pesat-tb-btn");
+          if (!btn) return;
+          const action = btn.getAttribute("data-action");
+          const currentText = window.getSelection()?.toString().trim() || text;
+
+          if (action === "ask") {
+            chrome.runtime.sendMessage({ action: "TOGGLE_SIDEPANEL" }).catch(() => {});
+            chrome.storage.session?.set({ pesat_pending_prompt: { prompt: `Tolong jelaskan mengenai teks berikut:\n\n"${currentText}"`, timestamp: Date.now() } });
+            pesatSelectionToolbar.style.display = "none";
+            return;
+          }
+
+          showSelectionPopover(currentText, action, rect);
+        });
+
+        root.appendChild(pesatSelectionToolbar);
+      }
+
+      const topPos = Math.max(10, rect.top + window.scrollY - 44);
+      const leftPos = Math.min(window.innerWidth - 380, Math.max(10, rect.left + window.scrollX));
+      pesatSelectionToolbar.style.top = `${topPos}px`;
+      pesatSelectionToolbar.style.left = `${leftPos}px`;
+      pesatSelectionToolbar.style.display = "flex";
+    }, 40);
+  }
+
+  function showSelectionPopover(selectedText, taskType, anchorRect) {
+    const root = getOrCreatePesatShadowRoot();
+    if (!pesatSelectionPopover) {
+      pesatSelectionPopover = document.createElement("div");
+      pesatSelectionPopover.id = "pesat-selection-popover";
+      root.appendChild(pesatSelectionPopover);
+    }
+
+    const actionLabels = {
+      summarize: "📖 Ringkasan Pesat AI",
+      translate: "🌐 Terjemahan",
+      explain: "💡 Penjelasan Konsep",
+      polish: "✏️ Teks Hasil Koreksi"
+    };
+
+    pesatSelectionPopover.innerHTML = `
+      <div class="pesat-popover-header">
+        <span class="pesat-popover-title">${actionLabels[taskType] || "⚡ Pesat AI"}</span>
+        <div class="pesat-popover-actions">
+          <button class="pesat-popover-copy" title="Salin Jawaban">📋 Salin</button>
+          <button class="pesat-popover-close" title="Tutup">✕</button>
+        </div>
+      </div>
+      <div class="pesat-popover-body">
+        <div class="pesat-popover-loading">Sedang memproses dengan Pesat AI...</div>
+      </div>
+    `;
+
+    const popoverTop = anchorRect.bottom + window.scrollY + 8;
+    const popoverLeft = Math.min(window.innerWidth - 370, Math.max(10, anchorRect.left + window.scrollX));
+    pesatSelectionPopover.style.top = `${popoverTop}px`;
+    pesatSelectionPopover.style.left = `${popoverLeft}px`;
+    pesatSelectionPopover.style.display = "block";
+
+    const bodyEl = pesatSelectionPopover.querySelector(".pesat-popover-body");
+    const copyBtn = pesatSelectionPopover.querySelector(".pesat-popover-copy");
+    const closeBtn = pesatSelectionPopover.querySelector(".pesat-popover-close");
+
+    closeBtn.onclick = () => { pesatSelectionPopover.style.display = "none"; };
+
+    chrome.runtime.sendMessage({
+      action: "IN_PAGE_AI_QUERY",
+      taskType,
+      selectedText
+    }, (res) => {
+      if (res && res.success) {
+        bodyEl.innerHTML = `<div class="pesat-popover-content">${escapeHtmlText(res.reply).replace(/\n/g, "<br>")}</div>`;
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(res.reply).then(() => {
+            copyBtn.textContent = "✓ Tersalin";
+            setTimeout(() => { copyBtn.textContent = "📋 Salin"; }, 2000);
+          });
+        };
+      } else {
+        bodyEl.innerHTML = `<div class="pesat-popover-error">⚠️ ${res?.error || "Gagal memproses permintaan."}</div>`;
+      }
+    });
+  }
+
+  function initSearchEngineCopilot() {
+    try {
+      const host = window.location.hostname;
+      const isSearchEngine = host.includes("google.") || host.includes("bing.com") || host.includes("duckduckgo.com");
+      if (!isSearchEngine) return;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const query = urlParams.get("q") || urlParams.get("query") || "";
+      if (!query || query.trim().length < 2) return;
+
+      setTimeout(() => {
+        injectSearchCopilotCard(query);
+      }, 700);
+    } catch (_) {}
+  }
+
+  function injectSearchCopilotCard(query) {
+    const root = getOrCreatePesatShadowRoot();
+    if (root.querySelector("#pesat-search-copilot")) return;
+
+    const card = document.createElement("div");
+    card.id = "pesat-search-copilot";
+    card.innerHTML = `
+      <div class="pesat-copilot-header">
+        <div class="pesat-copilot-title-row">
+          <span class="pesat-copilot-badge">⚡ PESAT AI COPILOT</span>
+          <button class="pesat-copilot-close" title="Tutup">✕</button>
+        </div>
+        <div class="pesat-copilot-query">"${escapeHtmlText(query)}"</div>
+      </div>
+      <div class="pesat-copilot-body">
+        <div class="pesat-copilot-status">⏳ Menganalisis pencarian web...</div>
+      </div>
+      <div class="pesat-copilot-footer">
+        <button class="pesat-copilot-btn pesat-copilot-copy">📋 Salin</button>
+        <button class="pesat-copilot-btn pesat-copilot-sidepanel">🚀 Buka di Sidepanel</button>
+      </div>
+    `;
+
+    root.appendChild(card);
+
+    const closeBtn = card.querySelector(".pesat-copilot-close");
+    const bodyEl = card.querySelector(".pesat-copilot-body");
+    const copyBtn = card.querySelector(".pesat-copilot-copy");
+    const sidepanelBtn = card.querySelector(".pesat-copilot-sidepanel");
+
+    closeBtn.onclick = () => { card.style.display = "none"; };
+
+    sidepanelBtn.onclick = () => {
+      chrome.runtime.sendMessage({ action: "TOGGLE_SIDEPANEL" }).catch(() => {});
+      chrome.storage.session?.set({
+        pesat_pending_prompt: {
+          prompt: `Jelaskan secara mendalam mengenai topik pencarian ini:\n"${query}"`,
+          timestamp: Date.now()
+        }
+      });
+    };
+
+    chrome.runtime.sendMessage({
+      action: "IN_PAGE_AI_QUERY",
+      taskType: "explain",
+      selectedText: `Topik pencarian: "${query}". Berikan ringkasan jawaban langsung, jelas, dan informatif.`
+    }, (res) => {
+      if (res && res.success) {
+        bodyEl.innerHTML = `<div class="pesat-copilot-content">${escapeHtmlText(res.reply).replace(/\n/g, "<br>")}</div>`;
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(res.reply).then(() => {
+            copyBtn.textContent = "✓ Tersalin";
+            setTimeout(() => { copyBtn.textContent = "📋 Salin"; }, 2000);
+          });
+        };
+      } else {
+        bodyEl.innerHTML = `<div class="pesat-copilot-error">⚠️ Tidak dapat memuat respons Copilot.</div>`;
+      }
+    });
+  }
+
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => {
+        initInPageAssistance();
+        initSearchEngineCopilot();
+      });
+    } else {
+      initInPageAssistance();
+      initSearchEngineCopilot();
+    }
+  }
 })();

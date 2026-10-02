@@ -74,15 +74,16 @@
 
     formatStructuredContextPrompt(sources = []) {
       if (!Array.isArray(sources) || sources.length === 0) return "";
-      
+
       let prompt = "\n\n=== LAMPIRAN KONTEKS TAMBAHAN PENGGUNA ===\n";
       sources.forEach((src, idx) => {
-        prompt += `\n[Konteks #${idx + 1}: ${src.title || src.type}]`;
+        prompt += `\n[Konteks #${idx + 1}: ${src.title || src.name || src.type}]`;
         if (src.url) prompt += ` (URL: ${src.url})`;
         if (src.metadata && src.metadata.fileName) prompt += ` (File: ${src.metadata.fileName})`;
         prompt += "\n```\n";
-        const contentStr = typeof src.content === "string" ? src.content : JSON.stringify(src.content, null, 2);
-        prompt += contentStr.length > 8000 ? contentStr.substring(0, 8000) + "\n...[dipotong karena panjang]" : contentStr;
+        const rawContent = src.content ?? src.metadata?.extractedText ?? src.metadata?.content ?? src.dataUrl ?? "";
+        const contentStr = typeof rawContent === "string" ? rawContent : (JSON.stringify(rawContent, null, 2) || "");
+        prompt += (contentStr && contentStr.length > 8000) ? contentStr.substring(0, 8000) + "\n...[dipotong karena panjang]" : (contentStr || "(Konten kosong)");
         prompt += "\n```\n";
       });
       prompt += "=== AKHIR LAMPIRAN KONTEKS ===\n";

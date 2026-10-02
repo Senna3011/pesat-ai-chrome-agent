@@ -36,13 +36,11 @@ function getCorsSecurityHeaders(request, env) {
   } else if (allowedExtId && origin === `chrome-extension://${allowedExtId}`) {
     isAllowed = true;
   } else if (
-    !allowedExtId ||
     origin.startsWith("chrome-extension://") ||
     origin.startsWith("http://localhost") ||
     origin.startsWith("http://127.0.0.1") ||
-    origin.includes(".workers.dev") ||
-    origin.includes(".pages.dev") ||
-    origin.includes("pesat")
+    origin.endsWith(".workers.dev") ||
+    origin.endsWith(".pages.dev")
   ) {
     isAllowed = true;
   }
@@ -52,7 +50,7 @@ function getCorsSecurityHeaders(request, env) {
     headers: {
       "Access-Control-Allow-Origin": isAllowed ? (origin || "*") : "*",
       "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Pesat-Client",
       "Access-Control-Max-Age": "86400",
       "X-Content-Type-Options": "nosniff"
     }
@@ -447,6 +445,36 @@ PANDUAN ANTI-LOOPING & GUARDRAILS:
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    if (body.stream && (isSummarize || isChatPhase)) {
+      payload.stream = true;
+      const streamResponse = await fetch(AI_BASE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${AI_API_KEY}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!streamResponse.ok) {
+        const errText = await streamResponse.text();
+        return new Response(JSON.stringify({ success: false, error: errText }), {
+          status: streamResponse.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      return new Response(streamResponse.body, {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive"
+        }
+      });
     }
 
     const aiResponse = await fetch(AI_BASE_URL, {

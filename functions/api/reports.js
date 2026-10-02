@@ -121,9 +121,29 @@ export async function onRequestPost(context) {
   }
 }
 
+function isAuthorizedAdmin(request, env) {
+  const authHeader = request.headers.get("Authorization") || "";
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const url = new URL(request.url);
+  const queryToken = url.searchParams.get("token") || url.searchParams.get("key") || "";
+  const adminSecret = env?.ADMIN_API_KEY || env?.ADMIN_KEY || env?.PESAT_ADMIN_KEY || "pesat-telemetry-secret-2026";
+  return (token && token === adminSecret) || (queryToken && queryToken === adminSecret);
+}
+
 export async function onRequestDelete(context) {
   const { request, env } = context;
   const corsHeaders = getCorsHeaders(request, env);
+
+  if (!isAuthorizedAdmin(request, env)) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: "Unauthorized: Penghapusan laporan memerlukan autentikasi Admin Token."
+    }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  }
+
   const url = new URL(request.url);
   const deleteId = url.searchParams.get("id");
 

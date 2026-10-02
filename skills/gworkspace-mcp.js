@@ -85,8 +85,12 @@
 
     async getAuthToken() {
       return new Promise((resolve) => {
-        chrome.storage.local.get(["googleAuthToken"], (res) => {
-          resolve(res.googleAuthToken || null);
+        const storageArea = (chrome.storage && chrome.storage.session) ? chrome.storage.session : chrome.storage.local;
+        storageArea.get(["googleAuthToken"], (res) => {
+          if (res && res.googleAuthToken) return resolve(res.googleAuthToken);
+          chrome.storage.local.get(["googleAuthToken"], (localRes) => {
+            resolve(localRes?.googleAuthToken || null);
+          });
         });
       });
     },

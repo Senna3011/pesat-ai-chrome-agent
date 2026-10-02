@@ -272,4 +272,51 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     const btnSend = page.locator('#btnSend');
     await expect(btnSend).not.toBeDisabled();
   });
+
+  test('should open quick model switcher dropdown and select a new model', async ({ page }) => {
+    const btnComposerModel = page.locator('#btnComposerModel');
+    const dropdown = page.locator('#composerModelDropdown');
+    const modelNameText = page.locator('#composerModelName');
+
+    await expect(btnComposerModel).toBeVisible();
+    await expect(dropdown).toHaveClass(/hidden/);
+
+    // Open model switcher
+    await btnComposerModel.click();
+    await expect(dropdown).not.toHaveClass(/hidden/);
+
+    // Click GPT-4o option
+    const gptOption = page.locator('.model-option-btn[data-model="gpt-4o"]');
+    await expect(gptOption).toBeVisible();
+    await gptOption.click();
+
+    // Verify model name changed and dropdown closed
+    await expect(modelNameText).toHaveText('gpt-4o');
+    await expect(dropdown).toHaveClass(/hidden/);
+  });
+
+  test('should sanitize potential XSS payloads in parseMarkdown', async ({ page }) => {
+    const sanitized = await page.evaluate(() => {
+      const malicious = '<script>window.__xss_leaked=true;</script><img src="x" onerror="window.__xss_leaked=true">**Halo Dunia**';
+      return window.parseMarkdown(malicious);
+    });
+
+    expect(sanitized).not.toContain('<script>');
+    expect(sanitized).not.toContain('onerror=');
+    expect(sanitized).toContain('<strong>Halo Dunia</strong>');
+  });
+
+  test('should enforce minimum 14px font size on model dropdown items', async ({ page }) => {
+    const btnComposerModel = page.locator('#btnComposerModel');
+    await btnComposerModel.click();
+
+    const optNames = page.locator('.model-opt-name');
+    const count = await optNames.count();
+    expect(count).toBeGreaterThan(0);
+
+    for (let i = 0; i < count; i++) {
+      const fontSize = await optNames.nth(i).evaluate(el => window.getComputedStyle(el).fontSize);
+      expect(parseFloat(fontSize)).toBeGreaterThanOrEqual(14);
+    }
+  });
 });

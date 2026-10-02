@@ -223,6 +223,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       return `__INLINE_CODE_${idx}__`;
     });
 
+    // 2.5 Sanitize raw text to prevent DOM-based XSS injection
+    s = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
     // 3. Headers (h6 to h1, with optional leading whitespace)
     s = s.replace(/^\s*######\s+(.*$)/gim, "<h6>$1</h6>");
     s = s.replace(/^\s*#####\s+(.*$)/gim, "<h5>$1</h5>");
@@ -306,6 +309,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     return s;
   }
   window.parseMarkdown = parseMarkdown;
+
+  function parseIncrementalMarkdown(text) {
+    if (!text) return "";
+    let s = String(text);
+    const fenceMatches = s.match(/```/g);
+    if (fenceMatches && fenceMatches.length % 2 === 1) {
+      s += "\n```";
+    }
+    const backticks = s.match(/`/g);
+    if (backticks && backticks.length % 2 === 1) {
+      s += "`";
+    }
+    const bolds = s.match(/\*\*/g);
+    if (bolds && bolds.length % 2 === 1) {
+      s += "**";
+    }
+    return parseMarkdown(s);
+  }
+  window.parseIncrementalMarkdown = parseIncrementalMarkdown;
 
   // ═══════════════════════════════════════════════════
   // STATUS INDICATOR
@@ -2094,7 +2116,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ═══════════════════════════════════════════════════
   // LLM BRIDGE (Direct pesatrouter.com BYOK via ai-engine.js)
   // ═══════════════════════════════════════════════════
-  async function callLLM(phase, promptText, { image = null, isSummarize = false } = {}) {
+  async function callLLM(phase, promptText, { image = null, isSummarize = false, onChunk = null } = {}) {
     if (!isConfigured()) {
       showByokGateMessage();
       throw new Error("API Key pesatrouter belum diatur.");
@@ -2122,7 +2144,8 @@ document.addEventListener("DOMContentLoaded", async () => {
           modelName: getModelName()
         },
         signal: activeAbortController.signal,
-        isSummarize: isSummarize
+        isSummarize: isSummarize,
+        onChunk: onChunk
       });
 
       if (res.visionFallback) {
@@ -2290,6 +2313,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         body: emailParams.body,
         sendNow: /(?:kirim sekarang|langsung kirim|auto send)/i.test(combined),
         message: `Mempersiapkan pengiriman email ke ${emailParams.to}...`
+      };
+    }
+
+    // Social post intent detection (e.g. posting ke X / Twitter / medsos)
+    const isSocialIntent = /(?:posting|post|tweet|unggah|publikasikan)\s+(?:ke\s+)?(?:x(?:\.com)?|twitter|medsos|media sosial)/i.test(combined) ||
+                           /(?:coba\s+)?posting\s+tweet/i.test(combined);
+    if (isSocialIntent) {
+      return {
+        planner: { steps: [`1. Membuka komposer postingan X (Twitter)`, `2. Menuliskan teks tweet`, `3. Menyiapkan postingan untuk ditinjau`] },
+        action: "post_social",
+        text: text || userPrompt,
+        sendNow: /(?:langsung posting|langsung tweet|auto post|publish)/i.test(combined),
+        message: `Mempersiapkan postingan ke X (Twitter)...`
       };
     }
 
@@ -2560,6 +2596,42 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
   // ═══════════════════════════════════════════════════
   // ACTION DISPATCHER (route: DOM / background / skills / clipboard / artifact)
   // ═══════════════════════════════════════════════════
+  function detectTargetSocialPlatform(text = "", currentUrl = "") {
+    const s = String(text || "").toLowerCase();
+    const u = String(currentUrl || "").toLowerCase();
+
+    if (/threads(?:\.net|\.com)?|\bthreads\b/i.test(s) || u.includes("threads.net")) {
+      return {
+        platform: "threads",
+        name: "Threads",
+        url: "https://www.threads.net",
+        domainCheck: /threads\.net/i
+      };
+    }
+    if (/linkedin(?:\.com)?|\blinkedin\b/i.test(s) || u.includes("linkedin.com")) {
+      return {
+        platform: "linkedin",
+        name: "LinkedIn",
+        url: "https://www.linkedin.com/feed/",
+        domainCheck: /linkedin\.com/i
+      };
+    }
+    if (/facebook(?:\.com)?|\bfacebook\b|\bfb(?:\.com)?\b/i.test(s) || u.includes("facebook.com")) {
+      return {
+        platform: "facebook",
+        name: "Facebook",
+        url: "https://www.facebook.com",
+        domainCheck: /facebook\.com/i
+      };
+    }
+    return {
+      platform: "twitter",
+      name: "X (Twitter)",
+      url: "https://x.com/compose/post",
+      domainCheck: /x\.com|twitter\.com/i
+    };
+  }
+
   async function executeAgentAction(resObj) {
     const isBatch = Array.isArray(resObj.actions) && resObj.actions.length > 0;
     let actionType = isBatch ? "batch" : (resObj.action || resObj.navigator?.action || "");
@@ -2696,24 +2768,29 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       return result;
     }
 
-    // ── Aksi otomatisasi Media Sosial Khusus (Twitter/X, LinkedIn, Threads) ──
-    if (actionType === "post_social" || actionType === "post_twitter" || actionType === "post_x" || actionType === "tweet" || actionType === "social_post") {
+    // ── Aksi otomatisasi Media Sosial Khusus (Twitter/X, Threads, LinkedIn, Facebook) ──
+    if (actionType === "post_social" || actionType === "post_twitter" || actionType === "post_x" || actionType === "tweet" || actionType === "social_post" || actionType === "post_threads") {
       let currentTab = null;
       try {
         const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
         if (tabs && tabs[0]) currentTab = tabs[0];
       } catch (e) {}
 
-      const isAlreadyOnSocial = currentTab && /x\.com|twitter\.com|linkedin\.com|threads\.net/i.test(currentTab.url || "");
+      const targetPlatform = detectTargetSocialPlatform(
+        `${resObj.platform || ""} ${resObj.target || ""} ${activeTask?.goal || ""} ${resObj.text || ""}`,
+        currentTab?.url || ""
+      );
+
+      const isAlreadyOnSocial = currentTab && targetPlatform.domainCheck.test(currentTab.url || "");
       if (!isAlreadyOnSocial) {
-        appendLog("Navigasi ke X (Twitter)...");
-        showStatusIndicator("Membuka halaman X (Twitter)...");
-        await sendToBackground({ action: "NAVIGATE_TAB", url: "https://x.com/compose/post" });
-        await new Promise(r => setTimeout(r, 4000));
+        appendLog(`Navigasi ke ${targetPlatform.name}...`);
+        showStatusIndicator(`Membuka halaman ${targetPlatform.name}...`);
+        await sendToBackground({ action: "NAVIGATE_TAB", url: targetPlatform.url });
+        await new Promise(r => setTimeout(r, 4500));
         await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
       }
 
-      showStatusIndicator("Menuliskan draf postingan di X / media sosial...");
+      showStatusIndicator(`Menuliskan draf postingan di ${targetPlatform.name}...`);
       const postText = resObj.text || resObj.body || resObj.message || resObj.value || "";
       const r = await sendToContentScript({
         type: "EXECUTE_ACTION",
@@ -2725,7 +2802,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       }, 20000);
 
       result.success = !!(r && r.success);
-      result.message = (r && (r.message || r.error)) || "Postingan media sosial berhasil diproses.";
+      result.message = (r && (r.message || r.error)) || `Postingan di ${targetPlatform.name} berhasil diproses.`;
       result.stateChanged = true;
       result.isFinished = true;
       return result;
@@ -3123,7 +3200,8 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
       const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
       const isSeo = !isSummarize && /(?:seo|meta|kata kunci|keyword)/i.test(userPrompt);
       const isSecurity = !isSummarize && /(?:keamanan|security|audit keamanan|ssl|https)/i.test(userPrompt);
-      const isSocialThread = !isSummarize && /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed)/i.test(userPrompt);
+      const isSocialThread = !isSummarize && !isDocsTarget && /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed|sosmed)/i.test(userPrompt);
+      const isSocialCopywritingForDocs = !isSummarize && isDocsTarget && /(?:sosmed|media sosial|copywriting|thread|tweet|postingan|caption|feed|carousel|konten)/i.test(userPrompt);
 
       const hasTableCreationIntent = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan|tabel\b)/i.test(userPrompt);
 
@@ -3141,8 +3219,8 @@ ${(pageAfter?.reducedDOM || "").split("\n").slice(0, 8).join("\n")}
       const isProductResearch = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isGeneralTableTask && !isSocialThread && /(?:riset produk|laptop|harga|rekomendasi produk|komparasi|spesifikasi|cari produk|tokopedia|shopee|produk)/i.test(userPrompt);
 
       // 4. isDocsArticleTask: jika tujuannya Google Docs dan meminta artikel/berita/top N/copywriting
-      const isDocsArticleTask = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isSocialThread && isDocsTarget && (
-        /(?:artikel|tulis|buatkan|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt)
+      const isDocsArticleTask = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && isDocsTarget && (
+        isSocialCopywritingForDocs || /(?:artikel|tulis|buatkan|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt)
       );
 
       const isArticle = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isDocsArticleTask && !isGeneralTableTask && !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt);
@@ -3273,10 +3351,59 @@ FORMAT STRUKTUR OUTPUT:
 	### 💼 FORMAT LINKEDIN (Long-form Post):
 	(Format Hook Otoritatif $\\to$ Konteks Strategis $\\to$ 3 Key Takeaways $\\to$ Pertanyaan Diskusi)`;
       } else if (isDocsArticleTask || (isArticle && isDocsTarget)) {
-        const paragraphMatch = userPrompt.match(/(?:tulis|buatkan|buat|ketik|isi)\s+(\d+)\s+paragraf/i);
-        const paragraphCount = paragraphMatch ? parseInt(paragraphMatch[1], 10) : null;
+        if (isSocialCopywritingForDocs) {
+          promptPayload = `Bertindaklah sebagai PRINCIPAL SOCIAL MEDIA COPYWRITER & CONTENT STRATEGIST kelas dunia (spesialisasi: kurasi berita viral, hook retention tinggi, dan copywriting editorial multi-format untuk Instagram, X/Twitter, dan LinkedIn).
 
-        promptPayload = `Bertindaklah sebagai JURNALIS PROFESIONAL & EDITOR KONTEN DOKUMEN GOOGLE DOCS.
+[PERINTAH KHUSUS PENGGUNA]:
+${userPrompt}
+
+[SUMBER REFERENSI DARI WEB / TAB AKTIF]:
+Judul: ${pageTitle} | URL: ${pageUrl}
+${cleanText.substring(0, 5000) || "(Gunakan data berita terhangat/terpopuler hari ini sebagai referensi)"}
+
+PEDOMAN FORMAT DOKUMEN GOOGLE DOCS (SUPER RAPI & COPYWRITING EXPERT STANDAR INTERNASIONAL):
+1. DILARANG membuat teks mentah tanpa struktur atau instruksi panduan (seperti "Buka Google Docs..."). LANGSUNG TULISKAN SELURUH DRAF KONTEN SIAP PAKAI!
+2. FORMAT DOKUMEN HARUS SANGAT RAPI DENGAN HIERARKI JUDUL GOOGLE DOCS:
+   # 📰 CURATED NEWS DIGEST & SOCIAL MEDIA COPYWRITING PACKAGE
+   *(Kurasi Berita Terhangat Hari Ini & Paket Konten Siap Posting)*
+
+   ---
+   ## 🎯 Executive Summary & Hook Pembuka
+   (Sajikan 2 paragraf pengantar bertenaga yang memikat pembaca, menguraikan isu terhangat hari ini dan implikasinya).
+
+   ---
+   ## 📑 Kurasi Berita Terhangat Hari Ini (Format News Digest)
+   Sajikan berita-berita pilihan dengan format seragam:
+   ### 1. [Headline Berita Menarik & Tajam]
+   - 📌 **Fakta Utama**: Ringkasan padat 2-3 kalimat mengenai inti peristiwa.
+   - 💡 **Key Takeaway / Dampak**: Mengapa berita ini penting bagi publik/bisnis.
+   - 💬 **Sudut Pandang Copywriter**: Angle unik untuk memancing interaksi dan komentar audiens.
+
+   ---
+   ## 📱 Paket Draf Konten Siap Posting Media Sosial
+
+   ### 🧵 Opsi A: Twitter / X Thread (High Retention)
+   - **Tweet 1 (Hook)**: Kalimat pembuka menggugah/curiosity gap + 🧵👇
+   - **Tweet 2**: Inti berita utama
+   - **Tweet 3**: Fakta kunci & data menarik
+   - **Tweet 4**: Analisis implikasi
+   - **Tweet 5 (Closing & CTA)**: Ajakan berdiskusi di kolom komentar + 1 hashtag relevan
+
+   ### 📸 Opsi B: Instagram / LinkedIn Carousel (Slide-by-Slide Outline)
+   - **Slide 1**: Cover Hook yang menonjol
+   - **Slide 2-6**: 1 Berita per Slide (Headline + 2 Poin Fakta)
+   - **Slide 7**: Rangkuman & Save/Share Call-to-Action
+
+   ### 📝 Opsi C: Caption Ringkas & Hashtag
+   (Caption profesional, energik, rapi, lengkap dengan emoji terarah dan 3-5 hashtag tertarget).
+
+3. GAYA BAHASA: Menggunakan prinsip copywriting modern AIDA (Attention, Interest, Desire, Action), diksi mengalir alami, tajam, bernas, dan bebas klise robotik AI.
+4. ATURAN PENULISAN: DILARANG KERAS MENGGUNAKAN SIMBOL BLOCKQUOTE (>) ATAU (>>) DI AWAL BARIS! Format dokumen Google Docs harus bersih tanpa karakter '>'. Tuliskan langsung sebagai teks biasa, subjudul (# / ## / ###), atau poin (• / -).`;
+        } else {
+          const paragraphMatch = userPrompt.match(/(?:tulis|buatkan|buat|ketik|isi)\s+(\d+)\s+paragraf/i);
+          const paragraphCount = paragraphMatch ? parseInt(paragraphMatch[1], 10) : null;
+
+          promptPayload = `Bertindaklah sebagai JURNALIS PROFESIONAL & EDITOR KONTEN DOKUMEN GOOGLE DOCS.
 
 [PERINTAH & TOPIK DARI PENGGUNA]:
 ${userPrompt}
@@ -3295,7 +3422,9 @@ PEDOMAN KETAT PENULISAN DOKUMEN GOOGLE DOCS:
    - Lead / Paragraf pengantar
    - Rincian 5 berita / butir pembahasan utama (## 1. Judul Berita, ## 2. Judul Berita, dst. dengan paragraf ulasan padat)
    - Kesimpulan atau penutup yang relevan
-6. Gaya bahasa: Mengalir alami, tajam, bernas, dan bebas klise robotik AI.${paragraphCount ? `\n7. Pengguna meminta tepat ${paragraphCount} paragraf: Patuhi secara presisi!` : ""}`;
+6. Gaya bahasa: Mengalir alami, tajam, bernas, dan bebas klise robotik AI.
+7. DILARANG KERAS MENGGUNAKAN SIMBOL BLOCKQUOTE (>) DI AWAL BARIS! Tuliskan seluruh teks dan butir secara langsung tanpa karakter '>'.${paragraphCount ? `\n8. Pengguna meminta tepat ${paragraphCount} paragraf: Patuhi secara presisi!` : ""}`;
+        }
       } else if (isArticle) {
         const paragraphMatch = userPrompt.match(/(?:tulis|buatkan|buat|ketik|isi)\s+(\d+)\s+paragraf/i);
         const paragraphCount = paragraphMatch ? parseInt(paragraphMatch[1], 10) : null;
@@ -3401,9 +3530,37 @@ Instruksi:
 Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahasa Indonesia yang baik dalam format Markdown yang rapi.`;
       }
 
-      showStatusIndicator();
+      showStatusIndicator("Menghasilkan respon instan...");
 
-      const aiReply = await callLLM("chat", promptPayload, { isSummarize: isSummarize });
+      let streamBubble = null;
+      let streamContainer = null;
+      const onChunk = (delta, accumulated) => {
+        if (!streamBubble) {
+          const chatAreaEl = document.getElementById("chatArea");
+          if (chatAreaEl) {
+            streamContainer = document.createElement("div");
+            streamContainer.className = "message-row assistant streaming-bubble";
+            streamBubble = document.createElement("div");
+            streamBubble.className = "message-bubble markdown-body";
+            streamContainer.appendChild(streamBubble);
+            chatAreaEl.appendChild(streamContainer);
+          }
+        }
+        if (streamBubble) {
+          streamBubble.innerHTML = parseIncrementalMarkdown(accumulated);
+          const chatAreaEl = document.getElementById("chatArea");
+          if (chatAreaEl) chatAreaEl.scrollTop = chatAreaEl.scrollHeight;
+        }
+      };
+
+      let aiReply;
+      try {
+        aiReply = await callLLM("chat", promptPayload, { isSummarize: isSummarize, onChunk });
+      } finally {
+        if (streamContainer && streamContainer.parentNode) {
+          streamContainer.parentNode.removeChild(streamContainer);
+        }
+      }
 
       const isDocsOutput = isDocsTableTask || isDocsArticleTask || (isDocsTarget && (isArticle || isDocsTableTask));
       const artType = (isSpreadsheetTask || isGeneralTableTask || isProductResearch) ? "table" : (isSocialThread ? "social" : ((isArticle || isDocsOutput) ? "doc" : "text"));
@@ -3596,6 +3753,7 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
               });
             });
             if (tabRes && tabRes.text && tabRes.text.length > 20) {
+              src.content = tabRes.text;
               src.metadata.extractedText = tabRes.text.slice(0, 4500);
               appendLog(`📖 Referensi "${src.name}" berhasil diekstrak di latar belakang (${src.metadata.extractedText.length} karakter).`);
             }
@@ -3604,9 +3762,15 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
       }
 
       // 2. Cek tab aktif saat ini & tentukan apakah perlu switch tab
-      const isCopywritingTask = /(copywriting|buatkan\s+(tulisan|artikel|konten|copy|penawaran|paragraf)|tulis\s+(copywriting|artikel|surat|penawaran|email|paragraf)|draft\s+|buat\s+(artikel|surat|email|copy|paragraf))/i.test(goal) ||
-                                /(?:tulis|ketik|buat|isi)\s+(?:\d+\s+)?paragraf/i.test(goal) ||
-                                /(?:tabel|table|data penjualan)/i.test(goal);
+      const isSocialPostingGoal = /(?:posting|post|tweet|unggah|publikasikan)\s+(?:ke\s+)?(?:x(?:\.com)?|twitter|threads(?:\.net|\.com)?|linkedin|medsos|media sosial)/i.test(goal) ||
+                                  /(?:coba\s+)?posting\s+(?:tweet|utas|thread)/i.test(goal) ||
+                                  /(?:posting|post)\s+(?:langsung\s+)?(?:di|ke)\s+(?:threads|x|twitter|linkedin)/i.test(goal);
+
+      const isCopywritingTask = !isSocialPostingGoal && (
+        /(copywriting|buatkan\s+(tulisan|artikel|konten|copy|penawaran|paragraf)|tulis\s+(copywriting|artikel|surat|penawaran|email|paragraf)|draft\s+|buat\s+(artikel|surat|email|copy|paragraf))/i.test(goal) ||
+        /(?:tulis|ketik|buat|isi)\s+(?:\d+\s+)?paragraf/i.test(goal) ||
+        /(?:tabel|table|data penjualan)/i.test(goal)
+      );
       let activeTabInfo = null;
       try {
         const at = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -3648,12 +3812,12 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
           await finalizeTask("done", "✅ Teks berhasil dituliskan langsung ke lembar kerja dokumen.");
           return;
         }
-      } else if (targetEditorSource && targetEditorSource.metadata?.tabId) {
+      } else if (!isSocialPostingGoal && targetEditorSource && targetEditorSource.metadata?.tabId) {
         showStatusIndicator();
         appendLog(`🔄 Berpindah ke tab editor: ${targetEditorSource.name} (tabId: ${targetEditorSource.metadata.tabId})`);
         await sendToBackground({ action: "SWITCH_TAB", tabId: targetEditorSource.metadata.tabId });
         await new Promise(r => setTimeout(r, 600));
-      } else if (!isCopywritingTask && targetOtherSource && targetOtherSource.metadata?.tabId) {
+      } else if (!isCopywritingTask && !isSocialPostingGoal && targetOtherSource && targetOtherSource.metadata?.tabId) {
         showStatusIndicator();
         appendLog(`🔄 Berpindah otomatis ke tab target: ${targetOtherSource.name} (tabId: ${targetOtherSource.metadata.tabId})`);
         await sendToBackground({ action: "SWITCH_TAB", tabId: targetOtherSource.metadata.tabId });
@@ -3662,6 +3826,63 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
           type: "LOCK_PAGE",
           message: `Tab ${targetOtherSource.name} sedang dikontrol oleh Pesat AI Agent...`
         }).catch(() => {});
+      }
+
+      // ══ FAST PATH FOR POSTING DRAFT TO SOCIAL MEDIA (X / Twitter, Threads, LinkedIn) ══
+      if (isSocialPostingGoal) {
+        const targetPlatform = detectTargetSocialPlatform(goal, activeTabInfo?.url || "");
+        appendLog(`📱 Mendeteksi instruksi posting ke ${targetPlatform.name}...`);
+        showStatusIndicator(`Mempersiapkan materi postingan untuk ${targetPlatform.name}...`);
+
+        let draftReferenceText = "";
+        for (const s of (contextSources || [])) {
+          const txt = s.content || s.metadata?.extractedText || "";
+          if (txt && txt.length > 30) {
+            draftReferenceText += `\n[SUMBER KONTEN DARI ${s.name || s.title}]:\n${txt}\n`;
+          }
+        }
+
+        if (!draftReferenceText && activeTabInfo && !targetPlatform.domainCheck.test(activeTabInfo.url || "")) {
+          try {
+            const curRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
+            if (curRes && curRes.text) draftReferenceText = curRes.text;
+          } catch (_) {}
+        }
+
+        const tweetExtractorPrompt = `Tolong ekstrak atau susun teks postingan untuk platform ${targetPlatform.name} persis sesuai permintaan pengguna di bawah.
+
+[PERINTAH PENGGUNA]:
+${goal}
+
+[REFERENSI DRAF DOKUMEN / KONTEN]:
+${draftReferenceText || "(Gunakan instruksi pengguna langsung jika teks sudah tertera di perintah)"}
+
+ATURAN KETAT:
+1. Kembalikan HANYA teks postingan / tweet / thread yang diminta (misal jika diminta tweet 1 sampai 3, ekstrak poin-poin tersebut secara rapi).
+2. DILARANG menambahkan kalimat pembuka atau penutup robotik (seperti "Tentu...", "Berikut drafnya:").
+3. Hapus nomor label seperti "#### Tweet 1", "Tweet 1 (Hook Utama)", atau awalan quote '>', sajikan teks murni yang siap diposting langsung.
+4. Berikan pemisah baris ganda yang rapi antar-paragraf atau antar-utas postingan.`;
+
+        const extractedPostText = await callLLM("chat", tweetExtractorPrompt);
+        if (extractedPostText && extractedPostText.trim().length > 5) {
+          appendLog(`🚀 Membuka ${targetPlatform.name} dan mengisi postingan (${extractedPostText.trim().length} karakter)...`);
+          showStatusIndicator(`Membuka ${targetPlatform.name} & mengisi postingan...`);
+
+          const socialRes = await executeAgentAction({
+            action: "post_social",
+            platform: targetPlatform.platform,
+            text: extractedPostText.trim(),
+            sendNow: /(?:langsung posting|langsung post|langsung tweet|auto post|publish)/i.test(goal)
+          });
+
+          if (socialRes && socialRes.success) {
+            addMessageToCurrentSession("assistant", `### 📱 Postingan ${targetPlatform.name} Berhasil Disiapkan\n\n${extractedPostText.trim()}`);
+            await finalizeTask("done", `✅ Postingan berhasil disiapkan dan diisikan ke ${targetPlatform.name}.`);
+            return;
+          } else {
+            throw new Error(socialRes?.error || `Gagal mengisi komposer ${targetPlatform.name}.`);
+          }
+        }
       }
 
 		      // ══ FAST PATH FOR END-TO-END AUTOMATIONS (Spreadsheet, Email, & Social) ══
@@ -5226,12 +5447,82 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     settingsPanel.classList.toggle("hidden");
     refreshGoogleStatus();
   });
-  if (btnComposerModel) {
-    btnComposerModel.addEventListener("click", () => {
-      settingsPanel.classList.toggle("hidden");
+
+  const composerModelDropdown = document.getElementById("composerModelDropdown");
+  const modelDropdownList = document.getElementById("modelDropdownList");
+  const btnOpenSettingsFromPill = document.getElementById("btnOpenSettingsFromPill");
+
+  if (btnComposerModel && composerModelDropdown) {
+    btnComposerModel.addEventListener("click", (e) => {
+      e.stopPropagation();
+      composerModelDropdown.classList.toggle("hidden");
+    });
+  }
+
+  if (btnOpenSettingsFromPill) {
+    btnOpenSettingsFromPill.addEventListener("click", () => {
+      composerModelDropdown?.classList.add("hidden");
+      settingsPanel?.classList.remove("hidden");
       refreshGoogleStatus();
     });
   }
+
+  if (modelDropdownList) {
+    modelDropdownList.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const optBtn = e.target.closest(".model-option-btn");
+      if (!optBtn) return;
+      const modelId = optBtn.getAttribute("data-model");
+      if (modelId) {
+        activeModelId = modelId;
+        if (typeof storedSettings !== "undefined" && storedSettings) storedSettings.modelName = modelId;
+        if (composerModelName) composerModelName.textContent = modelId;
+        if (typeof modelNameInput !== "undefined" && modelNameInput) modelNameInput.value = modelId;
+        modelDropdownList.querySelectorAll(".model-option-btn").forEach(b => b.classList.remove("active"));
+        optBtn.classList.add("active");
+        if (composerModelDropdown) composerModelDropdown.classList.add("hidden");
+        appendLog(`Model AI dialihkan ke: ${modelId}`);
+        try {
+          await chrome.storage.local.set({ modelName: modelId });
+        } catch (_) {}
+      }
+    });
+  }
+
+  document.addEventListener("click", (e) => {
+    if (composerModelDropdown && !composerModelDropdown.contains(e.target) && e.target !== btnComposerModel) {
+      composerModelDropdown.classList.add("hidden");
+    }
+  });
+
+  async function checkPendingPrompt() {
+    try {
+      const storageArea = (chrome.storage && chrome.storage.session) ? chrome.storage.session : chrome.storage.local;
+      const data = await storageArea.get(["pesat_pending_prompt"]);
+      if (data && data.pesat_pending_prompt && data.pesat_pending_prompt.prompt) {
+        const prompt = data.pesat_pending_prompt.prompt;
+        await storageArea.remove(["pesat_pending_prompt"]);
+        if (promptInput) {
+          promptInput.value = prompt;
+          autoResizeTextarea();
+          promptInput.focus();
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (chrome.runtime?.onMessage) {
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.action === "INJECT_PENDING_PROMPT" && msg.prompt) {
+        if (promptInput) {
+          promptInput.value = msg.prompt;
+          autoResizeTextarea();
+          promptInput.focus();
+        }
+      }
+    });
+  }
+
   btnCloseSettings.addEventListener("click", () => {
     settingsPanel.classList.add("hidden");
   });
@@ -5314,6 +5605,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   attachSuggestionListeners();
   initQuickChipsSlider();
   checkOnboarding();
+  await checkPendingPrompt();
   appendLog("Sesi ekstensi v5.2 (Direct PesatRouter BYOK) diaktifkan.", "INFO", { timestamp: Date.now() }, "SESSION_OPEN");
 
   btnSend.addEventListener("click", () => {

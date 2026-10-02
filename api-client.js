@@ -57,15 +57,81 @@
     }
   }
 
+  /**
+   * Resilient SSE (Server-Sent Events) Stream Reader for Real-time Token Delivery
+   * @param {string} url - API Endpoint URL
+   * @param {RequestInit & { signal?: AbortSignal }} options - Fetch Options
+   * @param {Function} onChunk - Callback for incremental text chunks (delta, accumulatedText)
+   * @returns {Promise<{ reply: string, success: boolean }>}
+   */
+  async function fetchStreamSSE(url, options = {}, onChunk = null) {
+    const fetchOptions = {
+      ...options,
+      signal: options.signal
+    };
+
+    const response = await fetch(url, fetchOptions);
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => "");
+      throw new Error(`HTTP_${response.status}: ${errBody || response.statusText}`);
+    }
+
+    if (!response.body) {
+      const text = await response.text();
+      if (typeof onChunk === "function") onChunk(text, text);
+      return { reply: text, success: true };
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let accumulatedText = "";
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith(":")) continue;
+          if (trimmed === "data: [DONE]") continue;
+          if (trimmed.startsWith("data: ")) {
+            const jsonStr = trimmed.slice(6);
+            try {
+              const data = JSON.parse(jsonStr);
+              const delta = data.choices?.[0]?.delta?.content || data.reply || "";
+              if (delta) {
+                accumulatedText += delta;
+                if (typeof onChunk === "function") {
+                  onChunk(delta, accumulatedText);
+                }
+              }
+            } catch (_) {}
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return { reply: accumulatedText, success: true };
+  }
+
   const ApiClient = {
-    fetchWithRetry: apiFetchWithRetry
+    fetchWithRetry: apiFetchWithRetry,
+    fetchStreamSSE: fetchStreamSSE
   };
 
   if (typeof globalThis !== "undefined") {
     globalThis.apiFetchWithRetry = apiFetchWithRetry;
+    globalThis.fetchStreamSSE = fetchStreamSSE;
     globalThis.PesatApiClient = ApiClient;
   }
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { apiFetchWithRetry, ApiClient };
+    module.exports = { apiFetchWithRetry, fetchStreamSSE, ApiClient };
   }
 })();

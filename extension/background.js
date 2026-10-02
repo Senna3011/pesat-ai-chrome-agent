@@ -31,7 +31,34 @@ chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
   .catch((error) => console.error("[Pesat SW] Error setting panel behavior:", error));
 
+function setupContextMenus() {
+  if (!chrome.contextMenus) return;
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: "pesat-ask-selection",
+      title: "Tanyakan ke Pesat AI",
+      contexts: ["selection"]
+    });
+    chrome.contextMenus.create({
+      id: "pesat-summarize-selection",
+      title: "Rangkum Teks Ini",
+      contexts: ["selection"]
+    });
+    chrome.contextMenus.create({
+      id: "pesat-explain-image",
+      title: "Jelaskan Gambar Ini (Vision OCR)",
+      contexts: ["image"]
+    });
+    chrome.contextMenus.create({
+      id: "pesat-summarize-link",
+      title: "Baca & Rangkum Isi Link Ini",
+      contexts: ["link"]
+    });
+  });
+}
+
 chrome.runtime.onInstalled.addListener(() => {
+  setupContextMenus();
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
     .catch((error) => console.error("[Pesat SW] Error setting panel behavior:", error));
@@ -39,6 +66,42 @@ chrome.runtime.onInstalled.addListener(() => {
   bgLog("INFO", "SW_INSTALLED", "Background Service Worker berhasil diinstal & aktif.");
   console.log("[Pesat AI Agent] Background Service Worker installed successfully.");
 });
+
+if (chrome.runtime.onStartup) {
+  chrome.runtime.onStartup.addListener(() => {
+    setupContextMenus();
+  });
+}
+
+if (chrome.contextMenus && chrome.contextMenus.onClicked) {
+  chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+    if (!tab?.id) return;
+    try {
+      if (tab.windowId) {
+        await chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
+      }
+    } catch (_) {}
+
+    let prompt = "";
+    if (info.menuItemId === "pesat-ask-selection" && info.selectionText) {
+      prompt = `Tolong jelaskan atau jawab mengenai teks berikut:\n\n"${info.selectionText}"`;
+    } else if (info.menuItemId === "pesat-summarize-selection" && info.selectionText) {
+      prompt = `Rangkum teks berikut secara padat dan jelas:\n\n"${info.selectionText}"`;
+    } else if (info.menuItemId === "pesat-explain-image" && info.srcUrl) {
+      prompt = `Jelaskan gambar berikut dari URL:\n${info.srcUrl}`;
+    } else if (info.menuItemId === "pesat-summarize-link" && info.linkUrl) {
+      prompt = `Buka dan rangkum isi dari tautan ini:\n${info.linkUrl}`;
+    }
+
+    if (prompt) {
+      const storageArea = chrome.storage.session || chrome.storage.local;
+      await storageArea.set({ pesat_pending_prompt: { prompt, timestamp: Date.now() } });
+      try {
+        chrome.runtime.sendMessage({ action: "INJECT_PENDING_PROMPT", prompt }).catch(() => {});
+      } catch (_) {}
+    }
+  });
+}
 
 // Safe Tab Message Dispatcher with Auto-Injection Fallback & SW lifecycle resilience
 async function sendTabMessageSafe(tabId, payload) {
@@ -449,8 +512,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "GOOGLE_STATUS") {
-    chrome.storage.local.get(["googleAuthToken", "googleUserEmail"], (res) => {
-      sendResponse({ connected: Boolean(res.googleAuthToken), email: res.googleUserEmail || "" });
+    const storageArea = (chrome.storage && chrome.storage.session) ? chrome.storage.session : chrome.storage.local;
+    storageArea.get(["googleAuthToken", "googleUserEmail"], (res) => {
+      if (res && res.googleAuthToken) {
+        sendResponse({ connected: true, email: res.googleUserEmail || "" });
+      } else {
+        chrome.storage.local.get(["googleAuthToken", "googleUserEmail"], (localRes) => {
+          sendResponse({ connected: Boolean(localRes && localRes.googleAuthToken), email: localRes?.googleUserEmail || "" });
+        });
+      }
     });
     return true;
   }
@@ -489,7 +559,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             const params = new URLSearchParams(urlObj.hash.substring(1));
             const token = params.get("access_token");
             if (token) {
-              await chrome.storage.local.set({ googleAuthToken: token });
+              const storageArea = (chrome.storage && chrome.storage.session) ? chrome.storage.session : chrome.storage.local;
+              await storageArea.set({ googleAuthToken: token });
               // Ambil info email user
               try {
                 const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
@@ -497,7 +568,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 });
                 if (userRes.ok) {
                   const userData = await userRes.json();
-                  if (userData.email) await chrome.storage.local.set({ googleUserEmail: userData.email });
+                  if (userData.email) await storageArea.set({ googleUserEmail: userData.email });
                 }
               } catch (_) {}
 
@@ -517,9 +588,79 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "GOOGLE_DISCONNECT") {
+    if (chrome.storage && chrome.storage.session) {
+      chrome.storage.session.remove(["googleAuthToken", "googleUserEmail"], () => {});
+    }
     chrome.storage.local.remove(["googleAuthToken", "googleUserEmail"], () => {
       sendResponse({ success: true });
     });
+    return true;
+  }
+
+  if (request.action === "TOGGLE_SIDEPANEL") {
+    const winId = sender.tab?.windowId;
+    if (winId && chrome.sidePanel?.open) {
+      chrome.sidePanel.open({ windowId: winId }).then(() => {
+        sendResponse({ success: true });
+      }).catch((e) => {
+        sendResponse({ success: false, error: e.message });
+      });
+      return true;
+    }
+    sendResponse({ success: false, error: "Window ID not found" });
+    return true;
+  }
+
+  if (request.action === "IN_PAGE_AI_QUERY") {
+    (async () => {
+      try {
+        const { taskType, selectedText, customPrompt } = request;
+        let instruction = "";
+        if (taskType === "summarize") {
+          instruction = `Rangkum teks berikut secara padat dan jelas dalam 2-3 poin penting:\n\n"${selectedText}"`;
+        } else if (taskType === "translate") {
+          instruction = `Terjemahkan teks berikut ke Bahasa Indonesia (atau ke Bahasa Inggris jika teks aslinya Bahasa Indonesia):\n\n"${selectedText}"`;
+        } else if (taskType === "explain") {
+          instruction = `Jelaskan istilah penting atau substansi teks berikut secara ringkas dan informatif:\n\n"${selectedText}"`;
+        } else if (taskType === "polish") {
+          instruction = `Perbaiki tata bahasa, ejaan, dan struktur teks berikut agar lebih profesional tanpa mengubah makna aslinya:\n\n"${selectedText}"`;
+        } else {
+          instruction = customPrompt || selectedText;
+        }
+
+        const storageData = await chrome.storage.local.get(["apiKey", "apiBaseUrl", "modelName"]);
+        const apiKey = storageData.apiKey || "";
+        const apiUrl = storageData.apiBaseUrl || "https://api.pesatrouter.com/v1";
+        const model = storageData.modelName || "pesat-flash";
+
+        const endpoint = apiUrl.endsWith("/chat/completions") ? apiUrl : `${apiUrl.replace(/\/+$/, "")}/chat/completions`;
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 800,
+            messages: [
+              { role: "system", content: "Kamu adalah asisten in-page cepat dari Pesat AI. Berikan jawaban yang padat, presisi, dan langsung ke inti jawaban tanpa basa-basi pembuka/penutup." },
+              { role: "user", content: instruction }
+            ]
+          })
+        });
+
+        if (!res.ok) {
+          const errTxt = await res.text().catch(() => "");
+          throw new Error(`API error ${res.status}: ${errTxt}`);
+        }
+        const data = await res.json();
+        const reply = data.choices?.[0]?.message?.content || data.reply || "Tidak ada respon.";
+        sendResponse({ success: true, reply });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
     return true;
   }
 

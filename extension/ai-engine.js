@@ -218,7 +218,7 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
       }
     },
 
-    async callLLMDirect({ phase, prompt, messages = [], taskState = null, domTree = "", config = {}, signal, useTools = true, isSummarize = false }) {
+    async callLLMDirect({ phase, prompt, messages = [], taskState = null, domTree = "", config = {}, signal, useTools = true, isSummarize = false, onChunk = null }) {
       const promptText = prompt || "";
       const apiKey = (config.apiKey || "").trim();
       const model = (config.modelName || "").trim() || "pesat-flash";
@@ -268,6 +268,42 @@ Pedoman Respon:
           requestBody.tool_choice = "auto";
         }
 
+        // SSE Streaming Handler (Milestone 1)
+        if (typeof onChunk === "function" && (phase === "chat" || isSummarize) && typeof globalThis.fetchStreamSSE === "function") {
+          requestBody.stream = true;
+          const streamRes = await globalThis.fetchStreamSSE(
+            endpoint,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${apiKey}`
+              },
+              body: JSON.stringify(requestBody),
+              signal: signal
+            },
+            onChunk
+          );
+          const finalReply = streamRes.reply || "";
+          const usage = {
+            prompt_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length) / 4),
+            completion_tokens: Math.ceil(finalReply.length / 4),
+            total_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length + finalReply.length) / 4)
+          };
+          try {
+            if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+              chrome.runtime.sendMessage({ action: "RECORD_TOKEN_USAGE", usage }).catch(() => {});
+            }
+          } catch (_) {}
+          return {
+            success: true,
+            reply: finalReply,
+            message: { role: "assistant", content: finalReply },
+            tool_calls: null,
+            usage
+          };
+        }
+
         const safeFetch = typeof globalThis.apiFetchWithRetry === "function" ? globalThis.apiFetchWithRetry : fetch;
         const res = await safeFetch(endpoint, {
           method: "POST",
@@ -303,6 +339,42 @@ Pedoman Respon:
       } else {
         // Fallback Cloudflare Worker
         const workerEndpoint = `${DEFAULT_CF_WORKER}/api/chat`;
+
+        if (typeof onChunk === "function" && (phase === "chat" || isSummarize) && typeof globalThis.fetchStreamSSE === "function") {
+          const streamRes = await globalThis.fetchStreamSSE(
+            workerEndpoint,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                messages: payloadMessages,
+                prompt: promptText,
+                phase: phase,
+                model: model,
+                max_tokens: maxTokens,
+                domTree: domTree,
+                isSummarize: isSummarize,
+                stream: true
+              }),
+              signal: signal
+            },
+            onChunk
+          );
+          const finalReply = streamRes.reply || "";
+          const usage = {
+            prompt_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length) / 4),
+            completion_tokens: Math.ceil(finalReply.length / 4),
+            total_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length + finalReply.length) / 4)
+          };
+          return {
+            success: true,
+            reply: finalReply,
+            message: { role: "assistant", content: finalReply },
+            tool_calls: null,
+            usage
+          };
+        }
+
         const safeFetch = typeof globalThis.apiFetchWithRetry === "function" ? globalThis.apiFetchWithRetry : fetch;
         const res = await safeFetch(workerEndpoint, {
           method: "POST",

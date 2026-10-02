@@ -429,10 +429,60 @@
           </div>
 
           <div class="composer-actions-right">
-            <button type="button" class="composer-model-pill" id="btnComposerModel" title="Model AI Aktif (Klik untuk Pengaturan)">
+            <button type="button" class="composer-model-pill" id="btnComposerModel" title="Pilih Model AI (Klik untuk Ganti Model)">
               <span class="model-pulse-dot"></span>
               <span id="composerModelName">pesat-flash</span>
             </button>
+            <div class="composer-model-dropdown hidden" id="composerModelDropdown">
+              <div class="model-dropdown-header">Pilih Model AI</div>
+              <div class="model-dropdown-list" id="modelDropdownList">
+                <button type="button" class="model-option-btn active" data-model="pesat-flash">
+                  <div class="model-opt-info">
+                    <span class="model-opt-name">⚡ Pesat Flash</span>
+                    <span class="model-opt-desc">Cepat & Hemat (32K)</span>
+                  </div>
+                  <span class="model-opt-badge flash">Fast</span>
+                </button>
+                <button type="button" class="model-option-btn" data-model="pesat-pro">
+                  <div class="model-opt-info">
+                    <span class="model-opt-name">🧠 Pesat Pro</span>
+                    <span class="model-opt-desc">Penalaran Mendalam (128K)</span>
+                  </div>
+                  <span class="model-opt-badge pro">Smart</span>
+                </button>
+                <button type="button" class="model-option-btn" data-model="gpt-4o">
+                  <div class="model-opt-info">
+                    <span class="model-opt-name">🚀 GPT-4o</span>
+                    <span class="model-opt-desc">OpenAI Flagship</span>
+                  </div>
+                  <span class="model-opt-badge">BYOK</span>
+                </button>
+                <button type="button" class="model-option-btn" data-model="gemini-2.5-flash">
+                  <div class="model-opt-info">
+                    <span class="model-opt-name">💎 Gemini 2.5 Flash</span>
+                    <span class="model-opt-desc">Google Multi-modal</span>
+                  </div>
+                  <span class="model-opt-badge">BYOK</span>
+                </button>
+                <button type="button" class="model-option-btn" data-model="claude-3-5-sonnet">
+                  <div class="model-opt-info">
+                    <span class="model-opt-name">🎭 Claude 3.5 Sonnet</span>
+                    <span class="model-opt-desc">Anthropic Frontier</span>
+                  </div>
+                  <span class="model-opt-badge">BYOK</span>
+                </button>
+                <button type="button" class="model-option-btn" data-model="deepseek-chat">
+                  <div class="model-opt-info">
+                    <span class="model-opt-name">🐳 DeepSeek V3</span>
+                    <span class="model-opt-desc">High Reasoning</span>
+                  </div>
+                  <span class="model-opt-badge">BYOK</span>
+                </button>
+              </div>
+              <div class="model-dropdown-footer">
+                <button type="button" id="btnOpenSettingsFromPill" class="link-btn">⚙️ Pengaturan Provider & API</button>
+              </div>
+            </div>
             <button id="btnSend" class="send-btn" title="Kirim Perintah (Enter)">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="19" x2="12" y2="5"></line>

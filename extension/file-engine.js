@@ -14,7 +14,7 @@
       }
 
       if (
-        ["txt", "md", "csv", "json", "js", "ts", "html", "css", "py", "sql"].includes(ext) ||
+        ["txt", "md", "json", "js", "ts", "html", "css", "py", "sql"].includes(ext) ||
         type.startsWith("text/") ||
         type === "application/json"
       ) {
@@ -25,6 +25,40 @@
           ext,
           type: "text",
           content: text
+        };
+      }
+
+      if (ext === "csv") {
+        const text = await this.readAsText(file);
+        const mdTable = this.parseCsvToMarkdown(text);
+        return {
+          name,
+          size,
+          ext,
+          type: "spreadsheet",
+          content: `[TABEL CSV: ${name}]\n\n${mdTable}`
+        };
+      }
+
+      if (ext === "pdf") {
+        const pdfContent = await this.parsePdfFile(file);
+        return {
+          name,
+          size,
+          ext,
+          type: "document",
+          content: pdfContent
+        };
+      }
+
+      if (ext === "docx" || ext === "doc") {
+        const docxContent = await this.parseDocxFile(file);
+        return {
+          name,
+          size,
+          ext,
+          type: "document",
+          content: docxContent
         };
       }
 
@@ -57,6 +91,69 @@
           type: "binary",
           content: `[File Lampiran: ${name} (${Math.round(size / 1024)} KB)]`
         };
+      }
+    },
+
+    parseCsvToMarkdown(csvText) {
+      if (!csvText) return "";
+      const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
+      if (!lines.length) return "";
+      return lines.map((line, idx) => {
+        const cells = line.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
+        const rowStr = "| " + cells.join(" | ") + " |";
+        if (idx === 0) {
+          const sepStr = "| " + cells.map(() => "---").join(" | ") + " |";
+          return rowStr + "\n" + sepStr;
+        }
+        return rowStr;
+      }).join("\n");
+    },
+
+    async parsePdfFile(file) {
+      try {
+        const arrayBuf = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuf);
+        const decoder = new TextDecoder("latin1");
+        const rawStr = decoder.decode(bytes);
+        const textSnippets = [];
+
+        const tjRegex = /\(([^)]+)\)\s*Tj/g;
+        let match;
+        while ((match = tjRegex.exec(rawStr)) !== null) {
+          const t = match[1].trim();
+          if (t && t.length > 1 && !t.startsWith("/")) textSnippets.push(t);
+        }
+
+        const arrayTjRegex = /\[([^\]]+)\]\s*TJ/g;
+        while ((match = arrayTjRegex.exec(rawStr)) !== null) {
+          const subMatches = match[1].match(/\(([^)]+)\)/g);
+          if (subMatches) {
+            const combined = subMatches.map(s => s.slice(1, -1)).join("");
+            if (combined.trim()) textSnippets.push(combined.trim());
+          }
+        }
+
+        const combinedText = textSnippets.join(" ").replace(/\s+/g, " ").trim();
+        if (combinedText.length >= 20) {
+          return `[DOKUMEN PDF: ${file.name}]\n\n${combinedText}`;
+        }
+        return `[DOKUMEN PDF: ${file.name} (${Math.round(file.size / 1024)} KB) - Format terstruktur PDF terlampir]`;
+      } catch (err) {
+        return `[DOKUMEN PDF: ${file.name} - Gagal mengekstrak teks: ${err.message}]`;
+      }
+    },
+
+    async parseDocxFile(file) {
+      try {
+        const text = await this.readAsText(file);
+        const xmlTextMatches = text.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+        if (xmlTextMatches && xmlTextMatches.length > 0) {
+          const extracted = xmlTextMatches.map(m => m.replace(/<[^>]+>/g, "")).join(" ");
+          return `[DOKUMEN WORD (.DOCX): ${file.name}]\n\n${extracted.replace(/\s+/g, " ")}`;
+        }
+        return `[DOKUMEN WORD (.DOCX): ${file.name} (${Math.round(file.size / 1024)} KB) terlampir]`;
+      } catch (_) {
+        return `[DOKUMEN WORD (.DOCX): ${file.name}]`;
       }
     },
 

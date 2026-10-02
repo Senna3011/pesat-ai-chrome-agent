@@ -10,7 +10,8 @@
     "storage",
     "tabs",
     "downloads",
-    "identity"
+    "identity",
+    "contextMenus"
   ],
   "host_permissions": [
     "https://*/*",
