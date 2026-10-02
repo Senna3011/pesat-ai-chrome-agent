@@ -281,9 +281,34 @@
 		  - Pendaftaran deklarasi `content_scripts` resmi pada `manifest.json` (`matches: ["http://*/*", "https://*/*"]`, `run_at: "document_end"`). Memastikan content script selalu hidup dan mendengarkan pesan di setiap halaman web tanpa bergantung pada dynamic script injection semata.
 		  - Penanganan error `Could not establish connection. Receiving end does not exist.` pada `sendTabMessageSafe` di `background.js` dengan polling retry (5x percobaan @ 250ms) pasca injeksi dinamis.
 		  - Pemasangan idempotency guard `window.__PESAT_CONTENT_SCRIPT_INITIALIZED__` di `content.js` guna mencegah duplikasi listener saat re-injeksi.
-		- [x] **Verifikasi & QA**:
-		  - 18 pengujian Playwright E2E lulus (`npm test`).
-		  - Sinkronisasi penuh ke direktori `extension/`.
+			- [x] **Verifikasi & QA**:
+			  - 18 pengujian Playwright E2E lulus (`npm test`).
+			  - Sinkronisasi penuh ke direktori `extension/`.
+
+	### 🗓️ Day 11 (Security Hardening, Shadow DOM Traversal, Form Sign-In Fix, & Sidebar Navigation Engine)
+	- [x] **Keamanan & Isolasi Prompt Injection (`ai-engine.js`, `logger.js`)**:
+	  - Penambahan boundary `<untrusted_web_content origin="active_tab">` untuk membungkus struktur DOM mentah dengan aturan #5 Anti-Prompt Injection ketat.
+	  - Implementasi recursive `scrubPII()` di `logger.js` untuk membersihkan kredensial, API key (`sk-*`, `ghp_*`, `AIza*`, `Bearer *`), email, nomor telepon, dan query params sensitif sebelum log dikirim ke backend.
+	- [x] **Shadow DOM Traversal & Prioritasi Viewport (`content.js`)**:
+	  - Fungsi traversal rekursif `collectElementsDeep()` dengan `TreeWalker` untuk menembus seluruh open Shadow Root (Web Components, Lit, Shoelace).
+	  - Prioritasi dinamis elemen tampak di layar (`isElementInViewport()`) dan peningkatan kapasitas semantik dari 75 menjadi 120 elemen.
+	- [x] **Persistensi State Service Worker MV3 (`background.js`)**:
+	  - Penambahan `hydrateSWState()` dan `persistSWState()` menggunakan `chrome.storage.session` agar riwayat aksi loop (`actionHistoryPerTab`) dan akumulasi token (`taskTokenUsage`) tetap aman saat Service Worker mengalami idle termination.
+	- [x] **Perbaikan Form Autofill & Eksekusi Tombol Sign In (`content.js`, `sidepanel/sidepanel.js`)**:
+	  - Penambahan event `focus` dan `blur` pada `setNativeInputValue()` untuk memicu validasi dirty/touched state pada framework modern (React Hook Form, Formik, Vue).
+	  - Mengatasi hilangnya `targetText` dan `fallbackText` pada pembuatan objek `actionData` di `sidepanel.js`.
+	  - Pembuatan helper terpusat `triggerFullClickSequence()` dan pemrosesan `submitAfter: true` yang ter-`await` penuh dengan fallback `form.requestSubmit()`.
+	- [x] **Navigasi Menu Sidebar & Elemen Non-Tombol (`content.js`, `ai-engine.js`)**:
+	  - Perluasan selektor `scanInteractiveDOM()` untuk mendeteksi item menu non-tombol (`nav li`, `aside li`, `[class*='sidebar' i] li`, `[class*='menu-item' i]`, `[class*='nav-item' i]`, `[class*='sidebar-link' i]`, `[data-sidebar]`, dll).
+	  - Deep text search fallback pada `findElementByFuzzy()` dengan pencocokan hingga container `.closest()`.
+	  - Propagasi klik dua arah (ke container induk `li`/`a` dan elemen anak) serta fallback routing otomatis via atribut `href`/`data-to`/`data-href`.
+	  - Protokol navigasi sidebar khusus di system prompt `ai-engine.js`.
+	- [x] **Anti-Loop Validator & Deterministic Menu Completion (`ai-engine.js`, `sidepanel/sidepanel.js`)**:
+	  - Isolasi pemanggilan tools (`requestBody.tools`) hanya untuk `phase === "act"`; fase `validate` dan `plan` diproteksi dengan prompt JSON evaluasi murni.
+	  - Fast-path deterministik di `runValidator` dan evaluasi ReAct loop (`isNavOrMenuIntent`): menandai subtask langsung `done` dan mengakhiri task jika tujuan membuka menu telah tercapai.
+	- [x] **Verifikasi & Sinkronisasi Build**:
+	  - Sinkronisasi penuh file ke direktori `extension/`.
+	  - Seluruh 18 pengujian Playwright lulus 100% (`npm test`).
 
 
 
