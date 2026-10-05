@@ -3184,11 +3184,22 @@ Respon HANYA dalam format JSON valid:
         if (tabs && tabs[0]) activeTabInfo = tabs[0];
       } catch (_) {}
 
+      // 0. Ekstraksi Dokumen / File Lampiran Pengguna
+      const attachedFiles = (contextSources || []).filter(s => s && (s.type === "File" || s.type === "Image" || s.type === "Download" || s.content || s.metadata?.extractedText || s.metadata?.content));
+      let fileContextBlock = "";
+      if (attachedFiles.length > 0) {
+        fileContextBlock = attachedFiles.map((f, idx) => {
+          const content = f.content || f.metadata?.content || f.metadata?.extractedText || f.metadata?.fullText || "";
+          return `[DOKUMEN TERLAMPIR #${idx + 1}: ${f.name || f.title || "File"} (${f.metadata?.sizeFormatted || f.type})]\n${content}`;
+        }).join("\n\n");
+        appendLog(`📎 Mengikutsertakan ${attachedFiles.length} file terlampir ke dalam analisis: ${attachedFiles.map(f => f.name).join(", ")}`);
+      }
+
       // 1. Cek apakah ada referensi BrowserTab yang dilampirkan atau di-mention (@tab1, @tab2, dll.)
       const referencedTab = (contextSources || []).find(s => s && (s.type === "BrowserTab" || s.type === "tab") && s.metadata?.tabId);
 
       let cleanText = "";
-      let pageTitle = activeTabInfo?.title || "Halaman Web";
+      let pageTitle = (attachedFiles[0]?.name) || activeTabInfo?.title || "Halaman Web";
       let pageUrl = activeTabInfo?.url || "";
 
       if (referencedTab && referencedTab.metadata?.tabId) {
@@ -3204,19 +3215,24 @@ Respon HANYA dalam format JSON valid:
         }
       }
 
-      // Jika belum ada cleanText dari referensi tab, ambil dari tab aktif saat ini
-      if (!cleanText) {
+      // Jika belum ada cleanText dari referensi tab dan tidak ada file, ambil dari tab aktif saat ini
+      if (!cleanText && (!fileContextBlock || (!pageUrl.startsWith("chrome://") && !pageUrl.startsWith("about:")))) {
         const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
-        cleanText = textRes?.text || "";
-        pageTitle = activeTabInfo?.title || textRes?.title || pageTitle;
-        pageUrl = activeTabInfo?.url || textRes?.url || pageUrl;
-
-        if (!cleanText || cleanText.length < 20) {
+        const webText = textRes?.text || "";
+        if (webText && webText.length > 20) {
+          cleanText = webText;
+          pageTitle = activeTabInfo?.title || textRes?.title || pageTitle;
+          pageUrl = activeTabInfo?.url || textRes?.url || pageUrl;
+        } else if (!fileContextBlock) {
           const scanFallback = await sendToContentScript({ type: "SCAN_DOM", showOverlay: false });
           cleanText = scanFallback?.data?.pageContent || "";
           pageTitle = activeTabInfo?.title || scanFallback?.data?.title || pageTitle;
           pageUrl = activeTabInfo?.url || scanFallback?.data?.url || pageUrl;
         }
+      }
+
+      if (fileContextBlock) {
+        cleanText = `${fileContextBlock}\n\n${cleanText ? `[KONTEKS HALAMAN WEB]:\n${cleanText}` : ""}`.trim();
       }
 
       const isSheetsSite = pageUrl.includes("/spreadsheets") ||
@@ -3551,21 +3567,25 @@ Format ringkasan dalam Markdown yang elegan:
 (Penjelasan akhir yang aplikatif)`;
         }
       } else {
-        // Tanya Jawab / Pertanyaan Informasi umum tentang halaman web saat ini
-        promptPayload = `Anda adalah asisten AI pintar. Jawablah pertanyaan pengguna berikut dengan tepat dan informatif berdasarkan halaman web yang sedang dibuka.
+        // Tanya Jawab / Pertanyaan Informasi umum / Analisis Dokumen
+        const fileHeading = attachedFiles.length > 0
+          ? `[DOKUMEN & FILE TERLAMPIR DARI PENGGUNA]:\n${fileContextBlock}\n\n`
+          : "";
 
-[INFORMASI HALAMAN WEB SAAT INI]
+        promptPayload = `Anda adalah asisten AI pintar berkemampuan analisis dokumen mendalam. Jawablah instruksi pengguna berikut dengan komprehensif, tepat, dan jelas berdasarkan data terlampir atau halaman web.
+
+${fileHeading}[KONTEKS HALAMAN WEB SAAT INI]
 Judul Halaman: ${pageTitle}
 URL Halaman: ${pageUrl}
 
-[ISI KONTEN HALAMAN]:
-${cleanText.substring(0, 7000) || "(Halaman kosong atau tidak memuat artikel teks)"}
+[KONTEN DOKUMEN / REFERENSI]:
+${cleanText.substring(0, 7500) || "(Tidak ada teks referensi tambahan; jawablah berdasarkan instruksi pengguna)"}
 
-[PERTANYAAN PENGGUNA]:
+[INSTRUKSI / PERTANYAAN PENGGUNA]:
 ${userPrompt}
 
 Instruksi:
-Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahasa Indonesia yang baik dalam format Markdown yang rapi.`;
+Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggunakan bahasa Indonesia yang baik dalam format Markdown yang rapi.`;
       }
 
       showStatusIndicator("Menghasilkan respon instan...");
@@ -5033,13 +5053,33 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     }
     composerChipsTray.classList.remove("hidden");
     attachedContextSources.forEach((src, idx) => {
-      const chip = document.createElement("span");
-      chip.className = "context-chip";
-      const icon = src.type === "Connector" ? (src.metadata?.icon || "⚡") : ((src.type === "BrowserTab" || src.type === "tab") ? "🌐" : (src.type === "CurrentPage" ? "📄" : (src.type === "Image" ? "🖼️" : "📎")));
-      const displayName = src.name || src.title || src.metadata?.title || "Konteks";
-      const label = displayName.length > 24 ? displayName.slice(0, 22) + "…" : displayName;
-      chip.title = `${displayName} (${src.type || "Tab"})`;
-      chip.innerHTML = `<span class="chip-label">${icon} ${escapeHtml(label)}</span><button type="button" class="chip-remove" title="Hapus">×</button>`;
+      const chip = document.createElement("div");
+      chip.className = "composer-chip";
+
+      let icon = "📎";
+      if (src.type === "Image") icon = "🖼️";
+      else if (src.type === "BrowserTab" || src.type === "tab") icon = "🌐";
+      else if (src.type === "Connector") icon = src.metadata?.icon || "⚡";
+      else {
+        const ext = (src.name || "").split(".").pop().toLowerCase();
+        if (ext === "pdf") icon = "📕";
+        else if (ext === "csv" || ext === "xlsx" || ext === "xls") icon = "📊";
+        else if (ext === "doc" || ext === "docx") icon = "📘";
+        else if (ext === "json" || ext === "js" || ext === "ts" || ext === "html") icon = "📄";
+      }
+
+      const displayName = src.name || src.title || "File";
+      const sizeStr = src.metadata?.sizeFormatted || (src.metadata?.size ? `${Math.round(src.metadata.size / 1024)} KB` : "");
+
+      chip.innerHTML = `
+        <span class="chip-icon">${icon}</span>
+        <div class="chip-info">
+          <span class="chip-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>
+          ${sizeStr ? `<span class="chip-meta">${sizeStr}</span>` : ""}
+        </div>
+        <button type="button" class="chip-remove" title="Hapus lampiran">✕</button>
+      `;
+
       chip.querySelector(".chip-remove")?.addEventListener("click", (e) => {
         e.stopPropagation();
         attachedContextSources.splice(idx, 1);
@@ -5211,26 +5251,32 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   async function handleIncomingFiles(fileList) {
     if (!fileList || fileList.length === 0) return;
     for (const file of Array.from(fileList)) {
-      showStatusIndicator();
+      showStatusIndicator("Membaca file lampiran...");
       try {
         if (typeof PesatFileEngine !== "undefined" && typeof PesatContextEngine !== "undefined") {
           const processed = await PesatFileEngine.processLocalFile(file);
+          const sizeKb = Math.round(file.size / 1024);
+          const sizeFormatted = sizeKb >= 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb || 1} KB`;
           const source = PesatContextEngine.createContextSource({
-            type: processed.fileType === "image" ? "Image" : "File",
+            type: processed.type === "image" ? "Image" : "File",
             name: file.name,
+            title: file.name,
+            content: processed.content || "",
             metadata: {
-              fileType: processed.fileType,
-              size: processed.size,
-              sizeFormatted: processed.sizeFormatted,
-              summary: processed.summary,
-              schema: processed.schema,
-              sampleText: processed.sampleText,
-              fullText: processed.fullText,
-              dataUrl: processed.dataUrl
+              fileName: file.name,
+              fileType: processed.type,
+              size: file.size,
+              sizeFormatted: sizeFormatted,
+              summary: `${(processed.type || "file").toUpperCase()}, ${sizeFormatted}`,
+              content: processed.content || "",
+              extractedText: processed.content || "",
+              fullText: processed.content || "",
+              sampleText: (processed.content || "").substring(0, 500),
+              dataUrl: processed.dataUrl || null
             }
           });
           attachedContextSources.push(source);
-          appendLog(`📎 File dilampirkan: ${file.name} (${processed.summary})`);
+          appendLog(`📎 File berhasil dilampirkan: ${file.name} (${sizeFormatted})`);
         }
       } catch (err) {
         appendLog(`Gagal memproses file ${file.name}: ${err.message}`, "WARN");

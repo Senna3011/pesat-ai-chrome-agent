@@ -40,6 +40,25 @@
         };
       }
 
+      if (ext === "xlsx" || ext === "xls") {
+        try {
+          const arrayBuf = await file.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuf);
+          const rawStr = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+          const tMatches = rawStr.match(/<t[^>]*>([^<]+)<\/t>/g);
+          if (tMatches && tMatches.length > 0) {
+            const cells = tMatches.map(m => m.replace(/<t[^>]*>|<\/t>/g, "").trim()).filter(Boolean);
+            return {
+              name,
+              size,
+              ext,
+              type: "spreadsheet",
+              content: `[DATA SPREADSHEET XLSX: ${name}]\n\n` + cells.slice(0, 300).join(" | ")
+            };
+          }
+        } catch (_) {}
+      }
+
       if (ext === "pdf") {
         const pdfContent = await this.parsePdfFile(file);
         return {

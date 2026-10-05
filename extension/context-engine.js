@@ -81,7 +81,7 @@
         if (src.url) prompt += ` (URL: ${src.url})`;
         if (src.metadata && src.metadata.fileName) prompt += ` (File: ${src.metadata.fileName})`;
         prompt += "\n```\n";
-        const rawContent = src.content ?? src.metadata?.extractedText ?? src.metadata?.content ?? src.dataUrl ?? "";
+        const rawContent = src.content || src.metadata?.extractedText || src.metadata?.content || src.metadata?.fullText || src.dataUrl || "";
         const contentStr = typeof rawContent === "string" ? rawContent : (JSON.stringify(rawContent, null, 2) || "");
         prompt += (contentStr && contentStr.length > 8000) ? contentStr.substring(0, 8000) + "\n...[dipotong karena panjang]" : (contentStr || "(Konten kosong)");
         prompt += "\n```\n";

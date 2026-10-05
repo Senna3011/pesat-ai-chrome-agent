@@ -1740,39 +1740,96 @@ textarea::placeholder {
 	  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 	}
 
-	.composer-chips-tray {
-	  display: flex;
-	  flex-wrap: wrap;
-	  gap: 6px;
-	}
+		.composer-chips-tray {
+		  display: flex;
+		  flex-wrap: wrap;
+		  gap: 8px;
+		  padding: 4px 2px 8px 2px;
+		  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		  margin-bottom: 4px;
+		}
 
-	.composer-chips-tray.hidden {
-	  display: none !important;
-	}
+		.composer-chips-tray.hidden {
+		  display: none !important;
+		}
 
-	.composer-chip {
-	  display: inline-flex;
-	  align-items: center;
-	  gap: 5px;
-	  background: rgba(99, 102, 241, 0.18);
-	  border: 1px solid rgba(99, 102, 241, 0.35);
-	  color: #c7d2fe;
-	  padding: 3px 8px;
-	  border-radius: 6px;
-	  font-size: 14px;
-	  font-weight: 500;
-	}
+		.composer-chip {
+		  display: inline-flex;
+		  align-items: center;
+		  gap: 8px;
+		  background: #1e293b;
+		  border: 1px solid rgba(56, 189, 248, 0.35);
+		  color: #f1f5f9;
+		  padding: 4px 8px 4px 8px;
+		  border-radius: 8px;
+		  font-size: 14px;
+		  max-width: 280px;
+		  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+		  animation: chipSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+		  transition: all 0.15s ease;
+		}
 
-	.composer-chip-remove {
-	  cursor: pointer;
-	  font-weight: 700;
-	  opacity: 0.7;
-	}
+		.composer-chip:hover {
+		  border-color: #38bdf8;
+		  background: #243247;
+		}
 
-	.composer-chip-remove:hover {
-	  opacity: 1;
-	  color: #ef4444;
-	}
+		.composer-chip .chip-icon {
+		  font-size: 15px;
+		  line-height: 1;
+		  flex-shrink: 0;
+		}
+
+		.composer-chip .chip-info {
+		  display: flex;
+		  flex-direction: column;
+		  min-width: 0;
+		  overflow: hidden;
+		}
+
+		.composer-chip .chip-name {
+		  font-weight: 600;
+		  color: #f8fafc;
+		  font-size: 14px;
+		  white-space: nowrap;
+		  overflow: hidden;
+		  text-overflow: ellipsis;
+		  max-width: 170px;
+		}
+
+		.composer-chip .chip-meta {
+		  font-size: 11px;
+		  color: #94a3b8;
+		  line-height: 1.1;
+		}
+
+		.composer-chip .chip-remove {
+		  background: rgba(255, 255, 255, 0.08);
+		  border: none;
+		  color: #94a3b8;
+		  cursor: pointer;
+		  font-size: 11px;
+		  font-weight: 700;
+		  width: 18px;
+		  height: 18px;
+		  border-radius: 50%;
+		  display: flex;
+		  align-items: center;
+		  justify-content: center;
+		  margin-left: 2px;
+		  flex-shrink: 0;
+		  transition: all 0.15s ease;
+		}
+
+		.composer-chip .chip-remove:hover {
+		  background: #ef4444;
+		  color: #ffffff;
+		}
+
+		@keyframes chipSlideIn {
+		  from { opacity: 0; transform: scale(0.92) translateY(4px); }
+		  to { opacity: 1; transform: scale(1) translateY(0); }
+		}
 
 	.composer-card textarea {
 	  width: 100%;
