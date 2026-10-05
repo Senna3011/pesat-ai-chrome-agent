@@ -460,11 +460,25 @@
         color: #38bdf8 !important;
       }
       .pesat-copilot-close {
-        background: transparent !important;
-        border: none !important;
-        color: #94a3b8 !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        color: #cbd5e1 !important;
         cursor: pointer !important;
         font-size: 14px !important;
+        width: 26px !important;
+        height: 26px !important;
+        border-radius: 6px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        line-height: 1 !important;
+        pointer-events: auto !important;
+        transition: all 0.15s !important;
+      }
+      .pesat-copilot-close:hover {
+        background: #ef4444 !important;
+        color: #ffffff !important;
+        border-color: #ef4444 !important;
       }
       .pesat-copilot-query {
         font-size: 13px !important;
@@ -3815,6 +3829,7 @@
 
   function initSearchEngineCopilot() {
     try {
+      if (sessionStorage.getItem("pesat_search_copilot_dismissed") === "true") return;
       const host = window.location.hostname;
       const isSearchEngine = host.includes("google.") || host.includes("bing.com") || host.includes("duckduckgo.com");
       if (!isSearchEngine) return;
@@ -3859,7 +3874,21 @@
     const copyBtn = card.querySelector(".pesat-copilot-copy");
     const sidepanelBtn = card.querySelector(".pesat-copilot-sidepanel");
 
-    closeBtn.onclick = () => { card.style.display = "none"; };
+    const handleClose = (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      try {
+        sessionStorage.setItem("pesat_search_copilot_dismissed", "true");
+      } catch (_) {}
+      card.style.setProperty("display", "none", "important");
+      try { card.remove(); } catch (_) {}
+    };
+
+    closeBtn.addEventListener("click", handleClose);
+    closeBtn.addEventListener("pointerdown", handleClose);
+    closeBtn.onclick = handleClose;
 
     sidepanelBtn.onclick = () => {
       chrome.runtime.sendMessage({ action: "TOGGLE_SIDEPANEL" }).catch(() => {});

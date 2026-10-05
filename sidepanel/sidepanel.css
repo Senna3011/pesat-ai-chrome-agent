@@ -837,26 +837,28 @@ textarea::placeholder {
   background: var(--accent-gradient);
   color: #ffffff;
   border: none;
-  border-radius: 16px;
-  width: 56px;
-  min-height: 80px;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   flex-shrink: 0;
-  box-shadow: var(--accent-glow);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .send-btn:hover {
-  opacity: 0.95;
-  transform: translateY(-1px) scale(1.02);
+  opacity: 0.92;
+  transform: translateY(-1px);
 }
 
 .send-btn svg {
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
 }
 
 .send-btn.stop-btn {
