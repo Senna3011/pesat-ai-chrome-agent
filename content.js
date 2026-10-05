@@ -2191,12 +2191,37 @@
 
       // 1. Google Sheets Integration (Waffle Clipboard Engine & Formula Bar Direct Injection)
       if (isGoogleSheets) {
-        // Tulis TSV matriks ke system clipboard agar data tersalin secara global
-        try {
-          if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(tsvText);
-          }
-        } catch (_) {}
+        // Tulis TSV & HTML matriks ke system clipboard agar data tersalin secara global
+        if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+          try {
+            const blobHtml = new Blob([htmlTable], { type: "text/html" });
+            const blobText = new Blob([tsvText], { type: "text/plain" });
+            await navigator.clipboard.write([
+              new ClipboardItem({
+                "text/html": blobHtml,
+                "text/plain": blobText
+              })
+            ]).catch(() => {});
+          } catch (_) {}
+        } else if (navigator.clipboard?.writeText) {
+          try {
+            await navigator.clipboard.writeText(tsvText).catch(() => {});
+          } catch (_) {}
+        }
+
+        // Fokuskan sel A1 pada canvas Google Sheets
+        const gridCanvas = document.querySelector("#waffle-grid-tab canvas") || document.querySelector("canvas");
+        if (gridCanvas) {
+          try {
+            const rect = gridCanvas.getBoundingClientRect();
+            const clickX = Math.round(rect.left + Math.min(80, rect.width / 2));
+            const clickY = Math.round(rect.top + Math.min(50, rect.height / 2));
+            const evt = { bubbles: true, cancelable: true, clientX: clickX, clientY: clickY };
+            gridCanvas.dispatchEvent(new MouseEvent("mousedown", evt));
+            gridCanvas.dispatchEvent(new MouseEvent("mouseup", evt));
+            gridCanvas.dispatchEvent(new MouseEvent("click", evt));
+          } catch (_) {}
+        }
 
         // A. Waffle Clipboard Engine Injection (Target utama Google Sheets untuk multi-sel matriks)
         const waffleClipTargets = [
@@ -2204,6 +2229,7 @@
           document.querySelector(".waffle-clipboard-target"),
           document.querySelector("#waffle-grid-tab textarea"),
           document.querySelector(".grid-scrollable textarea"),
+          document.activeElement,
           document.querySelector("#waffle-grid-tab"),
           document.querySelector(".grid-scrollable"),
           document.body

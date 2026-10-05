@@ -3065,6 +3065,12 @@ Respon HANYA dalam format JSON valid:
     promptInput.style.height = "38px";
     shouldStopAgent = false;
 
+    // Pastikan state task sebelumnya bersih saat prompt baru dikirim oleh user
+    if (!isAgentRunning) {
+      activeTask = null;
+      clearPersistedTask();
+    }
+
     chrome.runtime.sendMessage({ action: "RESET_LOOP_TRACKER" }, () => {
       if (chrome.runtime.lastError) {}
     });
@@ -3097,24 +3103,24 @@ Respon HANYA dalam format JSON valid:
     }
 
     // Deteksi cerdas antara Perintah Aksi Fisik di Web vs Pembuatan Konten/Artikel/Analisis Langsung
-    const isEmailAction = /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt);
-    const isFormAction = /(?:isi\s+form|isi\s+formulir|isi\s+field|login|sign\s*in|masuk|autofill|isi\s+email|isi\s+password|isi\s+kolom|masukkan\s+email|masukkan\s+password|isi\s+akun)/i.test(userPrompt);
-
-    const isDocsTarget = /(?:google\s+docs?|docs\.new|di docs|ke docs|dalam.*docs|google\s+dokumen|di dokumen|ke dokumen|dalam.*dokumen|lembar kerja)/i.test(userPrompt);
-    const hasTableCreation = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan)/i.test(userPrompt);
+    const isDocsTarget = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|ke|di|dalam|pada)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen)/i.test(userPrompt);
+    const hasTableCreation = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan|tabel\b)/i.test(userPrompt);
 
     const isSpreadsheetAction = !isDocsTarget && (
       /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan spreadsheet)/i.test(userPrompt) ||
       hasTableCreation
     );
 
+    const isEmailAction = /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt);
+    const isFormAction = !isSpreadsheetAction && !isDocsTarget && /(?:isi\s+form|isi\s+formulir|isi\s+field|\blogin\b|\bsign\s*in\b|\bmasuk\s+(?:ke|akun)\b|autofill|isi\s+email|isi\s+password|isi\s+kolom|masukkan\s+email|masukkan\s+password|isi\s+akun)/i.test(userPrompt);
+
     const isContentOrWriting = !isEmailAction && !isFormAction && (
       isSpreadsheetAction ||
       isDocsTarget ||
       hasTableCreation ||
-      /(?:buatkan|tuliskan|tulis|buat|draft|ketik|isi|generate|ceritakan|cerita)\s+(?:(?:\d+\s+)?(?:paragraf|kalimat|artikel|surat|konten|esai|tulisan|laporan|draf|copywriting|catatan|cerita|tabel)|tentang|mengenai)/i.test(userPrompt) ||
+      /(?:buatkan|tuliskan|tulis|buat|draft|ketik|isi|generate|ceritakan|cerita|bahas|ulas|jelaskan|paparkan)\s+(?:(?:\d+\s+)?(?:paragraf|kalimat|artikel|surat|konten|esai|tulisan|laporan|draf|copywriting|catatan|cerita|tabel|teori)|tentang|mengenai)/i.test(userPrompt) ||
       /(?:buatkan artikel|tulis artikel|buat artikel|artikel edukasi|buatkan draf artikel|buat draf artikel|surat penawaran|rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt) ||
-      /(?:tulis|ketik|isi|buat).*di\s+(?:google\s+docs|docs|dokumen|lembar\s+kerja)/i.test(userPrompt) ||
+      /(?:tulis|ketik|isi|buat|bahas).*di\s+(?:google\s+docs|goole\s+docs|docs|dokumen|lembar\s+kerja)/i.test(userPrompt) ||
       // Deteksi eksplisit permintaan N paragraf atau cerita pendek
       /\d+\s+(?:paragraf|kalimat|bait|bab)/i.test(userPrompt) ||
       /(?:cerita\s+(?:pendek|singkat|fiksi|rakyat|dongeng)|prosa|puisi|narasi)/i.test(userPrompt)
@@ -3684,7 +3690,7 @@ Jawablah pertanyaan pengguna secara langsung, jelas, dan ramah menggunakan bahas
             throw new Error("Google Sheets tidak dapat dimuat dalam 20 detik. Periksa koneksi internet Anda.");
           }
 
-          await new Promise(r => setTimeout(r, 2000));
+          await new Promise(r => setTimeout(r, 3500));
         }
 
         showStatusIndicator("Mengisikan data tabel langsung ke Google Sheets...");
@@ -3917,13 +3923,19 @@ ATURAN KETAT:
         }
       }
 
-		      // ══ FAST PATH FOR END-TO-END AUTOMATIONS (Spreadsheet, Email, & Social) ══
-		      const isSpreadsheetGoal = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(goal);
-		      if (isSpreadsheetGoal) {
-		        appendLog("📊 Mengalihkan ke Spreadsheet Automation Engine...");
-		        await runAnalysisFlow(goal, contextSources);
-		        return;
-		      }
+			      // ══ FAST PATH FOR END-TO-END AUTOMATIONS (Spreadsheet, Email, & Social) ══
+			      const isSpreadsheetGoal = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(goal);
+			      if (isSpreadsheetGoal) {
+			        appendLog("📊 Mengalihkan ke Spreadsheet Automation Engine...");
+			        setAgentRunning(false);
+			        if (activeTask) {
+			          activeTask.status = "COMPLETED";
+			          clearPersistedTask();
+			          activeTask = null;
+			        }
+			        await runAnalysisFlow(goal, contextSources);
+			        return;
+			      }
 
 	      // ══ FAST PATH FOR DIRECT NAVIGATION (Single clean step, no noisy ReAct loops) ══
 	      const directNavRegex = /^(?:tolong\s+|mohon\s+)?(?:buka|kunjungi|open|go\s*to|akses)\s+(?:website\s+|web\s+|situs\s+|halaman\s+|url\s+)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?|https?:\/\/[^\s]+)\s*$/i;
