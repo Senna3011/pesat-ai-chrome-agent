@@ -107,7 +107,7 @@
 
       if (toolName === "gworkspace_append_sheet_data") {
         const spreadsheetId = params.spreadsheetId;
-        const range = params.range || "Sheet1!A1";
+        const range = params.range || "A1";
         const rows = Array.isArray(params.rows) ? params.rows : [];
 
         if (!spreadsheetId || rows.length === 0) {

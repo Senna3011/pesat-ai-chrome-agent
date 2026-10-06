@@ -2187,7 +2187,7 @@
       const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 
       const tsvText = rows.map(r => r.join("\t")).join("\r\n");
-      const htmlTable = `<html><body><!--StartFragment--><table>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</table><!--EndFragment--></body></html>`;
+      const htmlTable = `<html><body><!--StartFragment--><table>${rows.map(r => `<tr>${r.map(c => `<td>${String(c ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</td>`).join("")}</tr>`).join("")}</table><!--EndFragment--></body></html>`;
 
       // 1. Google Sheets Integration (Waffle Clipboard Engine & Formula Bar Direct Injection)
       if (isGoogleSheets) {
@@ -2224,23 +2224,19 @@
         }
 
         // A. Waffle Clipboard Engine Injection (Target utama Google Sheets untuk multi-sel matriks)
-        const waffleClipTargets = [
-          document.querySelector("textarea.clip-target"),
-          document.querySelector(".waffle-clipboard-target"),
-          document.querySelector("#waffle-grid-tab textarea"),
-          document.querySelector(".grid-scrollable textarea"),
-          document.activeElement,
-          document.querySelector("#waffle-grid-tab"),
-          document.querySelector(".grid-scrollable"),
-          document.body
-        ].filter(Boolean);
+        const primaryTarget = document.querySelector("textarea.clip-target") ||
+                              document.querySelector("#waffle-grid-tab textarea") ||
+                              document.querySelector(".waffle-clipboard-target") ||
+                              document.activeElement ||
+                              document.body;
 
-        for (const target of waffleClipTargets) {
+        let pastedSuccessfully = false;
+        if (primaryTarget) {
           try {
-            target.focus?.();
-            if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
-              target.value = tsvText;
-              target.select?.();
+            primaryTarget.focus?.();
+            if (primaryTarget instanceof HTMLTextAreaElement || primaryTarget instanceof HTMLInputElement) {
+              primaryTarget.value = tsvText;
+              primaryTarget.select?.();
             }
 
             const dt = new DataTransfer();
@@ -2252,7 +2248,7 @@
               cancelable: true,
               clipboardData: dt
             });
-            target.dispatchEvent(pasteEv);
+            primaryTarget.dispatchEvent(pasteEv);
 
             const pasteKeyEvent = new KeyboardEvent("keydown", {
               key: "v",
@@ -2264,74 +2260,76 @@
               bubbles: true,
               cancelable: true
             });
-            target.dispatchEvent(pasteKeyEvent);
+            primaryTarget.dispatchEvent(pasteKeyEvent);
+            pastedSuccessfully = true;
           } catch (_) {}
         }
 
-        // B. Direct Cell Injection via Formula Bar & Name Box
-        function getColLetter(idx) {
-          let letter = "";
-          while (idx >= 0) {
-            letter = String.fromCharCode((idx % 26) + 65) + letter;
-            idx = Math.floor(idx / 26) - 1;
-          }
-          return letter;
-        }
-
-        const nameBox = document.querySelector("#t-name-box") ||
-                        document.querySelector("input#t-name-box") ||
-                        document.querySelector("input.name-box-input") ||
-                        document.querySelector("[aria-label*='kotak nama' i]") ||
-                        document.querySelector("[aria-label*='name box' i]");
-
-        const formulaInput = document.querySelector("#t-formula-bar-input") ||
-                             document.querySelector(".cell-input") ||
-                             document.querySelector("[id*='formula-bar']") ||
-                             document.querySelector(".docs-formula-input") ||
-                             document.querySelector("div[role='combobox']#t-formula-bar-input");
-
+        // B. Fallback: Direct Cell Injection via Formula Bar & Name Box (hanya jika clipboard tidak tersedia)
         let directCellSuccess = 0;
+        if (!pastedSuccessfully) {
+          function getColLetter(idx) {
+            let letter = "";
+            while (idx >= 0) {
+              letter = String.fromCharCode((idx % 26) + 65) + letter;
+              idx = Math.floor(idx / 26) - 1;
+            }
+            return letter;
+          }
 
-        if (nameBox && formulaInput) {
-          showReadingHUD(`📊 Mengisikan ${rows.length} baris data ke Google Sheets...`);
-          for (let rIdx = 0; rIdx < rows.length; rIdx++) {
-            const rowNum = rIdx + 1;
-            const rowData = rows[rIdx];
+          const nameBox = document.querySelector("#t-name-box") ||
+                          document.querySelector("input#t-name-box") ||
+                          document.querySelector("input.name-box-input") ||
+                          document.querySelector("[aria-label*='kotak nama' i]") ||
+                          document.querySelector("[aria-label*='name box' i]");
 
-            for (let cIdx = 0; cIdx < rowData.length; cIdx++) {
-              const cellPos = `${getColLetter(cIdx)}${rowNum}`;
-              const cellVal = String(rowData[cIdx] ?? "").trim();
-              if (!cellVal && cIdx > 0 && cIdx === rowData.length - 1) continue;
+          const formulaInput = document.querySelector("#t-formula-bar-input") ||
+                               document.querySelector(".cell-input") ||
+                               document.querySelector("[id*='formula-bar']") ||
+                               document.querySelector(".docs-formula-input") ||
+                               document.querySelector("div[role='combobox']#t-formula-bar-input");
 
-              // 1. Pilih posisi sel via Name Box
-              try {
-                nameBox.focus();
-                nameBox.value = cellPos;
-                nameBox.dispatchEvent(new Event("input", { bubbles: true }));
-                nameBox.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
-                nameBox.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
-              } catch (_) {}
+          if (nameBox && formulaInput) {
+            showReadingHUD(`📊 Mengisikan ${rows.length} baris data ke Google Sheets...`);
+            for (let rIdx = 0; rIdx < rows.length; rIdx++) {
+              const rowNum = rIdx + 1;
+              const rowData = rows[rIdx];
 
-              await new Promise(r => setTimeout(r, 25));
+              for (let cIdx = 0; cIdx < rowData.length; cIdx++) {
+                const cellPos = `${getColLetter(cIdx)}${rowNum}`;
+                const cellVal = String(rowData[cIdx] ?? "").trim();
+                if (!cellVal && cIdx > 0 && cIdx === rowData.length - 1) continue;
 
-              // 2. Tuliskan nilai/formula ke Formula Bar
-              try {
-                formulaInput.focus();
-                const range = document.createRange();
-                range.selectNodeContents(formulaInput);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
+                // 1. Pilih posisi sel via Name Box
+                try {
+                  nameBox.focus();
+                  nameBox.value = cellPos;
+                  nameBox.dispatchEvent(new Event("input", { bubbles: true }));
+                  nameBox.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+                  nameBox.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+                } catch (_) {}
 
-                document.execCommand("insertText", false, cellVal);
-                formulaInput.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: cellVal }));
-                formulaInput.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: cellVal }));
-                formulaInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
-                formulaInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
-              } catch (_) {}
+                await new Promise(r => setTimeout(r, 25));
 
-              directCellSuccess++;
-              await new Promise(r => setTimeout(r, 25));
+                // 2. Tuliskan nilai/formula ke Formula Bar
+                try {
+                  formulaInput.focus();
+                  const range = document.createRange();
+                  range.selectNodeContents(formulaInput);
+                  const sel = window.getSelection();
+                  sel.removeAllRanges();
+                  sel.addRange(range);
+
+                  document.execCommand("insertText", false, cellVal);
+                  formulaInput.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: cellVal }));
+                  formulaInput.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: cellVal }));
+                  formulaInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+                  formulaInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+                } catch (_) {}
+
+                directCellSuccess++;
+                await new Promise(r => setTimeout(r, 25));
+              }
             }
           }
         }
@@ -2627,15 +2625,17 @@
       return { success: false, error: "Canvas tidak ditemukan pada halaman ini." };
     }
 
-    // ── paste_text / insert_table / create_table: insert teks pada posisi kursor (Google Docs, Canvas, & Rich Editor friendly) ──
-    if (action === "paste_text" || action === "insert_table" || action === "create_table" || action === "fill_table") {
-      const text = String(value ?? actionData.text ?? actionData.table ?? actionData.data ?? "");
-      if (!text) return { success: false, error: "Teks kosong untuk paste_text.", errorType: "TOOL_INVALID_ARGUMENT" };
+    // ── paste_text / insert_table / create_table / fill_spreadsheet_grid: insert teks/tabel pada posisi kursor (Google Docs, Google Sheets, Canvas, & Rich Editor friendly) ──
+    if (action === "paste_text" || action === "insert_table" || action === "create_table" || action === "fill_table" || action === "fill_spreadsheet_grid" || action === "fill_sheet") {
+      const dataPayload = actionData.tableData || actionData.data || actionData.rows || actionData.table || actionData.text || value || "";
+      if (!dataPayload) return { success: false, error: "Teks atau data tabel kosong.", errorType: "TOOL_INVALID_ARGUMENT" };
 
       const isGoogleSheets = window.location.hostname.includes("docs.google.com") && window.location.pathname.includes("/spreadsheets");
-      if (isGoogleSheets) {
-        return await handleSpreadsheetGridInput(text);
+      if (isGoogleSheets || action === "fill_spreadsheet_grid" || action === "fill_sheet") {
+        return await handleSpreadsheetGridInput(dataPayload);
       }
+
+      const text = typeof dataPayload === "string" ? dataPayload : String(value ?? actionData.text ?? "");
 
       const isGoogleDocs = window.location.hostname.includes("docs.google.com");
       if (isGoogleDocs) {

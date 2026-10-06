@@ -1075,11 +1075,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 		                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
 		                  }
 
-		                  await sendToContentScript({
-		                    type: "EXECUTE_ACTION",
-		                    actionData: { action: "fill_spreadsheet_grid", value: contentStr }
-		                  }, 25000);
-		                  appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet.`);
+			                  const tableData = typeof parseMarkdownTable === "function" ? parseMarkdownTable(contentStr) : null;
+			                  await sendToContentScript({
+			                    type: "EXECUTE_ACTION",
+			                    actionData: { action: "fill_spreadsheet_grid", value: contentStr, tableData: tableData }
+			                  }, 25000);
+			                  appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet.`);
 	                } else {
 	                  showStatusIndicator("Menempelkan teks ke editor aktif...");
 	                  await sendToContentScript({
@@ -3303,23 +3304,24 @@ PEDOMAN KETAT TABEL DOKUMEN GOOGLE DOCS:
 2. Sertakan judul dokumen berbobot di baris pertama (# Judul Dokumen).
 3. Berikan pengantar singkat sebelum tabel dan ringkasan eksekutif serta analisis mendalam (1-2 paragraf) setelah tabel yang membedah wawasan, tren, dan faktor penggerak dari data tersebut.`;
       } else if (isSpreadsheetTask) {
-	        promptPayload = `Bertindaklah sebagai MASTER SPREADSHEET & FINANCIAL DATA SCIENTIST EXPERT (Standar Senior Modeler & Excel Specialist).
+		        promptPayload = `Bertindaklah sebagai MASTER SPREADSHEET & FINANCIAL DATA SCIENTIST EXPERT (Standar Senior Financial Modeler & Google Sheets/Excel Specialist).
 
-	[PERINTAH & KEBUTUHAN DATA SPREADSHEET]:
-	${userPrompt}
+		[PERINTAH & KEBUTUHAN DATA SPREADSHEET]:
+		${userPrompt}
 
-	[KONTEKS WEB SAAT INI (jika ada)]:
-	Judul: ${pageTitle} | URL: ${pageUrl}
-	${cleanText.substring(0, 4000)}
+		[KONTEKS WEB SAAT INI (jika ada)]:
+		Judul: ${pageTitle} | URL: ${pageUrl}
+		${cleanText.substring(0, 4000)}
 
-	PEDOMAN KETAT OUTPUT SPREADSHEET:
-	1. SAJIKAN TABEL DATA LENGKAP DALAM FORMAT MARKDOWN TABLE (WAJIB):
-	   - Kolom-kolom harus rapi, terisi penuh, dan presisi sesuai yang diminta pengguna.
-	   - Tuliskan data riil, akurat, dan bersih tanpa placeholder [...].
-	   - DILARANG membubuhkan tanda khusus Markdown seperti bintang ganda (**), asterisk (*), atau backtick di dalam sel tabel data (tulis langsung teks atau nilainya secara bersih, contoh: tulis 'Total' bukan '**Total**').
-	   - Jika terdapat kolom harga atau nilai numerik, sertakan baris FORMULA / TOTAL / AVERAGE di baris paling bawah jika relevan (misal: | | Rata-rata Harga | | | =AVERAGE(E2:E4) |).
-	2. Pastikan tabel Markdown menggunakan format standar (| baris | baris |) yang mudah di-parse dan di-paste langsung ke Google Sheets atau Excel.
-	3. Sertakan 1 paragraf ringkasan singkat analisis di bawah tabel.`;
+		PEDOMAN KETAT OUTPUT SPREADSHEET (STANDAR EKSEKUTIF & RAPI):
+		1. SAJIKAN TABEL DATA LENGKAP DALAM FORMAT MARKDOWN TABLE (WAJIB):
+		   - Baris Pertama: Header kolom yang deskriptif dan profesional (contoh: | No | Merek & Model | Kategori | Prosesor (CPU) | Grafis (GPU) | RAM | Storage | Baterai | Benchmark | Estimasi Harga (IDR) |).
+		   - Format Angka & Mata Uang: Wajib gunakan pemisah ribuan agar mudah dibaca (contoh: tulis 'Rp 42.999.000' atau '42.999.000', JANGAN tulis angka mentah tanpa pemisah seperti '42999000').
+		   - Satuan: Sertakan satuan pada header atau sel (misal: '32 GB', '1 TB', '18 Jam').
+		   - DILARANG membubuhkan tanda khusus Markdown seperti bintang ganda (**), asterisk (*), atau backtick di dalam sel tabel data (tulis langsung teks atau nilainya secara bersih, contoh: tulis 'Total' bukan '**Total**').
+		   - Baris Agregat / Statistik: Sertakan baris 'Rata-rata', 'Nilai Minimum', dan 'Nilai Maksimum' di baris paling bawah.
+		2. Pastikan tabel Markdown menggunakan format standar (| baris | baris |) yang mudah di-parse dan di-paste langsung ke Google Sheets.
+		3. Sertakan 1 paragraf ringkasan singkat analisis eksekutif di bawah tabel.`;
       } else if (isProductResearch) {
         promptPayload = `Lakukan RISET DAN ANALISIS KOMPARASI PRODUK MENDALAM & PROFESIONAL berdasarkan data katalog produk berikut:
 
