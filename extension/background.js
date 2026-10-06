@@ -642,16 +642,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "TOGGLE_SIDEPANEL") {
+    const tabId = sender.tab?.id;
     const winId = sender.tab?.windowId;
-    if (winId && chrome.sidePanel?.open) {
-      chrome.sidePanel.open({ windowId: winId }).then(() => {
-        sendResponse({ success: true });
-      }).catch((e) => {
+    if (chrome.sidePanel?.open) {
+      (async () => {
+        let opened = false;
+        if (tabId) {
+          try {
+            await chrome.sidePanel.open({ tabId });
+            opened = true;
+          } catch (_) {}
+        }
+        if (!opened && winId) {
+          try {
+            await chrome.sidePanel.open({ windowId: winId });
+            opened = true;
+          } catch (_) {}
+        }
+        sendResponse({ success: opened });
+      })().catch((e) => {
         sendResponse({ success: false, error: e.message });
       });
       return true;
     }
-    sendResponse({ success: false, error: "Window ID not found" });
+    sendResponse({ success: false, error: "Sidepanel API not supported" });
     return true;
   }
 

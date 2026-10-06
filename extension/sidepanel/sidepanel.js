@@ -1075,12 +1075,33 @@ document.addEventListener("DOMContentLoaded", async () => {
 		                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
 		                  }
 
-			                  const tableData = typeof parseMarkdownTable === "function" ? parseMarkdownTable(contentStr) : null;
-			                  await sendToContentScript({
-			                    type: "EXECUTE_ACTION",
-			                    actionData: { action: "fill_spreadsheet_grid", value: contentStr, tableData: tableData }
-			                  }, 25000);
-			                  appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet.`);
+				                  const tableData = typeof parseMarkdownTable === "function" ? parseMarkdownTable(contentStr) : null;
+				                  let apiPasted = false;
+				                  const sMatch = (currentTab?.url || "").match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+				                  if (sMatch && sMatch[1] && tableData && typeof globalThis.PesatGWorkspaceMCPSkill !== "undefined") {
+				                    try {
+				                      const token = await globalThis.PesatGWorkspaceMCPSkill.getAuthToken();
+				                      if (token) {
+				                        const apiRes = await globalThis.PesatGWorkspaceMCPSkill.execute("gworkspace_update_sheet_data", {
+				                          spreadsheetId: sMatch[1],
+				                          rows: tableData,
+				                          replace: true
+				                        });
+				                        if (apiRes && apiRes.success) {
+				                          apiPasted = true;
+				                          appendLog(`⤴️ Data tabel "${a.name}" berhasil disuntikkan ke spreadsheet via Google Sheets API!`);
+				                        }
+				                      }
+				                    } catch (_) {}
+				                  }
+
+				                  if (!apiPasted) {
+				                    await sendToContentScript({
+				                      type: "EXECUTE_ACTION",
+				                      actionData: { action: "fill_spreadsheet_grid", value: contentStr, tableData: tableData, replace: true }
+				                    }, 25000);
+				                    appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet.`);
+				                  }
 	                } else {
 	                  showStatusIndicator("Menempelkan teks ke editor aktif...");
 	                  await sendToContentScript({
@@ -3265,7 +3286,7 @@ Respon HANYA dalam format JSON valid:
 
       // 2. isSpreadsheetTask: jika pengguna eksplisit meminta Sheets atau sedang berada di tab Sheets
       const isSpreadsheetTask = !isSummarize && !isSeo && !isSecurity && !isSocialThread && !isDocsTableTask && (
-        userExplicitSheets || (isSheetsSite && hasTableCreationIntent)
+        userExplicitSheets || (isSheetsSite && (hasTableCreationIntent || /(?:ganti|timpa|isi|tambah|update|ubah|masukkan|data)\b/i.test(userPrompt)))
       );
 
       // 3. isGeneralTableTask: jika pengguna meminta tabel tapi bukan khusus Google Docs dan bukan khusus Google Sheets
@@ -3696,22 +3717,50 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
           await new Promise(r => setTimeout(r, 3500));
         }
 
-        showStatusIndicator("Mengisikan data tabel langsung ke Google Sheets...");
-        appendLog("📊 Mengisikan baris & kolom data langsung ke Google Sheets...");
-
         const tableData = typeof parseMarkdownTable === "function" ? parseMarkdownTable(aiReply) : null;
+        const isReplaceIntent = /(?:ganti|timpa|replace|hapus|ubah)/i.test(userPrompt) || isSheetsSite;
 
-        const fillResult = await sendToContentScript({
-          type: "EXECUTE_ACTION",
-          actionData: {
-            action: "fill_spreadsheet_grid",
-            value: aiReply,
-            tableData: tableData
+        let filledViaApi = false;
+        const targetUrl = (pageUrl.includes("docs.google.com/spreadsheets") ? pageUrl : "");
+        const sMatch = targetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+        if (sMatch && sMatch[1] && tableData && typeof globalThis.PesatGWorkspaceMCPSkill !== "undefined") {
+          try {
+            const token = await globalThis.PesatGWorkspaceMCPSkill.getAuthToken();
+            if (token) {
+              appendLog("⚡ Memperbarui data tabel langsung via Google Sheets REST API v4...");
+              showStatusIndicator("Memperbarui data di Google Sheets...");
+              const apiRes = await globalThis.PesatGWorkspaceMCPSkill.execute("gworkspace_update_sheet_data", {
+                spreadsheetId: sMatch[1],
+                rows: tableData,
+                replace: isReplaceIntent
+              });
+              if (apiRes && apiRes.success) {
+                filledViaApi = true;
+                appendLog(`✅ ${apiRes.message || "Data spreadsheet berhasil dimodifikasi via Google Sheets API!"}`);
+              }
+            }
+          } catch (apiErr) {
+            console.warn("GWorkspace REST API fallback to DOM:", apiErr);
           }
-        }, 25000, 3);
+        }
 
-        if (!fillResult.success) {
-          appendLog(`⚠️ Peringatan pengisian sel: ${fillResult.error || "Gagal mengisi sel otomatis"}`, "WARN");
+        if (!filledViaApi) {
+          showStatusIndicator("Mengisikan data tabel langsung ke Google Sheets...");
+          appendLog("📊 Mengisikan baris & kolom data langsung ke Google Sheets...");
+
+          const fillResult = await sendToContentScript({
+            type: "EXECUTE_ACTION",
+            actionData: {
+              action: "fill_spreadsheet_grid",
+              value: aiReply,
+              tableData: tableData,
+              replace: isReplaceIntent
+            }
+          }, 25000, 3);
+
+          if (!fillResult.success) {
+            appendLog(`⚠️ Peringatan pengisian sel: ${fillResult.error || "Gagal mengisi sel otomatis"}`, "WARN");
+          }
         }
 
         addMessageToCurrentSession("assistant", `### 📊 Data Berhasil Dibuat & Diisikan ke Google Sheets\n\n${aiReply}`, {

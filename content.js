@@ -233,6 +233,22 @@
   let pesatShadowRoot = null;
 
   function getOrCreatePesatShadowRoot() {
+    // 1. Cek dan hapus duplikat pesat-ai-agent-host yang mungkin ada di DOM
+    const existingHosts = Array.from(document.querySelectorAll("pesat-ai-agent-host, #pesat-ai-agent-host-root"));
+    if (existingHosts.length > 0) {
+      const primaryHost = existingHosts[0];
+      for (let i = 1; i < existingHosts.length; i++) {
+        try { existingHosts[i].remove(); } catch (_) {}
+      }
+      if (primaryHost.shadowRoot) {
+        pesatHostElement = primaryHost;
+        pesatShadowRoot = primaryHost.shadowRoot;
+        ensurePesatStylesInShadow(pesatShadowRoot);
+        return pesatShadowRoot;
+      }
+      try { primaryHost.remove(); } catch (_) {}
+    }
+
     if (pesatShadowRoot && pesatHostElement && (document.documentElement.contains(pesatHostElement) || document.body?.contains(pesatHostElement))) {
       return pesatShadowRoot;
     }
@@ -257,7 +273,7 @@
     pesatShadowRoot = pesatHostElement.attachShadow({ mode: "open" });
     ensurePesatStylesInShadow(pesatShadowRoot);
 
-    (document.documentElement || document.body).appendChild(pesatHostElement);
+    (document.body || document.documentElement).appendChild(pesatHostElement);
     return pesatShadowRoot;
   }
 
@@ -313,8 +329,8 @@
       }
       #pesat-fab-toggle {
         position: fixed !important;
-        bottom: 24px !important;
-        right: 24px !important;
+        bottom: 24px;
+        right: 24px;
         width: 48px !important;
         height: 48px !important;
         border-radius: 50% !important;
@@ -322,17 +338,24 @@
         border: 2px solid #38bdf8 !important;
         color: #38bdf8 !important;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 12px rgba(56, 189, 248, 0.4) !important;
-        cursor: pointer !important;
+        cursor: grab !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
         z-index: 2147483647 !important;
         pointer-events: auto !important;
-        transition: transform 0.2s, box-shadow 0.2s !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        touch-action: none !important;
+        transition: transform 0.15s, box-shadow 0.15s !important;
       }
       #pesat-fab-toggle:hover {
-        transform: scale(1.1) !important;
+        transform: scale(1.08) !important;
         box-shadow: 0 6px 24px rgba(56, 189, 248, 0.6) !important;
+      }
+      #pesat-fab-toggle:active {
+        cursor: grabbing !important;
+        transform: scale(0.96) !important;
       }
       #pesat-selection-toolbar {
         position: absolute !important;
@@ -2209,10 +2232,34 @@
           } catch (_) {}
         }
 
-        // Fokuskan sel A1 pada canvas Google Sheets
+        // 1. Reset posisi kursor ke sel A1 (dan bersihkan range jika replace diminta)
+        const nameBox = document.querySelector("#t-name-box") ||
+                        document.querySelector("input#t-name-box") ||
+                        document.querySelector("input.name-box-input") ||
+                        document.querySelector("[aria-label*='kotak nama' i]") ||
+                        document.querySelector("[aria-label*='name box' i]");
+
         const gridCanvas = document.querySelector("#waffle-grid-tab canvas") || document.querySelector("canvas");
+        const activeInput = document.querySelector("#waffle-grid-tab textarea") ||
+                            document.querySelector("textarea.clip-target") ||
+                            document.querySelector(".waffle-clipboard-target") ||
+                            document.activeElement;
+
+        if (nameBox) {
+          try {
+            nameBox.focus();
+            nameBox.value = "A1";
+            nameBox.dispatchEvent(new Event("input", { bubbles: true }));
+            nameBox.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+            nameBox.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+          } catch (_) {}
+          await new Promise(r => setTimeout(r, 60));
+        }
+
+        // Fokuskan sel A1 pada canvas Google Sheets
         if (gridCanvas) {
           try {
+            gridCanvas.focus?.();
             const rect = gridCanvas.getBoundingClientRect();
             const clickX = Math.round(rect.left + Math.min(80, rect.width / 2));
             const clickY = Math.round(rect.top + Math.min(50, rect.height / 2));
@@ -2223,113 +2270,81 @@
           } catch (_) {}
         }
 
-        // A. Waffle Clipboard Engine Injection (Target utama Google Sheets untuk multi-sel matriks)
-        const primaryTarget = document.querySelector("textarea.clip-target") ||
-                              document.querySelector("#waffle-grid-tab textarea") ||
+        // Jika mode replace, hapus isi grid lama terlebih dahulu
+        if (actionData.replace) {
+          const targetForKeys = activeInput || gridCanvas || document.body;
+          try {
+            targetForKeys.dispatchEvent(new KeyboardEvent("keydown", { key: "a", code: "KeyA", keyCode: 65, which: 65, ctrlKey: !isMac, metaKey: isMac, bubbles: true }));
+            targetForKeys.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", code: "Delete", keyCode: 46, which: 46, bubbles: true }));
+            await new Promise(r => setTimeout(r, 60));
+            // Kembalikan ke A1
+            targetForKeys.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", code: "Home", keyCode: 36, which: 36, ctrlKey: true, bubbles: true }));
+          } catch (_) {}
+          await new Promise(r => setTimeout(r, 60));
+        }
+
+        // A. Waffle Clipboard Engine Injection
+        const primaryTarget = document.querySelector("#waffle-grid-tab textarea") ||
+                              document.querySelector("textarea.clip-target") ||
                               document.querySelector(".waffle-clipboard-target") ||
                               document.activeElement ||
                               document.body;
 
-        let pastedSuccessfully = false;
         if (primaryTarget) {
           try {
             primaryTarget.focus?.();
-            if (primaryTarget instanceof HTMLTextAreaElement || primaryTarget instanceof HTMLInputElement) {
-              primaryTarget.value = tsvText;
-              primaryTarget.select?.();
-            }
-
             const dt = new DataTransfer();
             dt.setData("text/plain", tsvText);
             dt.setData("text/html", htmlTable);
 
-            const pasteEv = new ClipboardEvent("paste", {
-              bubbles: true,
-              cancelable: true,
-              clipboardData: dt
-            });
-            primaryTarget.dispatchEvent(pasteEv);
-
-            const pasteKeyEvent = new KeyboardEvent("keydown", {
-              key: "v",
-              code: "KeyV",
-              keyCode: 86,
-              which: 86,
-              ctrlKey: !isMac,
-              metaKey: isMac,
-              bubbles: true,
-              cancelable: true
-            });
-            primaryTarget.dispatchEvent(pasteKeyEvent);
-            pastedSuccessfully = true;
+            primaryTarget.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt }));
+            primaryTarget.dispatchEvent(new KeyboardEvent("keydown", { key: "v", code: "KeyV", keyCode: 86, ctrlKey: !isMac, metaKey: isMac, bubbles: true }));
           } catch (_) {}
         }
 
-        // B. Fallback: Direct Cell Injection via Formula Bar & Name Box (hanya jika clipboard tidak tersedia)
+        // B. Spreadsheet Grid Direct Typing (Tab antar kolom & Enter ganti baris)
+        const formulaInput = document.querySelector("#t-formula-bar-input") ||
+                             document.querySelector(".cell-input") ||
+                             document.querySelector("[id*='formula-bar']") ||
+                             document.querySelector(".docs-formula-input") ||
+                             document.querySelector("div[role='combobox']#t-formula-bar-input");
+
         let directCellSuccess = 0;
-        if (!pastedSuccessfully) {
-          function getColLetter(idx) {
-            let letter = "";
-            while (idx >= 0) {
-              letter = String.fromCharCode((idx % 26) + 65) + letter;
-              idx = Math.floor(idx / 26) - 1;
-            }
-            return letter;
-          }
+        if (formulaInput) {
+          showReadingHUD(`📊 Mengisikan ${rows.length} baris data ke Google Sheets...`);
+          for (let rIdx = 0; rIdx < rows.length; rIdx++) {
+            const rowData = rows[rIdx];
+            for (let cIdx = 0; cIdx < rowData.length; cIdx++) {
+              const cellVal = String(rowData[cIdx] ?? "").trim();
+              const isLastColInRow = cIdx === rowData.length - 1;
 
-          const nameBox = document.querySelector("#t-name-box") ||
-                          document.querySelector("input#t-name-box") ||
-                          document.querySelector("input.name-box-input") ||
-                          document.querySelector("[aria-label*='kotak nama' i]") ||
-                          document.querySelector("[aria-label*='name box' i]");
+              // Tulis nilai ke formula bar
+              try {
+                formulaInput.focus();
+                const range = document.createRange();
+                range.selectNodeContents(formulaInput);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
 
-          const formulaInput = document.querySelector("#t-formula-bar-input") ||
-                               document.querySelector(".cell-input") ||
-                               document.querySelector("[id*='formula-bar']") ||
-                               document.querySelector(".docs-formula-input") ||
-                               document.querySelector("div[role='combobox']#t-formula-bar-input");
+                document.execCommand("insertText", false, cellVal);
+                formulaInput.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: cellVal }));
+                formulaInput.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: cellVal }));
+              } catch (_) {}
 
-          if (nameBox && formulaInput) {
-            showReadingHUD(`📊 Mengisikan ${rows.length} baris data ke Google Sheets...`);
-            for (let rIdx = 0; rIdx < rows.length; rIdx++) {
-              const rowNum = rIdx + 1;
-              const rowData = rows[rIdx];
-
-              for (let cIdx = 0; cIdx < rowData.length; cIdx++) {
-                const cellPos = `${getColLetter(cIdx)}${rowNum}`;
-                const cellVal = String(rowData[cIdx] ?? "").trim();
-                if (!cellVal && cIdx > 0 && cIdx === rowData.length - 1) continue;
-
-                // 1. Pilih posisi sel via Name Box
-                try {
-                  nameBox.focus();
-                  nameBox.value = cellPos;
-                  nameBox.dispatchEvent(new Event("input", { bubbles: true }));
-                  nameBox.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
-                  nameBox.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
-                } catch (_) {}
-
-                await new Promise(r => setTimeout(r, 25));
-
-                // 2. Tuliskan nilai/formula ke Formula Bar
-                try {
-                  formulaInput.focus();
-                  const range = document.createRange();
-                  range.selectNodeContents(formulaInput);
-                  const sel = window.getSelection();
-                  sel.removeAllRanges();
-                  sel.addRange(range);
-
-                  document.execCommand("insertText", false, cellVal);
-                  formulaInput.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: cellVal }));
-                  formulaInput.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: cellVal }));
+              // Navigasi: Tab untuk kolom kanan, Enter di akhir baris untuk pindah ke baris baru
+              try {
+                if (isLastColInRow) {
                   formulaInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
                   formulaInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
-                } catch (_) {}
+                } else {
+                  formulaInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", code: "Tab", keyCode: 9, which: 9, bubbles: true }));
+                  formulaInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Tab", code: "Tab", keyCode: 9, which: 9, bubbles: true }));
+                }
+              } catch (_) {}
 
-                directCellSuccess++;
-                await new Promise(r => setTimeout(r, 25));
-              }
+              directCellSuccess++;
+              await new Promise(r => setTimeout(r, 18));
             }
           }
         }
@@ -3720,15 +3735,130 @@
   function initInPageAssistance() {
     try {
       const root = getOrCreatePesatShadowRoot();
+      const existingFabs = Array.from(root.querySelectorAll("#pesat-fab-toggle"));
+      if (existingFabs.length > 0) {
+        pesatFab = existingFabs[0];
+        for (let i = 1; i < existingFabs.length; i++) {
+          try { existingFabs[i].remove(); } catch (_) {}
+        }
+        return;
+      }
+
       if (!root.querySelector("#pesat-fab-toggle")) {
         pesatFab = document.createElement("button");
         pesatFab.id = "pesat-fab-toggle";
-        pesatFab.title = "Buka Pesat AI Agent (Klik untuk Sidepanel)";
-        pesatFab.innerHTML = `<span style="font-size:22px;line-height:1;">⚡</span>`;
+        pesatFab.title = "Pesat AI Agent (Tahan & Geser untuk pindah posisi, Klik untuk Sidepanel)";
+        pesatFab.innerHTML = `<span style="font-size:22px;line-height:1;pointer-events:none;">⚡</span>`;
+
+        // Pulihkan posisi tersimpan dari localStorage
+        try {
+          const raw = localStorage.getItem("pesat_fab_pos");
+          if (raw) {
+            const pos = JSON.parse(raw);
+            if (Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+              const clampedX = Math.min(window.innerWidth - 56, Math.max(10, pos.x));
+              const clampedY = Math.min(window.innerHeight - 56, Math.max(10, pos.y));
+              pesatFab.style.left = `${clampedX}px`;
+              pesatFab.style.top = `${clampedY}px`;
+              pesatFab.style.right = "auto";
+              pesatFab.style.bottom = "auto";
+            }
+          }
+        } catch (_) {}
+
+        // Drag and Drop State
+        let isDragging = false;
+        let startX = 0, startY = 0;
+        let initialLeft = 0, initialTop = 0;
+        let hasMoved = false;
+
+        const handleDragStart = (clientX, clientY) => {
+          isDragging = true;
+          hasMoved = false;
+          startX = clientX;
+          startY = clientY;
+          const rect = pesatFab.getBoundingClientRect();
+          initialLeft = rect.left;
+          initialTop = rect.top;
+          pesatFab.style.cursor = "grabbing";
+          pesatFab.style.transition = "none";
+        };
+
+        const handleDragMove = (clientX, clientY) => {
+          if (!isDragging) return;
+          const dx = clientX - startX;
+          const dy = clientY - startY;
+          if (Math.hypot(dx, dy) > 4) {
+            hasMoved = true;
+          }
+          const newLeft = Math.min(window.innerWidth - 54, Math.max(8, initialLeft + dx));
+          const newTop = Math.min(window.innerHeight - 54, Math.max(8, initialTop + dy));
+          pesatFab.style.left = `${newLeft}px`;
+          pesatFab.style.top = `${newTop}px`;
+          pesatFab.style.right = "auto";
+          pesatFab.style.bottom = "auto";
+        };
+
+        const handleDragEnd = () => {
+          if (!isDragging) return;
+          isDragging = false;
+          pesatFab.style.cursor = "grab";
+          pesatFab.style.transition = "transform 0.15s, box-shadow 0.15s";
+
+          if (hasMoved) {
+            const rect = pesatFab.getBoundingClientRect();
+            try {
+              localStorage.setItem("pesat_fab_pos", JSON.stringify({ x: rect.left, y: rect.top }));
+            } catch (_) {}
+          }
+        };
+
+        // Mouse Dragging
+        pesatFab.addEventListener("mousedown", (e) => {
+          if (e.button !== 0) return;
+          handleDragStart(e.clientX, e.clientY);
+          e.preventDefault();
+
+          const onMouseMove = (me) => handleDragMove(me.clientX, me.clientY);
+          const onMouseUp = () => {
+            handleDragEnd();
+            window.removeEventListener("mousemove", onMouseMove);
+            window.removeEventListener("mouseup", onMouseUp);
+          };
+
+          window.addEventListener("mousemove", onMouseMove);
+          window.addEventListener("mouseup", onMouseUp);
+        });
+
+        // Touch Dragging (untuk perangkat sentuh / touch emulator)
+        pesatFab.addEventListener("touchstart", (e) => {
+          if (e.touches.length === 1) {
+            handleDragStart(e.touches[0].clientX, e.touches[0].clientY);
+          }
+        }, { passive: true });
+
+        pesatFab.addEventListener("touchmove", (e) => {
+          if (e.touches.length === 1) {
+            handleDragMove(e.touches[0].clientX, e.touches[0].clientY);
+          }
+        }, { passive: true });
+
+        pesatFab.addEventListener("touchend", () => {
+          handleDragEnd();
+        });
+
+        // Click Action (hanya dieksekusi jika tidak sedang digeser)
         pesatFab.addEventListener("click", (e) => {
           e.stopPropagation();
-          chrome.runtime.sendMessage({ action: "TOGGLE_SIDEPANEL" }).catch(() => {});
+          if (hasMoved) return;
+
+          chrome.runtime.sendMessage({ action: "TOGGLE_SIDEPANEL" }, (res) => {
+            if (chrome.runtime.lastError || res?.success === false) {
+              showReadingHUD("⚡ Sidepanel: Klik ikon Pesat AI di toolbar browser untuk membuka.");
+            }
+          });
         });
+
         root.appendChild(pesatFab);
       }
 

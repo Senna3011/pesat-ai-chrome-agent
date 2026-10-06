@@ -11,7 +11,9 @@
     "tabs",
     "downloads",
     "identity",
-    "contextMenus"
+    "contextMenus",
+    "clipboardWrite",
+    "clipboardRead"
   ],
   "host_permissions": [
     "https://*/*",

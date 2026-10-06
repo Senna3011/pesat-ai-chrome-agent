@@ -36,6 +36,35 @@
       {
         type: "function",
         function: {
+          name: "gworkspace_update_sheet_data",
+          description: "Update or replace rows of data in a Google Spreadsheet from cell A1 using Google Sheets REST API v4.",
+          parameters: {
+            type: "object",
+            properties: {
+              spreadsheetId: {
+                type: "string",
+                description: "The ID of the Google Spreadsheet."
+              },
+              rows: {
+                type: "array",
+                description: "2D Array of rows to write.",
+                items: {
+                  type: "array",
+                  items: { type: "string" }
+                }
+              },
+              replace: {
+                type: "boolean",
+                description: "Whether to clear existing data before writing."
+              }
+            },
+            required: ["spreadsheetId", "rows"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
           name: "gworkspace_read_sheet",
           description: "Read values from a Google Spreadsheet range using Google Sheets REST API v4.",
           parameters: {
@@ -102,6 +131,50 @@
           success: false,
           error: "AUTH_REQUIRED: Akun Google Workspace belum terhubung. Silakan login pada menu 'Pengaturan Google' di Sidepanel atau gunakan fallback pengetikan browser.",
           requiresAuth: true
+        };
+      }
+
+      if (toolName === "gworkspace_update_sheet_data" || (toolName === "gworkspace_append_sheet_data" && params.replace)) {
+        const spreadsheetId = params.spreadsheetId;
+        const rows = Array.isArray(params.rows) ? params.rows : [];
+
+        if (!spreadsheetId || rows.length === 0) {
+          return { success: false, error: "spreadsheetId dan rows tidak boleh kosong." };
+        }
+
+        // 1. Bersihkan sel lama jika mode replace
+        if (params.replace !== false) {
+          try {
+            await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/A1:Z100:clear`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` }
+            });
+          } catch (_) {}
+        }
+
+        // 2. Tulis tabel baru mulai dari A1 dengan PUT
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/A1?valueInputOption=USER_ENTERED`;
+        const res = await fetch(url, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ values: rows })
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          return { success: false, error: `Google Sheets API Error (${res.status}): ${errText}` };
+        }
+
+        const data = await res.json();
+        return {
+          success: true,
+          message: `Berhasil memperbarui ${rows.length} baris data di Google Spreadsheet via REST API.`,
+          updatedRange: data.updatedRange || "A1",
+          updatedRows: data.updatedRows || rows.length,
+          stateChanged: true
         };
       }
 
