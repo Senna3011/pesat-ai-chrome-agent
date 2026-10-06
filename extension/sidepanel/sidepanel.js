@@ -3246,7 +3246,7 @@ Respon HANYA dalam format JSON valid:
                          pageTitle.includes("Google Docs") ||
                          pageUrl.includes("word.office.com");
 
-      const userExplicitDocs = /(?:google\s+docs?|docs\.new|di docs|ke docs|dalam.*docs|google\s+dokumen|di dokumen|ke dokumen|dalam.*dokumen|lembar kerja)/i.test(userPrompt);
+      const userExplicitDocs = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|ke|di|dalam|pada|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen)/i.test(userPrompt);
       const userExplicitSheets = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|buatkan spreadsheet)/i.test(userPrompt);
       const isDocsTarget = userExplicitDocs || isDocsSite;
 
@@ -3272,9 +3272,12 @@ Respon HANYA dalam format JSON valid:
 
       const isProductResearch = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isGeneralTableTask && !isSocialThread && /(?:riset produk|laptop|harga|rekomendasi produk|komparasi|spesifikasi|cari produk|tokopedia|shopee|produk)/i.test(userPrompt);
 
-      // 4. isDocsArticleTask: jika tujuannya Google Docs dan meminta artikel/berita/top N/copywriting
-      const isDocsArticleTask = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && isDocsTarget && (
-        isSocialCopywritingForDocs || /(?:artikel|tulis|buatkan|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt)
+      // 4. isDocsArticleTask: jika tujuannya Google Docs dan meminta pembuatan dokumen/tulisan/pembahasan/analisis/makna/rangkuman
+      const isDocsArticleTask = !isSpreadsheetTask && !isDocsTableTask && isDocsTarget && (
+        isSocialCopywritingForDocs ||
+        isSummarize ||
+        /(?:artikel|tulis|buatkan|buat|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat|jelaskan|makna|simpan|isi|masukkan|rangkum|ringkas|ulas|bahas|analisis|catat|paparkan|video)/i.test(userPrompt) ||
+        userExplicitDocs
       );
 
       const isArticle = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isDocsArticleTask && !isGeneralTableTask && !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt);
@@ -3299,28 +3302,6 @@ PEDOMAN KETAT TABEL DOKUMEN GOOGLE DOCS:
    - Sertakan baris Total / Rata-rata di bagian paling bawah jika relevan dengan metrik numerik.
 2. Sertakan judul dokumen berbobot di baris pertama (# Judul Dokumen).
 3. Berikan pengantar singkat sebelum tabel dan ringkasan eksekutif serta analisis mendalam (1-2 paragraf) setelah tabel yang membedah wawasan, tren, dan faktor penggerak dari data tersebut.`;
-      } else if (isDocsArticleTask) {
-        const paragraphMatch = userPrompt.match(/(?:tulis|buatkan|buat|ketik|isi)\s+(\d+)\s+paragraf/i);
-        const paragraphCount = paragraphMatch ? parseInt(paragraphMatch[1], 10) : null;
-
-        promptPayload = `Bertindaklah sebagai MASTER JOURNALIST & PRINCIPAL ESSAYIST KELAS DUNIA (Standar Publikasi Dokumen Resmi Google Docs).
-
-[PERINTAH & TOPIK]:
-${userPrompt}
-
-[REFERENSI DARI WEB / TAB TERLAMPIR]:
-Judul: ${pageTitle} | URL: ${pageUrl}
-${cleanText.substring(0, 4500) || "(Gunakan instruksi pengguna sebagai referensi)"}
-
-PEDOMAN KETAT PENULISAN DOKUMEN GOOGLE DOCS:
-1. TULISKAN KONTEN / ARTIKEL LENGKAP UTUH yang langsung siap dipublikasikan ke lembar kerja Google Docs.
-2. DILARANG KERAS memberikan instruksi manual atau panduan (seperti "Buka Google Docs...", "Langkah 1:...", dll.). LANGSUNG TULISKAN KONTEN ARTIKEL/BERITANYA DARI DATA REFERENSI!
-3. Format dokumen:
-   - Judul Dokumen yang Otoritatif di baris pertama (# Judul Berita / Artikel)
-   - Lead / Paragraf pengantar
-   - Rincian butir-butir utama (contoh: ## 1. Judul Berita, dengan 2-3 paragraf ulasan tajam dan fakta pendukung dari data web referensi)
-   - Analisis implikasi dan kesimpulan
-4. Gaya bahasa: Tajam, bernas, berwawasan mendalam, dan bebas klise robotik AI.${paragraphCount ? `\n5. Pengguna meminta tepat ${paragraphCount} paragraf: Patuhi secara presisi!` : ""}`;
       } else if (isSpreadsheetTask) {
 	        promptPayload = `Bertindaklah sebagai MASTER SPREADSHEET & FINANCIAL DATA SCIENTIST EXPERT (Standar Senior Modeler & Excel Specialist).
 
@@ -3454,27 +3435,27 @@ PEDOMAN FORMAT DOKUMEN GOOGLE DOCS (SUPER RAPI & COPYWRITING EXPERT STANDAR INTE
 3. GAYA BAHASA: Menggunakan prinsip copywriting modern AIDA (Attention, Interest, Desire, Action), diksi mengalir alami, tajam, bernas, dan bebas klise robotik AI.
 4. ATURAN PENULISAN: DILARANG KERAS MENGGUNAKAN SIMBOL BLOCKQUOTE (>) ATAU (>>) DI AWAL BARIS! Format dokumen Google Docs harus bersih tanpa karakter '>'. Tuliskan langsung sebagai teks biasa, subjudul (# / ## / ###), atau poin (• / -).`;
         } else {
-          const paragraphMatch = userPrompt.match(/(?:tulis|buatkan|buat|ketik|isi)\s+(\d+)\s+paragraf/i);
+          const paragraphMatch = userPrompt.match(/(?:tulis|buatkan|buat|ketik|isi|bahas)\s+(\d+)\s+paragraf/i) || userPrompt.match(/(\d+)\s+paragraf/i);
           const paragraphCount = paragraphMatch ? parseInt(paragraphMatch[1], 10) : null;
 
-          promptPayload = `Bertindaklah sebagai JURNALIS PROFESIONAL & EDITOR KONTEN DOKUMEN GOOGLE DOCS.
+          promptPayload = `Bertindaklah sebagai JURNALIS PROFESIONAL & EDITOR KONTEN DOKUMEN GOOGLE DOCS (Standar Publikasi Dokumen Resmi).
 
 [PERINTAH & TOPIK DARI PENGGUNA]:
 ${userPrompt}
 
 [REFERENSI SUMBER DARI WEB / TAB TERLAMPIR]:
 Judul: ${pageTitle} | URL: ${pageUrl}
-${cleanText.substring(0, 4500) || "(Gunakan instruksi pengguna sebagai referensi)"}
+${cleanText.substring(0, 5000) || "(Gunakan instruksi pengguna sebagai referensi)"}
 
 PEDOMAN KETAT PENULISAN DOKUMEN GOOGLE DOCS:
-1. TULISKAN KONTEN SESUAI PERMINTAAN SECARA MENDALAM, MENARIK, DAN FAKTUAL (Jika diminta 5 berita terviral, sajikan 5 berita terpopuler/terviral secara lengkap dengan ulasan faktual dan gaya bahasa jurnalistik menarik!).
-2. DILARANG KERAS memberikan instruksi manual atau panduan (seperti "Buka Google Docs...", "Langkah 1:...", dll.). LANGSUNG TULISKAN KONTEN ARTIKEL/BERITANYA DARI DATA REFERENSI!
+1. TULISKAN KONTEN SESUAI PERMINTAAN SECARA MENDALAM, MENARIK, DAN FAKTUAL (Jelaskan makna, fakta, atau analisis secara lengkap dan komprehensif!).
+2. DILARANG KERAS memberikan instruksi manual atau panduan (seperti "Buka Google Docs...", "Langkah 1:...", dll.). LANGSUNG TULISKAN KONTEN DOKUMEN / PEMBAHASANNYA DARI DATA REFERENSI!
 3. DILARANG membuat format briefing militer/intelijen kecuali pengguna secara eksplisit memintanya.
 4. JANGAN menyertakan tabel Markdown jika pengguna tidak meminta tabel.
 5. Format dokumen yang rapi:
    - Judul Dokumen di baris pertama (# Judul)
    - Lead / Paragraf pengantar
-   - Rincian 5 berita / butir pembahasan utama (## 1. Judul Berita, ## 2. Judul Berita, dst. dengan paragraf ulasan padat)
+   - Rincian butir-butir pembahasan utama (fakta, makna, pesan moral, atau poin analisis penting dari video/web referensi)
    - Kesimpulan atau penutup yang relevan
 6. Gaya bahasa: Mengalir alami, tajam, bernas, dan bebas klise robotik AI.
 7. DILARANG KERAS MENGGUNAKAN SIMBOL BLOCKQUOTE (>) DI AWAL BARIS! Tuliskan seluruh teks dan butir secara langsung tanpa karakter '>'.${paragraphCount ? `\n8. Pengguna meminta tepat ${paragraphCount} paragraf: Patuhi secara presisi!` : ""}`;
@@ -3620,7 +3601,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         }
       }
 
-      const isDocsOutput = isDocsTableTask || isDocsArticleTask || (isDocsTarget && (isArticle || isDocsTableTask));
+      const isDocsOutput = isDocsTableTask || isDocsArticleTask || (isDocsTarget && !isSpreadsheetTask);
       const artType = (isSpreadsheetTask || isGeneralTableTask || isProductResearch) ? "table" : (isSocialThread ? "social" : ((isArticle || isDocsOutput) ? "doc" : "text"));
       const artTitle = (isSpreadsheetTask || isGeneralTableTask || isProductResearch)
         ? `Tabel-${(userPrompt || "Data").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
@@ -3943,19 +3924,32 @@ ATURAN KETAT:
         }
       }
 
-			      // ══ FAST PATH FOR END-TO-END AUTOMATIONS (Spreadsheet, Email, & Social) ══
-			      const isSpreadsheetGoal = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(goal);
-			      if (isSpreadsheetGoal) {
-			        appendLog("📊 Mengalihkan ke Spreadsheet Automation Engine...");
-			        setAgentRunning(false);
-			        if (activeTask) {
-			          activeTask.status = "COMPLETED";
-			          clearPersistedTask();
-			          activeTask = null;
-			        }
-			        await runAnalysisFlow(goal, contextSources);
-			        return;
-			      }
+				      // ══ FAST PATH FOR END-TO-END AUTOMATIONS (Spreadsheet, Docs, Email, & Social) ══
+				      const isDocsGoal = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|ke|di|dalam|pada|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen)/i.test(goal);
+				      if (isDocsGoal && !/(?:spreadsheet|sheets\.new|google sheets?)/i.test(goal)) {
+				        appendLog("📄 Mengalihkan ke Document Writing Engine (Google Docs)...");
+				        setAgentRunning(false);
+				        if (activeTask) {
+				          activeTask.status = "COMPLETED";
+				          clearPersistedTask();
+				          activeTask = null;
+				        }
+				        await runAnalysisFlow(goal, contextSources);
+				        return;
+				      }
+
+				      const isSpreadsheetGoal = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(goal);
+				      if (isSpreadsheetGoal) {
+				        appendLog("📊 Mengalihkan ke Spreadsheet Automation Engine...");
+				        setAgentRunning(false);
+				        if (activeTask) {
+				          activeTask.status = "COMPLETED";
+				          clearPersistedTask();
+				          activeTask = null;
+				        }
+				        await runAnalysisFlow(goal, contextSources);
+				        return;
+				      }
 
 	      // ══ FAST PATH FOR DIRECT NAVIGATION (Single clean step, no noisy ReAct loops) ══
 	      const directNavRegex = /^(?:tolong\s+|mohon\s+)?(?:buka|kunjungi|open|go\s*to|akses)\s+(?:website\s+|web\s+|situs\s+|halaman\s+|url\s+)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?|https?:\/\/[^\s]+)\s*$/i;
