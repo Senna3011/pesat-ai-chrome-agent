@@ -2037,7 +2037,7 @@
     }
 
     // ── Dedicated Google Docs Typing & Clipboard Injection Handler ──
-    async function handleGoogleDocsTyping(text) {
+    async function handleGoogleDocsTyping(text, actionData = {}) {
       const cleanText = String(text || "").trim();
       if (!cleanText) {
         return { success: false, error: "Teks pengetikan kosong.", errorType: "TOOL_INVALID_ARGUMENT" };
@@ -2089,6 +2089,21 @@
       }
 
       const targetElement = innerTextarea || document.activeElement || iframe || editorCanvas;
+
+      // Jika mode replace/ganti isi dokumen: pilih seluruh isi dokumen dan bersihkan sebelum menulis
+      if (actionData && actionData.replace) {
+        try {
+          const targetForSelect = innerTextarea || innerDoc || iframe || editorCanvas || document.body;
+          targetForSelect.dispatchEvent(new KeyboardEvent("keydown", { key: "a", code: "KeyA", keyCode: 65, which: 65, ctrlKey: !isMac, metaKey: isMac, bubbles: true }));
+          if (innerDoc) innerDoc.execCommand("selectAll", false, null);
+          document.execCommand("selectAll", false, null);
+
+          targetForSelect.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace", code: "Backspace", keyCode: 8, which: 8, bubbles: true }));
+          if (innerDoc) innerDoc.execCommand("delete", false, null);
+          document.execCommand("delete", false, null);
+          await new Promise(r => setTimeout(r, 60));
+        } catch (_) {}
+      }
 
       const { plain: cleanPlain, html: cleanHtml } = convertMarkdownToRichDoc(cleanText);
 
@@ -2654,7 +2669,7 @@
 
       const isGoogleDocs = window.location.hostname.includes("docs.google.com");
       if (isGoogleDocs) {
-        return await handleGoogleDocsTyping(text);
+        return await handleGoogleDocsTyping(text, actionData);
       }
 
       const { plain: cleanPlain, html: cleanHtml } = convertMarkdownToRichDoc(text);
@@ -2946,7 +2961,7 @@
         // Khusus Google Docs: alihkan ke dedicated Google Docs Typing Handler
         if (window.location.hostname.includes("docs.google.com")) {
           restoreOutline();
-          return await handleGoogleDocsTyping(textToFill);
+          return await handleGoogleDocsTyping(textToFill, actionData);
         }
 
         targetEl.focus();
