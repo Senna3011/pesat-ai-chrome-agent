@@ -56,6 +56,9 @@
             <polyline points="12 6 12 12 16 14"></polyline>
           </svg>
         </button>
+        <button class="icon-btn" id="btnMemory" title="Memori & Preferensi AI (🧠)">
+          <span style="font-size: 15px;">🧠</span>
+        </button>
         <button class="icon-btn" id="btnSettings" title="Pengaturan API PesatRouter">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"></circle>
@@ -82,6 +85,67 @@
       <div class="drawer-footer">
         <button class="btn btn-secondary-pill btn-full" id="btnExportHistory" style="margin-bottom:10px;">📥 Ekspor Riwayat</button>
         <button class="btn btn-danger-link" id="btnClearHistory">Hapus Semua Riwayat</button>
+      </div>
+    </div>
+
+    <!-- Memory Drawer (Slide-out panel) -->
+    <div class="history-drawer hidden" id="memoryDrawer">
+      <div class="drawer-header">
+        <h3>🧠 Memori & Preferensi AI</h3>
+        <button class="close-btn" id="btnCloseMemory">✕</button>
+      </div>
+      <div class="memory-filter-row">
+        <button class="memory-filter-tab active" data-category="all">Semua</button>
+        <button class="memory-filter-tab" data-category="profile">Profil</button>
+        <button class="memory-filter-tab" data-category="preferences">Preferensi</button>
+        <button class="memory-filter-tab" data-category="guardrails">Pantangan</button>
+        <button class="memory-filter-tab" data-category="skills">Skill Situs</button>
+      </div>
+      <!-- Memory Guide Toggle & Card -->
+      <div class="memory-guide-wrapper">
+        <button type="button" class="memory-guide-toggle" id="btnToggleMemoryGuide">
+          <span>💡 Panduan Cara Mengisi Memori</span>
+          <span id="memoryGuideArrow">▼</span>
+        </button>
+        <div class="memory-guide-content hidden" id="memoryGuideContent">
+          <div class="memory-guide-row">
+            <span class="guide-badge badge-profile">Profil</span>
+            <span class="guide-desc">Fakta diri/usaha. Contoh: <code>Saya pemilik bengkel di BSD</code></span>
+          </div>
+          <div class="memory-guide-row">
+            <span class="guide-badge badge-preferences">Preferensi</span>
+            <span class="guide-desc">Gaya jawaban. Contoh: <code>Jawaban selalu dalam tabel Markdown</code></span>
+          </div>
+          <div class="memory-guide-row">
+            <span class="guide-badge badge-guardrails">Pantangan</span>
+            <span class="guide-desc">Hal dilarang. Contoh: <code>Jangan gunakan kata pembuka klise</code></span>
+          </div>
+          <div class="memory-guide-row">
+            <span class="guide-badge badge-skills">Skill Situs</span>
+            <span class="guide-desc">Trik situs. Contoh: <code>tokopedia.com: Urutkan harga terendah</code></span>
+          </div>
+          <div class="memory-guide-tip">
+            ✨ <strong>Tips:</strong> Bisa juga ketik langsung di chat: <code>Ingat bahwa...</code> atau <code>/ingat [aturan]</code>.
+          </div>
+        </div>
+      </div>
+      <div class="memory-add-box">
+        <div class="memory-input-row">
+          <select id="memoryCategorySelect" class="memory-cat-select">
+            <option value="preferences">Preferensi</option>
+            <option value="profile">Profil</option>
+            <option value="guardrails">Pantangan</option>
+            <option value="skills">Skill Situs</option>
+          </select>
+          <input type="text" id="memoryInputText" class="memory-input-field" placeholder="Ketik aturan baru..." />
+          <button type="button" id="btnAddMemory" class="btn-memory-add" title="Tambah">+</button>
+        </div>
+      </div>
+      <div class="session-list" id="memoryList">
+        <div class="history-empty" id="memoryEmptyState">Belum ada memori atau aturan tersimpan.</div>
+      </div>
+      <div class="drawer-footer">
+        <button class="btn btn-danger-link" id="btnClearMemory">Hapus Semua Memori</button>
       </div>
     </div>
 
@@ -549,6 +613,7 @@
   <script src="../skills/gworkspace-mcp.js"></script>
   <script src="../skills/doc-export.js"></script>
   <script src="../skills/skill-registry.js"></script>
+  <script src="../memory-engine.js"></script>
   <script src="../ai-engine.js"></script>
   <script src="sidepanel.js"></script>
 </body>

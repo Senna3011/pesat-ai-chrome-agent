@@ -22,6 +22,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const btnNewChat = document.getElementById("btnNewChat");
   const btnHistory = document.getElementById("btnHistory");
+  const btnMemory = document.getElementById("btnMemory");
   const btnSettings = document.getElementById("btnSettings");
 
   const historyDrawer = document.getElementById("historyDrawer");
@@ -29,6 +30,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   const btnDrawerNewChat = document.getElementById("btnDrawerNewChat");
   const sessionList = document.getElementById("sessionList");
   const btnClearHistory = document.getElementById("btnClearHistory");
+
+  const memoryDrawer = document.getElementById("memoryDrawer");
+  const btnCloseMemory = document.getElementById("btnCloseMemory");
+  const memoryList = document.getElementById("memoryList");
+  const memoryCategorySelect = document.getElementById("memoryCategorySelect");
+  const memoryInputText = document.getElementById("memoryInputText");
+  const btnAddMemory = document.getElementById("btnAddMemory");
+  const btnClearMemory = document.getElementById("btnClearMemory");
 
   const settingsPanel = document.getElementById("settingsPanel");
   const btnCloseSettings = document.getElementById("btnCloseSettings");
@@ -410,6 +419,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     saveSessions();
     renderCurrentSession();
     historyDrawer.classList.add("hidden");
+    if (memoryDrawer) memoryDrawer.classList.add("hidden");
+    if (settingsPanel) settingsPanel.classList.add("hidden");
 
     // Reset prompt input UX
     if (promptInput) {
@@ -3064,6 +3075,14 @@ Respon HANYA dalam format JSON valid:
       return;
     }
 
+    // Phase 2: Deteksi Memori Eksplisit Pengguna ("Ingat bahwa...", "/ingat", "Saya adalah...", "Jangan...")
+    try {
+      const savedMem = await globalThis.PesatMemoryEngine?.detectAndSaveExplicitMemory?.(userPrompt);
+      if (savedMem) {
+        appendLog(`🧠 Memori tersimpan: "${savedMem.text}" (${savedMem.category})`);
+      }
+    } catch (_) {}
+
     const contextSourcesToSend = [...attachedContextSources];
     attachedContextSources = [];
     renderComposerChips();
@@ -5038,6 +5057,13 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     refreshTaskCard();
 
     const isSuccess = activeTask.status === "DONE";
+    if (isSuccess && activeTask.currentUrl && activeTask.goal) {
+      try {
+        const lastAction = activeTask.history?.[activeTask.history.length - 1];
+        const actionNote = lastAction?.message || "Alur navigasi berhasil diselesaikan";
+        await globalThis.PesatMemoryEngine?.recordLearnedSkill?.(activeTask.currentUrl, activeTask.goal, actionNote);
+      } catch (_) {}
+    }
     const isCancelled = activeTask.status === "CANCELLED";
     const heading = isSuccess ? "✅ **Selesai**" : (isCancelled ? "⏹️ **Dihentikan**" : "⚠️ **Belum selesai**");
     const resultText = String(message || (isSuccess ? "Tugas selesai." : "Tugas belum dapat diselesaikan.")).trim();
@@ -5723,11 +5749,20 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   // ═══════════════════════════════════════════════════
   // HEADER & DRAWERS & EXPORT
   // ═══════════════════════════════════════════════════
-  btnNewChat.addEventListener("click", () => createNewSession());
+  btnNewChat.addEventListener("click", () => {
+    historyDrawer?.classList.add("hidden");
+    memoryDrawer?.classList.add("hidden");
+    settingsPanel?.classList.add("hidden");
+    createNewSession();
+  });
   btnDrawerNewChat.addEventListener("click", () => createNewSession());
 
   btnHistory.addEventListener("click", () => {
-    historyDrawer.classList.toggle("hidden");
+    const isHidden = historyDrawer.classList.toggle("hidden");
+    if (!isHidden) {
+      memoryDrawer?.classList.add("hidden");
+      settingsPanel?.classList.add("hidden");
+    }
   });
   btnCloseHistory.addEventListener("click", () => {
     historyDrawer.classList.add("hidden");
@@ -5740,9 +5775,169 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   });
 
   btnSettings.addEventListener("click", () => {
-    settingsPanel.classList.toggle("hidden");
-    refreshGoogleStatus();
+    const isHidden = settingsPanel.classList.toggle("hidden");
+    if (!isHidden) {
+      historyDrawer?.classList.add("hidden");
+      memoryDrawer?.classList.add("hidden");
+      refreshGoogleStatus();
+    }
   });
+
+  // ── Memory Drawer Management (Phase 2) ──
+  let activeMemoryCategory = "all";
+
+  async function renderMemoryList() {
+    if (!memoryList) return;
+    await globalThis.PesatMemoryEngine?.init?.();
+    const all = globalThis.PesatMemoryEngine?.getAll?.() || { profile: [], preferences: [], guardrails: [], skills: [] };
+
+    let items = [];
+    if (activeMemoryCategory === "all") {
+      items = [
+        ...all.profile.map(i => ({ ...i, category: "profile" })),
+        ...all.preferences.map(i => ({ ...i, category: "preferences" })),
+        ...all.guardrails.map(i => ({ ...i, category: "guardrails" })),
+        ...all.skills.map(i => ({ ...i, category: "skills" }))
+      ];
+    } else {
+      items = (all[activeMemoryCategory] || []).map(i => ({ ...i, category: activeMemoryCategory }));
+    }
+
+    items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    if (items.length === 0) {
+      memoryList.innerHTML = `<div class="history-empty" id="memoryEmptyState">Belum ada memori untuk kategori ini.</div>`;
+      return;
+    }
+
+    const badgeLabels = {
+      profile: "Profil",
+      preferences: "Preferensi",
+      guardrails: "Pantangan",
+      skills: "Skill Situs"
+    };
+
+    memoryList.innerHTML = items.map(item => `
+      <div class="memory-card" data-id="${item.id}">
+        <span class="memory-badge badge-${item.category}">${badgeLabels[item.category] || item.category}</span>
+        <div class="memory-content">
+          <div class="memory-text">${escapeHtml(item.text)}</div>
+          ${item.domain ? `<div class="memory-meta">🌐 Domain: ${escapeHtml(item.domain)}</div>` : ""}
+        </div>
+        <button type="button" class="memory-del-btn" data-id="${item.id}" title="Hapus memori">✕</button>
+      </div>
+    `).join("");
+
+    memoryList.querySelectorAll(".memory-del-btn").forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute("data-id");
+        if (id) {
+          await globalThis.PesatMemoryEngine?.remove?.(id);
+          renderMemoryList();
+        }
+      };
+    });
+  }
+
+  if (btnMemory && memoryDrawer) {
+    btnMemory.addEventListener("click", () => {
+      const isHidden = memoryDrawer.classList.toggle("hidden");
+      if (!isHidden) {
+        historyDrawer?.classList.add("hidden");
+        settingsPanel?.classList.add("hidden");
+        renderMemoryList();
+      }
+    });
+  }
+
+  if (btnCloseMemory && memoryDrawer) {
+    btnCloseMemory.addEventListener("click", () => {
+      memoryDrawer.classList.add("hidden");
+    });
+  }
+
+  document.querySelectorAll(".memory-filter-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".memory-filter-tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      activeMemoryCategory = tab.getAttribute("data-category") || "all";
+      renderMemoryList();
+    });
+  });
+
+  const btnToggleMemoryGuide = document.getElementById("btnToggleMemoryGuide");
+  const memoryGuideContent = document.getElementById("memoryGuideContent");
+  const memoryGuideArrow = document.getElementById("memoryGuideArrow");
+
+  if (btnToggleMemoryGuide && memoryGuideContent) {
+    btnToggleMemoryGuide.addEventListener("click", () => {
+      const isHidden = memoryGuideContent.classList.toggle("hidden");
+      if (memoryGuideArrow) {
+        memoryGuideArrow.textContent = isHidden ? "▼" : "▲";
+      }
+    });
+  }
+
+  const categoryPlaceholders = {
+    preferences: "Contoh: Jawaban selalu ringkas dalam tabel Markdown",
+    profile: "Contoh: Saya pemilik bengkel di BSD",
+    guardrails: "Contoh: Jangan gunakan kata klise pembuka",
+    skills: "Contoh: tokopedia.com: Urutkan harga terendah"
+  };
+
+  if (memoryCategorySelect && memoryInputText) {
+    memoryCategorySelect.addEventListener("change", () => {
+      const cat = memoryCategorySelect.value;
+      memoryInputText.placeholder = categoryPlaceholders[cat] || "Ketik aturan baru...";
+    });
+  }
+
+  if (btnAddMemory && memoryInputText) {
+    const handleAdd = async () => {
+      const val = memoryInputText.value.trim();
+      const cat = memoryCategorySelect ? memoryCategorySelect.value : "preferences";
+      if (!val) {
+        memoryInputText.focus();
+        memoryInputText.classList.add("input-shake");
+        const prevPlaceholder = memoryInputText.placeholder;
+        memoryInputText.placeholder = "⚠️ Ketik teks aturan di sini dulu!";
+        setTimeout(() => {
+          memoryInputText.classList.remove("input-shake");
+          memoryInputText.placeholder = prevPlaceholder || "Ketik aturan baru...";
+        }, 2000);
+        return;
+      }
+      try {
+        btnAddMemory.style.transform = "scale(0.9)";
+        await globalThis.PesatMemoryEngine?.add?.(cat, val);
+        memoryInputText.value = "";
+        await renderMemoryList();
+      } finally {
+        setTimeout(() => { btnAddMemory.style.transform = ""; }, 150);
+      }
+    };
+    btnAddMemory.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handleAdd();
+    });
+    memoryInputText.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleAdd();
+      }
+    });
+  }
+
+  if (btnClearMemory) {
+    btnClearMemory.addEventListener("click", async () => {
+      if (confirm("Hapus semua memori dan aturan tersimpan?")) {
+        await globalThis.PesatMemoryEngine?.clear?.();
+        renderMemoryList();
+      }
+    });
+  }
 
   const composerModelDropdown = document.getElementById("composerModelDropdown");
   const modelDropdownList = document.getElementById("modelDropdownList");
@@ -5834,6 +6029,9 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       }
       if (historyDrawer && !historyDrawer.classList.contains("hidden")) {
         historyDrawer.classList.add("hidden");
+      }
+      if (memoryDrawer && !memoryDrawer.classList.contains("hidden")) {
+        memoryDrawer.classList.add("hidden");
       }
     }
   });

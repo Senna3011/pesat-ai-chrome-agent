@@ -319,4 +319,30 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
       expect(parseFloat(fontSize)).toBeGreaterThanOrEqual(14);
     }
   });
+
+  test('should open, validate empty rule, add custom rule, and close Memory Drawer', async ({ page }) => {
+    const btnMemory = page.locator('#btnMemory');
+    const memoryDrawer = page.locator('#memoryDrawer');
+
+    // Open Memory Drawer
+    await btnMemory.click();
+    await expect(memoryDrawer).toBeVisible();
+
+    // Click + with empty input
+    const input = page.locator('#memoryInputText');
+    await page.locator('#btnAddMemory').click();
+    await expect(input).toHaveClass(/input-shake/);
+
+    // Add a test rule
+    await input.fill('Gunakan bahasa formal dan tabel');
+    await page.locator('#btnAddMemory').click();
+
+    // Verify card is rendered
+    await expect(page.locator('.memory-card')).toBeVisible();
+    await expect(page.locator('.memory-text')).toContainText('Gunakan bahasa formal dan tabel');
+
+    // Close Memory Drawer
+    await page.locator('#btnCloseMemory').click();
+    await expect(memoryDrawer).not.toBeVisible();
+  });
 });
