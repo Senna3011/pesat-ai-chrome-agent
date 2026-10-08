@@ -60,13 +60,14 @@
       };
     },
 
-    createContextSource({ id, type, title, url, content, metadata = {} }) {
+    createContextSource({ id, type, title, url, content, dataUrl, metadata = {} }) {
       return {
         id: id || `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         type: type || "custom",
         title: title || "Konteks",
         url: url || "",
         content: content || "",
+        dataUrl: dataUrl || metadata?.dataUrl || null,
         metadata: metadata,
         addedAt: new Date().toISOString()
       };

@@ -510,7 +510,7 @@ PANDUAN ANTI-LOOPING & GUARDRAILS:
     }
 
     const choice = data?.choices?.[0] || {};
-    const reply = choice?.message?.content || data?.reply || rawText;
+    const reply = choice?.message?.content || choice?.message?.reasoning_content || data?.reply || rawText;
     const toolCalls = choice?.message?.tool_calls || null;
     const usage = data?.usage || {
       prompt_tokens: Math.ceil((userPrompt.length + JSON.stringify(conversationHistory).length) / 4),

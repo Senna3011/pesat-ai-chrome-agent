@@ -20,8 +20,8 @@
     <div class="drop-overlay hidden" id="dropOverlay">
       <div class="drop-overlay-box">
         <div style="font-size:36px;margin-bottom:8px;">📁</div>
-        <div style="font-size:14.5px;font-weight:700;color:#38bdf8;">Lepaskan file di sini</div>
-        <div style="font-size:14px;color:#94a3b8;margin-top:4px;">CSV, XLSX, PDF, DOCX, TXT, JSON, Gambar</div>
+        <div style="font-size:14.5px;font-weight:700;color:var(--text-accent);">Lepaskan file di sini</div>
+        <div style="font-size:14px;color:var(--text-secondary);margin-top:4px;">CSV, XLSX, PDF, DOCX, TXT, JSON, Gambar</div>
       </div>
     </div>
 
@@ -274,7 +274,7 @@
           </div>
 
           <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size:14px;color:#94a3b8;font-weight:600;">Panduan Google Cloud Console:</span>
+            <span style="font-size:14px;color:var(--text-secondary);font-weight:600;">Panduan Google Cloud Console:</span>
             <button type="button" class="btn-guide-toggle" id="btnToggleGoogleGuide">📖 Panduan</button>
           </div>
 
@@ -507,20 +507,20 @@
       <div class="drawer-header" style="padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.08);">
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size: 18px;">🐞</span>
-          <h3 style="font-size: 15px; font-weight: 700; color: #f8fafc; margin: 0;">Laporkan Bug / Kendala</h3>
+          <h3 style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin: 0;">Laporkan Bug / Kendala</h3>
         </div>
         <button class="close-btn" id="btnCloseBugReport">✕</button>
       </div>
       <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;">
-        <label style="font-size:14px; color: #94a3b8; font-weight: 500;">Jelaskan kendala atau perilaku yang dialami:</label>
-        <textarea id="bugDescriptionInput" placeholder="Contoh: Saat mengisi formulir, tombol tidak terklik otomatis..." rows="4" style="width: 100%; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; padding: 10px; font-size:14px; resize: vertical; font-family: inherit; box-sizing: border-box; min-height: 70px;"></textarea>
+        <label style="font-size:14px; color: var(--text-secondary); font-weight: 500;">Jelaskan kendala atau perilaku yang dialami:</label>
+        <textarea id="bugDescriptionInput" placeholder="Contoh: Saat mengisi formulir, tombol tidak terklik otomatis..." rows="4" style="width: 100%; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); padding: 10px; font-size:14px; resize: vertical; font-family: inherit; box-sizing: border-box; min-height: 70px;"></textarea>
 
         <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 2px;">
-          <label style="display: flex; align-items: center; gap: 8px; font-size:14px; color: #cbd5e1; cursor: pointer;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size:14px; color: var(--text-secondary); cursor: pointer;">
             <input type="checkbox" id="bugIncludeLogs" checked style="accent-color: #38bdf8;" />
             <span>Lampirkan riwayat log aksi terakhir</span>
           </label>
-          <label style="display: flex; align-items: center; gap: 8px; font-size:14px; color: #cbd5e1; cursor: pointer;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size:14px; color: var(--text-secondary); cursor: pointer;">
             <input type="checkbox" id="bugIncludeDom" checked style="accent-color: #38bdf8;" />
             <span>Lampirkan snapshot struktur DOM tab aktif</span>
           </label>

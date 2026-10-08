@@ -229,7 +229,7 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
       }
     },
 
-    async callLLMDirect({ phase, prompt, messages = [], taskState = null, domTree = "", config = {}, signal, useTools = true, isSummarize = false, onChunk = null }) {
+    async callLLMDirect({ phase, prompt, messages = [], taskState = null, domTree = "", config = {}, signal, useTools = true, isSummarize = false, onChunk = null, image = null }) {
       const promptText = prompt || "";
       const apiKey = (config.apiKey || "").trim();
       const model = (config.modelName || "").trim() || "pesat-flash";
@@ -276,7 +276,22 @@ Format respon HANYA berupa JSON valid:
       ];
 
       if (promptText && (!payloadMessages.length || payloadMessages[payloadMessages.length - 1].content !== promptText)) {
-        payloadMessages.push({ role: "user", content: promptText });
+        if (image) {
+          const imgUrl = typeof image === "string" ? image : (image.url || image.dataUrl);
+          if (imgUrl && typeof imgUrl === "string") {
+            payloadMessages.push({
+              role: "user",
+              content: [
+                { type: "text", text: promptText },
+                { type: "image_url", image_url: { url: imgUrl } }
+              ]
+            });
+          } else {
+            payloadMessages.push({ role: "user", content: promptText });
+          }
+        } else {
+          payloadMessages.push({ role: "user", content: promptText });
+        }
       }
 
       const maxTokens = Number(config.maxTokens || config.max_tokens) || 4096;
@@ -350,7 +365,9 @@ Format respon HANYA berupa JSON valid:
 
         const data = (typeof res === "object" && res !== null && !(res instanceof Response)) ? res : await res.json();
         const choice = data?.choices?.[0] || {};
-        const replyText = choice.message?.content || "";
+        const replyText = (choice.message?.content !== undefined && choice.message?.content !== null && choice.message?.content !== "")
+          ? choice.message.content
+          : (choice.message?.reasoning_content || data.reply || "");
         const usage = data.usage || {
           prompt_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length) / 4),
           completion_tokens: Math.ceil(replyText.length / 4),
@@ -364,7 +381,7 @@ Format respon HANYA berupa JSON valid:
         } catch (_) {}
 
         return {
-          message: choice.message || { role: "assistant", content: "" },
+          message: choice.message || { role: "assistant", content: replyText },
           reply: replyText,
           tool_calls: choice.message?.tool_calls || null,
           usage: usage

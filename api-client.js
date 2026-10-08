@@ -84,7 +84,8 @@
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
-    let accumulatedText = "";
+    let accumulatedContent = "";
+    let accumulatedReasoning = "";
     let buffer = "";
 
     try {
@@ -103,11 +104,19 @@
             const jsonStr = trimmed.slice(6);
             try {
               const data = JSON.parse(jsonStr);
-              const delta = data.choices?.[0]?.delta?.content || data.reply || "";
-              if (delta) {
-                accumulatedText += delta;
+              const choice = data.choices?.[0];
+              const contentDelta = choice?.delta?.content ?? data.reply;
+              const reasoningDelta = choice?.delta?.reasoning_content;
+
+              if (contentDelta !== undefined && contentDelta !== null && contentDelta !== "") {
+                accumulatedContent += contentDelta;
                 if (typeof onChunk === "function") {
-                  onChunk(delta, accumulatedText);
+                  onChunk(contentDelta, accumulatedContent);
+                }
+              } else if (reasoningDelta !== undefined && reasoningDelta !== null && reasoningDelta !== "") {
+                accumulatedReasoning += reasoningDelta;
+                if (!accumulatedContent && typeof onChunk === "function") {
+                  onChunk(reasoningDelta, accumulatedReasoning);
                 }
               }
             } catch (_) {}
@@ -118,7 +127,8 @@
       reader.releaseLock();
     }
 
-    return { reply: accumulatedText, success: true };
+    const finalReply = accumulatedContent.trim() ? accumulatedContent : accumulatedReasoning;
+    return { reply: finalReply, success: true };
   }
 
   const ApiClient = {

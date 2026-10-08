@@ -226,6 +226,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     // 2.5 Sanitize raw text to prevent DOM-based XSS injection
     s = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+    // 2.7 Ensure headings preceded by text have proper double newlines
+    s = s.replace(/([^\n\r])\s*(#{1,6}\s*)/g, "$1\n\n$2");
+
     // 3. Headers (h6 to h1, with optional leading whitespace)
     s = s.replace(/^\s*######\s+(.*$)/gim, "<h6>$1</h6>");
     s = s.replace(/^\s*#####\s+(.*$)/gim, "<h5>$1</h5>");
@@ -233,15 +236,29 @@ document.addEventListener("DOMContentLoaded", async () => {
     s = s.replace(/^\s*###\s+(.*$)/gim, "<h3>$1</h3>");
     s = s.replace(/^\s*##\s+(.*$)/gim, "<h2>$1</h2>");
     s = s.replace(/^\s*#\s+(.*$)/gim, "<h1>$1</h1>");
+    s = s.replace(/(?:^|\s)#{1,6}\s+/g, " ");
+
+    // 3.5 Renumber sequential ordered list items cleanly
+    const rawLines = s.split("\n");
+    let currentOlNum = 0;
+    for (let i = 0; i < rawLines.length; i++) {
+      const match = rawLines[i].match(/^(\s*)\d+[\.\)]\s+(.*)/);
+      if (match) {
+        currentOlNum++;
+        rawLines[i] = `${match[1]}${currentOlNum}. ${match[2]}`;
+      } else if (rawLines[i].trim().startsWith("<h") || rawLines[i].trim().startsWith("#")) {
+        currentOlNum = 0;
+      }
+    }
+    s = rawLines.join("\n");
 
     // 4. Unordered & Ordered lists
     s = s.replace(/^\s*[\*\-]\s+(.*$)/gim, "<li>$1</li>");
     s = s.replace(/(<li>.*<\/li>)/gim, "<ul>$1</ul>");
     s = s.replace(/<\/ul>\s*<ul>/g, "");
 
-    s = s.replace(/^\s*\d+\.\s+(.*$)/gim, "<oli>$1</oli>");
-    s = s.replace(/(<oli>.*<\/oli>)/gim, "<ol>$1</ol>");
-    s = s.replace(/<\/ol>\s*<ol>/g, "");
+    s = s.replace(/^\s*(\d+)[\.\)]\s+(.*$)/gim, '<ol start="$1"><oli>$2</oli></ol>');
+    s = s.replace(/<\/ol>\s*<ol[^>]*>/g, "");
     s = s.replace(/<oli>/g, "<li>").replace(/<\/oli>/g, "</li>");
 
     // 5. Bold & Italic
@@ -757,7 +774,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
         askHtml += `</div>`;
       } else if (msg.answered) {
-        askHtml += `<div style="font-size:14px;color:#34d399;margin-top:8px;">✔️ Dijawab: ${escapeHtml(msg.answered)}</div>`;
+        askHtml += `<div style="font-size:14px;color:var(--text-accent);margin-top:8px;">✔️ Dijawab: ${escapeHtml(msg.answered)}</div>`;
       }
       askHtml += `
           </div>
@@ -769,7 +786,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       let confHtml = `
         <div class="confirm-card">
           <div class="confirm-title">🛡️ Konfirmasi Diperlukan — Aksi Berisiko</div>
-          <div style="font-size:14px;color:#cbd5e1;margin-bottom:8px;">${escapeHtml(c.description || "Aksi berikut akan dieksekusi:")}</div>
+          <div style="font-size:14px;color:var(--text-secondary);margin-bottom:8px;">${escapeHtml(c.description || "Aksi berikut akan dieksekusi:")}</div>
           <div class="confirm-action-desc">${escapeHtml(c.detail || "")}</div>
       `;
       if (!c.resolved) {
@@ -781,7 +798,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           </div>
         `;
       } else {
-        confHtml += `<div style="font-size:14px;color:${c.approved ? "#34d399" : "#f87171"};">${c.approved ? "✔️ Disetujui pengguna" : "⛔ Ditolak pengguna"}</div>`;
+        confHtml += `<div style="font-size:14px;color:var(--text-primary);">${c.approved ? "✔️ Disetujui pengguna" : "⛔ Ditolak pengguna"}</div>`;
       }
       confHtml += `</div>`;
       contentHtml = confHtml;
@@ -894,7 +911,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             <div class="agent-card-body">
               <div>${escapeHtml(navigator.description || navigator.action)}</div>
               ${navigator.elementId ? `<span class="target-badge">Target: [${escapeHtml(String(navigator.elementId))}]</span>` : ''}
-              ${navigator.status ? `<div style="font-size:14px; color:#c7d2fe; margin-top:4px;">Status: ${escapeHtml(navigator.status)}</div>` : ''}
+              ${navigator.status ? `<div style="font-size:14px; color:var(--text-secondary); margin-top:4px;">Status: ${escapeHtml(navigator.status)}</div>` : ''}
               ${navigator.screenshot ? `<img class="screenshot-thumb" src="${navigator.screenshot}" alt="Bukti visual langkah" />` : ''}
             </div>
           </div>
@@ -1862,7 +1879,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           if (errText.includes("belum terpasang") || errText.includes("belum diisi")) {
             const detailsEl = document.querySelector(".advanced-google-details");
             if (detailsEl) detailsEl.open = true;
-            showGoogleAlert("info", "💡 <strong>Otomatisasi Tab Sudah Aktif (Tanpa Login):</strong><br>Anda dapat langsung meminta AI Agent membuka dan mengedit Google Sheets atau Docs Anda di tab browser Chrome tanpa login akun di sini.<br><br><small style='color:#94a3b8;'>Jika Anda ingin menghubungkan API latar belakang, masukkan Client ID pada menu Pengaturan Client ID di bawah.</small>");
+            showGoogleAlert("info", "💡 <strong>Otomatisasi Tab Sudah Aktif (Tanpa Login):</strong><br>Anda dapat langsung meminta AI Agent membuka dan mengedit Google Sheets atau Docs Anda di tab browser Chrome tanpa login akun di sini.<br><br><small style='color:var(--text-secondary);'>Jika Anda ingin menghubungkan API latar belakang, masukkan Client ID pada menu Pengaturan Client ID di bawah.</small>");
           } else {
             showGoogleAlert("error", `❌ ${errText}`);
           }
@@ -2158,7 +2175,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         prompt: promptText,
         messages: history,
         taskState: taskSummaryForLLM(),
-        image: image && visionEnabled && phase === "act" ? image : null,
+        image: image && visionEnabled ? image : null,
         capabilities: { google: googleConnected, vision: visionEnabled },
         config: {
           apiBaseUrl: getApiBaseUrl(),
@@ -2448,7 +2465,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   </div>
   <div class="plan-approval-sub">
     AI telah menyusun <strong>${planList.length} subtask</strong> untuk mencapai tujuan:
-    <div style="color:#cbd5e1; font-weight:600; margin-top:3px;">"${escapeHtml(goalText)}"</div>
+    <div style="color:var(--text-primary); font-weight:600; margin-top:3px;">"${escapeHtml(goalText)}"</div>
   </div>
   <div class="plan-approval-list">
     ${planItemsHtml}
@@ -2477,7 +2494,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (card) {
               const actionsRow = card.querySelector(".plan-approval-actions");
               if (actionsRow) {
-                actionsRow.innerHTML = `<span style="color:#10b981; font-size:14px; font-weight:600; display:flex; align-items:center; gap:6px;">✅ Rencana Disetujui — Memulai Eksekusi...</span>`;
+                actionsRow.innerHTML = `<span style="color:var(--text-primary); font-size:14px; font-weight:600; display:flex; align-items:center; gap:6px;">✅ Rencana Disetujui — Memulai Eksekusi...</span>`;
               }
             }
             if (planApprovalResolver) {
@@ -2492,7 +2509,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (card) {
               const actionsRow = card.querySelector(".plan-approval-actions");
               if (actionsRow) {
-                actionsRow.innerHTML = `<span style="color:#ef4444; font-size:14px; font-weight:600;">⛔ Rencana Dibatalkan</span>`;
+                actionsRow.innerHTML = `<span style="color:var(--text-primary); font-size:14px; font-weight:600;">⛔ Rencana Dibatalkan</span>`;
               }
             }
             if (planApprovalResolver) {
@@ -3151,10 +3168,14 @@ Respon HANYA dalam format JSON valid:
 
     const isDocsModificationIntent = isCurrentTabDocs && /(?:ganti|ubah|edit|perbarui|modifikasi|hapus|tulis|buat|tambahkan|isi|masukkan|top\s*\d+|perusahaan|artikel|paragraf|tabel)/i.test(userPrompt);
 
+    // Deteksi intent analisis komprehensif (analisa profil bisnis, website, review, audit, bedah, evaluasi)
+    const isAnalysisIntent = !isEmailAction && !isFormAction && /(?:^|\b)(?:analisa|analisis|analyze|analysis|audit|review|tinjau|bedah|evaluasi|periksa|cek|riset)\b/i.test(userPrompt);
+
     const isContentOrWriting = !isEmailAction && !isFormAction && (
       isSpreadsheetAction ||
       isDocsTarget ||
       isDocsModificationIntent ||
+      isAnalysisIntent ||
       hasTableCreation ||
       /(?:buatkan|tuliskan|tulis|buat|draft|ketik|isi|generate|ceritakan|cerita|bahas|ulas|jelaskan|paparkan|ganti|ubah|edit|perbarui|modifikasi)\s+(?:(?:\d+\s+)?(?:paragraf|kalimat|artikel|surat|konten|esai|tulisan|laporan|draf|copywriting|catatan|cerita|tabel|teori)|tentang|mengenai)/i.test(userPrompt) ||
       /(?:buatkan artikel|tulis artikel|buat artikel|artikel edukasi|buatkan draf artikel|buat draf artikel|surat penawaran|rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt) ||
@@ -3170,10 +3191,14 @@ Respon HANYA dalam format JSON valid:
       /(?:buka tab|buka x\.com|buka twitter|buka gmail|buka linkedin|posting ke|post ke|tweet ke|isi form|isi email|isi password)/i.test(userPrompt)
     ));
 
-    const isDirectAnalysisOnly = !isEmailAction && !isFormAction && (isContentOrWriting || (!hasPhysicalActionVerb && (
-      /(?:^(?:apa|apakah|siapa|bagaimana|mengapa|kenapa|dimana|berapa|kapan|jelaskan|terangkan|ceritakan|sebutkan|tolong jelaskan|info|informasi|what|who|how|why|where|when|which|is this|explain|tell me|ini apa|ini platform apa|ini website apa|halaman apa ini|bisakah|bisa)\b)/i.test(userPrompt) ||
-      /\?$/.test(userPrompt)
-    )));
+    const isDirectAnalysisOnly = !isEmailAction && !isFormAction && (
+      isAnalysisIntent ||
+      isContentOrWriting ||
+      (!hasPhysicalActionVerb && (
+        /(?:^(?:apa|apakah|siapa|bagaimana|mengapa|kenapa|dimana|berapa|kapan|jelaskan|terangkan|ceritakan|sebutkan|tolong jelaskan|info|informasi|what|who|how|why|where|when|which|is this|explain|tell me|ini apa|ini platform apa|ini website apa|halaman apa ini|bisakah|bisa)\b)/i.test(userPrompt) ||
+        /\?$/.test(userPrompt)
+      ))
+    );
 
     if (isDirectAnalysisOnly) {
       await runAnalysisFlow(userPrompt, contextSourcesToSend);
@@ -3223,14 +3248,21 @@ Respon HANYA dalam format JSON valid:
       } catch (_) {}
 
       // 0. Ekstraksi Dokumen / File Lampiran Pengguna
-      const attachedFiles = (contextSources || []).filter(s => s && (s.type === "File" || s.type === "Image" || s.type === "Download" || s.content || s.metadata?.extractedText || s.metadata?.content));
+      const attachedFiles = (contextSources || []).filter(s => s && (s.type === "File" || s.type === "Image" || s.type === "Download" || s.content || s.metadata?.extractedText || s.metadata?.content || s.dataUrl || s.metadata?.dataUrl));
       let fileContextBlock = "";
       if (attachedFiles.length > 0) {
         fileContextBlock = attachedFiles.map((f, idx) => {
           const content = f.content || f.metadata?.content || f.metadata?.extractedText || f.metadata?.fullText || "";
           return `[DOKUMEN TERLAMPIR #${idx + 1}: ${f.name || f.title || "File"} (${f.metadata?.sizeFormatted || f.type})]\n${content}`;
         }).join("\n\n");
-        appendLog(`📎 Mengikutsertakan ${attachedFiles.length} file terlampir ke dalam analisis: ${attachedFiles.map(f => f.name).join(", ")}`);
+        appendLog(`📎 Mengikutsertakan ${attachedFiles.length} file terlampir ke dalam analisis: ${attachedFiles.map(f => f.name || f.title).join(", ")}`);
+      }
+
+      // Deteksi gambar terlampir untuk analisis multimodal visual
+      const attachedImages = attachedFiles.filter(f => (f.type === "Image" || f.metadata?.fileType === "image" || /\.(png|jpe?g|webp|gif)$/i.test(f.name || f.title || "")) && (f.dataUrl || f.metadata?.dataUrl));
+      const primaryImage = attachedImages.length > 0 ? (attachedImages[0].dataUrl || attachedImages[0].metadata?.dataUrl) : null;
+      if (primaryImage) {
+        appendLog(`🖼️ Mempersiapkan gambar lampiran untuk analisis visual: ${attachedImages[0].name || attachedImages[0].title || "Gambar"}`);
       }
 
       // 1. Cek apakah ada referensi BrowserTab yang dilampirkan atau di-mention (@tab1, @tab2, dll.)
@@ -3321,6 +3353,8 @@ Respon HANYA dalam format JSON valid:
       );
 
       const isArticle = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isDocsArticleTask && !isGeneralTableTask && !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt);
+
+      const isBusinessOrPageAnalysis = !isSummarize && !isSeo && !isSecurity && !isDocsTarget && !isSpreadsheetTask && /(?:analisa|analisis|analyze|analysis|audit|review|tinjau|bedah|evaluasi|periksa|cek|riset|business profile|google business|profil bisnis|toko|kompetitor)\b/i.test(userPrompt);
 
       let promptPayload = "";
       if (isDocsTableTask) {
@@ -3593,20 +3627,71 @@ Format ringkasan dalam Markdown yang elegan:
 ### 💡 Kesimpulan & Tindak Lanjut
 (Penjelasan akhir yang aplikatif)`;
         }
+      } else if (isBusinessOrPageAnalysis) {
+        const fileHeading = attachedFiles.length > 0
+          ? `[DOKUMEN & FILE TERLAMPIR DARI PENGGUNA]:\n${fileContextBlock}\n\n`
+          : "";
+        const imageNotice = primaryImage
+          ? `\n[PANDUAN GAMBAR TERLAMPIR]:\nPengguna telah melampirkan gambar (${attachedImages.map(i => i.name || i.title || "Gambar").join(", ")}). Bacalah dan periksalah seluruh visual, teks, nama profil/toko, rating, ulasan, alamat, tombol, dan metrik yang tertera pada gambar secara detail untuk menyusun analisis ini.\n`
+          : "";
+
+        promptPayload = `Bertindaklah sebagai SENIOR BUSINESS & WEB INTELLIGENCE ANALYST.
+Lakukan analisis mendalam dan komprehensif terhadap entitas/halaman web/profil bisnis berikut sesuai instruksi pengguna.${imageNotice}
+
+${fileHeading}[KONTEKS HALAMAN / REFERENSI WEB]:
+Judul Halaman: ${pageTitle}
+URL Halaman: ${pageUrl}
+
+[KONTEN HALAMAN]:
+${cleanText.substring(0, 8000) || (primaryImage ? "(Informasi utama tertera pada gambar tangkapan layar terlampir)" : "(Data halaman web tidak tersedia, analisislah berdasarkan informasi yang tersedia)")}
+
+[INSTRUKSI KHUSUS PENGGUNA]:
+${userPrompt}
+
+	PEDOMAN PENYAJIAN LAPORAN:
+1. Langsung sajikan laporan final dimulai dari judul:
+### 🏢 Laporan Analisis: ${primaryImage ? (attachedImages[0].name || "Profil Bisnis") : pageTitle}
+
+2. Gunakan struktur bagian berikut:
+### 1. 📌 Ringkasan Profil & Identitas
+- **Nama Entitas / Bisnis**: (Nama bisnis/organisasi dari data/gambar)
+- **Kategori / Bidang Usaha**: (Bidang bisnis)
+- **Lokasi / Kontak**: (Alamat, kontak, jam operasional jika ada)
+- **Reputasi & Ulasan**: (Rating, jumlah ulasan/sentimen jika ada)
+
+### 2. ⭐ Kekuatan & Keunggulan Utama (Strengths)
+1. **(Kekuatan 1)**: (Penjelasan rinci)
+2. **(Kekuatan 2)**: (Penjelasan rinci)
+3. **(Kekuatan 3)**: (Penjelasan rinci)
+
+### 3. ⚠️ Evaluasi & Area Peningkatan (Weaknesses / Opportunities)
+1. **(Area 1)**: (Penjelasan rinci)
+2. **(Area 2)**: (Penjelasan rinci)
+3. **(Area 3)**: (Penjelasan rinci)
+
+### 4. 💡 Rekomendasi Strategis & Tindak Lanjut Konkret
+1. **(Rekomendasi 1)**: (Langkah praktis yang dapat langsung diterapkan)
+2. **(Rekomendasi 2)**: (Langkah praktis yang dapat langsung diterapkan)
+3. **(Rekomendasi 3)**: (Langkah praktis yang dapat langsung diterapkan)
+
+3. WAJIB gunakan penomoran urut yang benar (1, 2, 3...) pada setiap sub-poin, DILARANG mengulangi nomor yang sama (seperti 1, 1, 1). Dilarang menyertakan proses berpikir internal.`;
       } else {
         // Tanya Jawab / Pertanyaan Informasi umum / Analisis Dokumen
         const fileHeading = attachedFiles.length > 0
           ? `[DOKUMEN & FILE TERLAMPIR DARI PENGGUNA]:\n${fileContextBlock}\n\n`
           : "";
+        const imageNotice = primaryImage
+          ? `\n[PANDUAN GAMBAR TERLAMPIR]:\nPengguna telah melampirkan gambar (${attachedImages.map(i => i.name || i.title || "Gambar").join(", ")}). Perhatikan gambar tersebut dan jawab instruksi pengguna berdasarkan gambar terlampir.\n`
+          : "";
 
-        promptPayload = `Anda adalah asisten AI pintar berkemampuan analisis dokumen mendalam. Jawablah instruksi pengguna berikut dengan komprehensif, tepat, dan jelas berdasarkan data terlampir atau halaman web.
+        promptPayload = `Anda adalah asisten AI pintar berkemampuan analisis dokumen dan visual gambar mendalam. Jawablah instruksi pengguna berikut dengan komprehensif, tepat, dan jelas berdasarkan gambar terlampir, data terlampir, atau halaman web.${imageNotice}
 
 ${fileHeading}[KONTEKS HALAMAN WEB SAAT INI]
 Judul Halaman: ${pageTitle}
 URL Halaman: ${pageUrl}
 
 [KONTEN DOKUMEN / REFERENSI]:
-${cleanText.substring(0, 7500) || "(Tidak ada teks referensi tambahan; jawablah berdasarkan instruksi pengguna)"}
+${cleanText.substring(0, 7500) || (primaryImage ? "(Informasi utama tertera pada gambar tangkapan layar terlampir)" : "(Tidak ada teks referensi tambahan; jawablah berdasarkan instruksi pengguna)")}
 
 [INSTRUKSI / PERTANYAAN PENGGUNA]:
 ${userPrompt}
@@ -3640,7 +3725,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
 
       let aiReply;
       try {
-        aiReply = await callLLM("chat", promptPayload, { isSummarize: isSummarize, onChunk });
+        aiReply = await callLLM("chat", promptPayload, { image: primaryImage, isSummarize: isSummarize, onChunk });
       } finally {
         if (streamContainer && streamContainer.parentNode) {
           streamContainer.parentNode.removeChild(streamContainer);
@@ -4024,18 +4109,32 @@ ATURAN KETAT:
 					        return;
 					      }
 
-					      const isSpreadsheetGoal = isSheetsSiteGoal || /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(goal);
-					      if (isSpreadsheetGoal) {
-					        appendLog("📊 Mengalihkan ke Spreadsheet Automation Engine...");
-					        setAgentRunning(false);
-					        if (activeTask) {
-					          activeTask.status = "COMPLETED";
-					          clearPersistedTask();
-					          activeTask = null;
-					        }
-					        await runAnalysisFlow(goal, contextSources);
-					        return;
-					      }
+						      const isSpreadsheetGoal = isSheetsSiteGoal || /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(goal);
+						      if (isSpreadsheetGoal) {
+						        appendLog("📊 Mengalihkan ke Spreadsheet Automation Engine...");
+						        setAgentRunning(false);
+						        if (activeTask) {
+						          activeTask.status = "COMPLETED";
+						          clearPersistedTask();
+						          activeTask = null;
+						        }
+						        await runAnalysisFlow(goal, contextSources);
+						        return;
+						      }
+
+						      const isGeneralAnalysisGoal = /(?:^|\b)(?:analisa|analisis|analyze|analysis|audit|review|tinjau|bedah|evaluasi|periksa|cek|riset)\b/i.test(goal) &&
+						        !/(?:klik|click|isi\s+form|login|register|checkout|pesan|scroll|ketik|input)/i.test(goal);
+						      if (isGeneralAnalysisGoal) {
+						        appendLog("🔍 Mengalihkan ke Intelligence & Analysis Engine...");
+						        setAgentRunning(false);
+						        if (activeTask) {
+						          activeTask.status = "COMPLETED";
+						          clearPersistedTask();
+						          activeTask = null;
+						        }
+						        await runAnalysisFlow(goal, contextSources);
+						        return;
+						      }
 
 	      // ══ FAST PATH FOR DIRECT NAVIGATION (Single clean step, no noisy ReAct loops) ══
 	      const directNavRegex = /^(?:tolong\s+|mohon\s+)?(?:buka|kunjungi|open|go\s*to|akses)\s+(?:website\s+|web\s+|situs\s+|halaman\s+|url\s+)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?|https?:\/\/[^\s]+)\s*$/i;
@@ -5342,6 +5441,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
             name: file.name,
             title: file.name,
             content: processed.content || "",
+            dataUrl: processed.dataUrl || null,
             metadata: {
               fileName: file.name,
               fileType: processed.type,
