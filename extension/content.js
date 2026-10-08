@@ -520,6 +520,67 @@
         line-height: 1.55 !important;
         flex: 1 !important;
       }
+      .pesat-copilot-content {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        font-size: 13.5px !important;
+        line-height: 1.6 !important;
+        color: #cbd5e1 !important;
+      }
+      .pesat-copilot-content p {
+        margin: 0 0 8px 0 !important;
+        color: #f1f5f9 !important;
+      }
+      .pesat-copilot-content strong {
+        color: #38bdf8 !important;
+        font-weight: 600 !important;
+      }
+      .pesat-copilot-content em {
+        color: #cbd5e1 !important;
+        font-style: italic !important;
+      }
+      .pesat-copilot-content ul {
+        margin: 4px 0 8px 0 !important;
+        padding-left: 18px !important;
+      }
+      .pesat-copilot-content ol {
+        margin: 4px 0 8px 0 !important;
+        padding-left: 20px !important;
+      }
+      .pesat-copilot-content li {
+        margin-bottom: 6px !important;
+        color: #e2e8f0 !important;
+        line-height: 1.5 !important;
+      }
+      .pesat-copilot-content h1,
+      .pesat-copilot-content h2,
+      .pesat-copilot-content h3 {
+        color: #f8fafc !important;
+        font-size: 14.5px !important;
+        font-weight: 700 !important;
+        margin: 8px 0 6px 0 !important;
+      }
+      .pesat-popover-content {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        font-size: 13.5px !important;
+        line-height: 1.6 !important;
+        color: #cbd5e1 !important;
+      }
+      .pesat-popover-content p {
+        margin: 0 0 6px 0 !important;
+        color: #f1f5f9 !important;
+      }
+      .pesat-popover-content strong {
+        color: #38bdf8 !important;
+        font-weight: 600 !important;
+      }
+      .pesat-popover-content ul, .pesat-popover-content ol {
+        margin: 4px 0 6px 0 !important;
+        padding-left: 18px !important;
+      }
+      .pesat-popover-content li {
+        margin-bottom: 4px !important;
+        color: #e2e8f0 !important;
+      }
       .pesat-copilot-footer {
         display: flex !important;
         gap: 8px !important;
@@ -3747,6 +3808,81 @@
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  function renderInPageMarkdown(rawText) {
+    if (!rawText) return "";
+    let s = String(rawText).trim();
+
+    // 1. Escape HTML
+    s = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    // Helper for inline styles
+    function parseInline(str) {
+      return str
+        .replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>")
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+        .replace(/`([^`]+)`/g, "<code>$1</code>");
+    }
+
+    // 2. Separate headings
+    s = s.replace(/([^\n\r])\s*(#{1,6}\s*)/g, "$1\n\n$2");
+
+    // 3. Line by line parsing for block elements
+    const lines = s.split("\n");
+    let inUl = false;
+    let inOl = false;
+    let out = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].trim();
+      if (!line) {
+        if (inUl) { out.push("</ul>"); inUl = false; }
+        if (inOl) { out.push("</ol>"); inOl = false; }
+        continue;
+      }
+
+      const hMatch = line.match(/^(#{1,6})\s+(.*)/);
+      if (hMatch) {
+        if (inUl) { out.push("</ul>"); inUl = false; }
+        if (inOl) { out.push("</ol>"); inOl = false; }
+        const level = Math.min(6, hMatch[1].length);
+        out.push(`<h${level}>${parseInline(hMatch[2])}</h${level}>`);
+        continue;
+      }
+
+      const bulletMatch = line.match(/^[\*\-]\s+(.*)/);
+      if (bulletMatch) {
+        if (!inUl) {
+          if (inOl) { out.push("</ol>"); inOl = false; }
+          out.push("<ul>");
+          inUl = true;
+        }
+        out.push(`<li>${parseInline(bulletMatch[1])}</li>`);
+        continue;
+      }
+
+      const numberMatch = line.match(/^(\d+)[\.\)]\s+(.*)/);
+      if (numberMatch) {
+        if (!inOl) {
+          if (inUl) { out.push("</ul>"); inUl = false; }
+          out.push("<ol>");
+          inOl = true;
+        }
+        out.push(`<li>${parseInline(numberMatch[2])}</li>`);
+        continue;
+      }
+
+      if (inUl) { out.push("</ul>"); inUl = false; }
+      if (inOl) { out.push("</ol>"); inOl = false; }
+      out.push(`<p>${parseInline(line)}</p>`);
+    }
+
+    if (inUl) out.push("</ul>");
+    if (inOl) out.push("</ol>");
+
+    return out.join("");
+  }
+
   function initInPageAssistance() {
     try {
       const root = getOrCreatePesatShadowRoot();
@@ -3985,7 +4121,7 @@
       selectedText
     }, (res) => {
       if (res && res.success) {
-        bodyEl.innerHTML = `<div class="pesat-popover-content">${escapeHtmlText(res.reply).replace(/\n/g, "<br>")}</div>`;
+        bodyEl.innerHTML = `<div class="pesat-popover-content">${renderInPageMarkdown(res.reply)}</div>`;
         copyBtn.onclick = () => {
           navigator.clipboard.writeText(res.reply).then(() => {
             copyBtn.textContent = "✓ Tersalin";
@@ -4073,11 +4209,11 @@
 
     chrome.runtime.sendMessage({
       action: "IN_PAGE_AI_QUERY",
-      taskType: "explain",
-      selectedText: `Topik pencarian: "${query}". Berikan ringkasan jawaban langsung, jelas, dan informatif.`
+      taskType: "search_copilot",
+      selectedText: query
     }, (res) => {
       if (res && res.success) {
-        bodyEl.innerHTML = `<div class="pesat-copilot-content">${escapeHtmlText(res.reply).replace(/\n/g, "<br>")}</div>`;
+        bodyEl.innerHTML = `<div class="pesat-copilot-content">${renderInPageMarkdown(res.reply)}</div>`;
         copyBtn.onclick = () => {
           navigator.clipboard.writeText(res.reply).then(() => {
             copyBtn.textContent = "✓ Tersalin";

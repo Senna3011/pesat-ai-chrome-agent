@@ -674,7 +674,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       try {
         const { taskType, selectedText, customPrompt } = request;
         let instruction = "";
-        if (taskType === "summarize") {
+        if (taskType === "search_copilot") {
+          instruction = `Pengguna mencari di search engine: "${selectedText}".
+Sajikan ringkasan wawasan langsung yang padat, akurat, dan sangat enak dibaca:
+1. Jika berupa tempat/toko/bisnis: sebutkan nama resmi, lokasi ringkas, konsep, menu/layanan utama, dan fasilitas penting.
+2. Jika berupa konsep/pertanyaan/topik: sajikan jawaban inti langsung dalam 2-3 poin kunci.
+Gunakan format poin (- **Label:** Penjelasan) yang rapi tanpa basa-basi pembuka atau penutup.`;
+        } else if (taskType === "summarize") {
           instruction = `Rangkum teks berikut secara padat dan jelas dalam 2-3 poin penting:\n\n"${selectedText}"`;
         } else if (taskType === "translate") {
           instruction = `Terjemahkan teks berikut ke Bahasa Indonesia (atau ke Bahasa Inggris jika teks aslinya Bahasa Indonesia):\n\n"${selectedText}"`;
@@ -692,6 +698,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const model = storageData.modelName || "pesat-flash";
 
         const endpoint = apiUrl.endsWith("/chat/completions") ? apiUrl : `${apiUrl.replace(/\/+$/, "")}/chat/completions`;
+        const systemPrompt = taskType === "search_copilot"
+          ? "Kamu adalah Pesat AI Web Copilot. Berikan intisari informasi yang sangat rapi, akurat, dan langsung menjawab pencarian pengguna tanpa kalimat pembuka atau penutup klise."
+          : "Kamu adalah asisten in-page cepat dari Pesat AI. Berikan jawaban yang padat, presisi, dan langsung ke inti jawaban tanpa basa-basi pembuka/penutup.";
+
         const res = await fetch(endpoint, {
           method: "POST",
           headers: {
@@ -702,7 +712,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             model,
             max_tokens: 800,
             messages: [
-              { role: "system", content: "Kamu adalah asisten in-page cepat dari Pesat AI. Berikan jawaban yang padat, presisi, dan langsung ke inti jawaban tanpa basa-basi pembuka/penutup." },
+              { role: "system", content: systemPrompt },
               { role: "user", content: instruction }
             ]
           })
@@ -713,7 +723,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           throw new Error(`API error ${res.status}: ${errTxt}`);
         }
         const data = await res.json();
-        const reply = data.choices?.[0]?.message?.content || data.reply || "Tidak ada respon.";
+        const choice = data.choices?.[0];
+        const reply = (choice?.message?.content !== undefined && choice?.message?.content !== null && choice?.message?.content !== "")
+          ? choice.message.content
+          : (choice?.message?.reasoning_content || data.reply || "Tidak ada respon.");
         sendResponse({ success: true, reply });
       } catch (err) {
         sendResponse({ success: false, error: err.message });
