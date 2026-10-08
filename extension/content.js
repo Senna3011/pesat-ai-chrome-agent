@@ -451,8 +451,8 @@
       }
       #pesat-search-copilot {
         position: fixed !important;
-        top: 130px !important;
-        right: 24px !important;
+        top: 130px;
+        right: 24px;
         width: 360px !important;
         max-width: calc(100vw - 48px) !important;
         max-height: 75vh !important;
@@ -470,6 +470,11 @@
         background: #111827 !important;
         padding: 10px 14px !important;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+        cursor: grab !important;
+        user-select: none !important;
+      }
+      .pesat-copilot-header:active {
+        cursor: grabbing !important;
       }
       .pesat-copilot-title-row {
         display: flex !important;
@@ -482,12 +487,18 @@
         letter-spacing: 0.05em !important;
         color: #38bdf8 !important;
       }
+      .pesat-copilot-controls {
+        display: flex !important;
+        gap: 6px !important;
+        align-items: center !important;
+      }
+      .pesat-copilot-minimize,
       .pesat-copilot-close {
         background: rgba(255, 255, 255, 0.08) !important;
         border: 1px solid rgba(255, 255, 255, 0.15) !important;
         color: #cbd5e1 !important;
         cursor: pointer !important;
-        font-size: 14px !important;
+        font-size: 13px !important;
         width: 26px !important;
         height: 26px !important;
         border-radius: 6px !important;
@@ -498,10 +509,26 @@
         pointer-events: auto !important;
         transition: all 0.15s !important;
       }
+      .pesat-copilot-minimize:hover {
+        background: rgba(56, 189, 248, 0.2) !important;
+        color: #38bdf8 !important;
+        border-color: #38bdf8 !important;
+      }
       .pesat-copilot-close:hover {
         background: #ef4444 !important;
         color: #ffffff !important;
         border-color: #ef4444 !important;
+      }
+      #pesat-search-copilot.pesat-copilot-minimized {
+        height: auto !important;
+        max-height: 48px !important;
+        width: 230px !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
+      }
+      #pesat-search-copilot.pesat-copilot-minimized .pesat-copilot-query,
+      #pesat-search-copilot.pesat-copilot-minimized .pesat-copilot-body,
+      #pesat-search-copilot.pesat-copilot-minimized .pesat-copilot-footer {
+        display: none !important;
       }
       .pesat-copilot-query {
         font-size: 13px !important;
@@ -906,6 +933,38 @@
   }
 
   // ─────────────────────────────────────────────────────
+  // DLP SENSITIVE DATA MASKING (Luhn Card & NIK Protection)
+  // ─────────────────────────────────────────────────────
+  function isValidLuhn(digits) {
+    let sum = 0;
+    let alternate = false;
+    for (let i = digits.length - 1; i >= 0; i--) {
+      let n = parseInt(digits.charAt(i), 10);
+      if (alternate) {
+        n *= 2;
+        if (n > 9) n -= 9;
+      }
+      sum += n;
+      alternate = !alternate;
+    }
+    return sum % 10 === 0;
+  }
+
+  function maskSensitiveDLP(text) {
+    if (!text || typeof text !== "string") return text;
+    return text.replace(/\b(?:\d{4}[ -]?){3}\d{1,7}\b|\b\d{13,19}\b/g, (match) => {
+      const digits = match.replace(/\D/g, "");
+      if (digits.length >= 13 && digits.length <= 19 && isValidLuhn(digits)) {
+        return "[PROTECTED_CARD]";
+      }
+      if (digits.length === 16) {
+        return "[PROTECTED_ID]";
+      }
+      return match;
+    });
+  }
+
+  // ─────────────────────────────────────────────────────
   // SEMANTIC AXTREE SNAPSHOT
   // ─────────────────────────────────────────────────────
   function scanInteractiveDOM(showOverlay = true) {
@@ -1120,13 +1179,13 @@
       elementsList.push(`[@e${elementId}] <${role}${placeholder}${val}${statesStr}> "${label}"`);
     }
 
-    const pageReadableText = extractReadablePageText();
+    const pageReadableText = maskSensitiveDLP(extractReadablePageText());
 
     return {
       title: document.title,
       url: window.location.href,
       elementsCount: visibleElements.length,
-      reducedDOM: elementsList.join("\n"),
+      reducedDOM: maskSensitiveDLP(elementsList.join("\n")),
       pageContent: pageReadableText,
       pageErrors: [...capturedPageErrors]
     };
@@ -1362,10 +1421,10 @@
         showReadingHUD(`✓ Selesai membaca artikel (${resultText.length} karakter)`, true);
       }
 
-      return resultText.substring(0, 7000).trim();
+      return maskSensitiveDLP(resultText.substring(0, 7000).trim());
     } catch (err) {
       console.warn("[Pesat] Gagal mengambil readable content:", err);
-      return document.body ? (document.body.innerText || "").substring(0, 5000) : "";
+      return maskSensitiveDLP(document.body ? (document.body.innerText || "").substring(0, 5000) : "");
     }
   }
 
@@ -2992,7 +3051,7 @@
         const isComposeBtn = /tulis|compose/i.test(targetEl.innerText || targetEl.getAttribute("aria-label") || targetEl.getAttribute("data-tooltip") || "") || targetEl.getAttribute("gh") === "cm" || targetEl.closest('[gh="cm"]');
         if (isComposeBtn && window.location.hostname.includes("mail.google.com")) {
           try {
-            chrome.runtime.sendMessage({ action: "NAVIGATE_TAB", url: "https://mail.google.com/mail/u/0/#inbox?compose=new" });
+            safeSendMessage({ action: "NAVIGATE_TAB", url: "https://mail.google.com/mail/u/0/#inbox?compose=new" });
           } catch (_) {}
           try {
             window.location.hash = "#inbox?compose=new";
@@ -3808,6 +3867,20 @@
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  function safeSendMessage(message, callback) {
+    if (typeof chrome === "undefined" || !chrome.runtime?.id) {
+      return;
+    }
+    try {
+      chrome.runtime.sendMessage(message, (res) => {
+        if (chrome.runtime?.lastError) {
+          return;
+        }
+        if (typeof callback === "function") callback(res);
+      });
+    } catch (_) {}
+  }
+
   function renderInPageMarkdown(rawText) {
     if (!rawText) return "";
     let s = String(rawText).trim();
@@ -4003,8 +4076,8 @@
           e.stopPropagation();
           if (hasMoved) return;
 
-          chrome.runtime.sendMessage({ action: "TOGGLE_SIDEPANEL" }, (res) => {
-            if (chrome.runtime.lastError || res?.success === false) {
+          safeSendMessage({ action: "TOGGLE_SIDEPANEL" }, (res) => {
+            if (res?.success === false) {
               showReadingHUD("⚡ Sidepanel: Klik ikon Pesat AI di toolbar browser untuk membuka.");
             }
           });
@@ -4055,8 +4128,10 @@
           const currentText = window.getSelection()?.toString().trim() || text;
 
           if (action === "ask") {
-            chrome.runtime.sendMessage({ action: "TOGGLE_SIDEPANEL" }).catch(() => {});
-            chrome.storage.session?.set({ pesat_pending_prompt: { prompt: `Tolong jelaskan mengenai teks berikut:\n\n"${currentText}"`, timestamp: Date.now() } });
+            safeSendMessage({ action: "TOGGLE_SIDEPANEL" });
+            try {
+              chrome.storage.session?.set({ pesat_pending_prompt: { prompt: `Tolong jelaskan mengenai teks berikut:\n\n"${currentText}"`, timestamp: Date.now() } });
+            } catch (_) {}
             pesatSelectionToolbar.style.display = "none";
             return;
           }
@@ -4115,7 +4190,7 @@
 
     closeBtn.onclick = () => { pesatSelectionPopover.style.display = "none"; };
 
-    chrome.runtime.sendMessage({
+    safeSendMessage({
       action: "IN_PAGE_AI_QUERY",
       taskType,
       selectedText
@@ -4134,7 +4209,8 @@
     });
   }
 
-  function initSearchEngineCopilot() {
+  let lastCopilotQuery = "";
+  function checkSearchEngineCopilot() {
     try {
       if (sessionStorage.getItem("pesat_search_copilot_dismissed") === "true") return;
       const host = window.location.hostname;
@@ -4142,13 +4218,36 @@
       if (!isSearchEngine) return;
 
       const urlParams = new URLSearchParams(window.location.search);
-      const query = urlParams.get("q") || urlParams.get("query") || "";
-      if (!query || query.trim().length < 2) return;
+      const query = (urlParams.get("q") || urlParams.get("query") || "").trim();
+      if (!query || query.length < 2) return;
+      if (query === lastCopilotQuery) return;
 
-      setTimeout(() => {
-        injectSearchCopilotCard(query);
-      }, 700);
+      lastCopilotQuery = query;
+
+      const root = getOrCreatePesatShadowRoot();
+      const existing = root.querySelector("#pesat-search-copilot");
+      if (existing) {
+        try { existing.remove(); } catch (_) {}
+      }
+
+      injectSearchCopilotCard(query);
     } catch (_) {}
+  }
+
+  function initSearchEngineCopilot() {
+    checkSearchEngineCopilot();
+
+    window.addEventListener("popstate", () => {
+      setTimeout(checkSearchEngineCopilot, 400);
+    });
+
+    const titleEl = document.querySelector("title");
+    if (titleEl) {
+      const titleObserver = new MutationObserver(() => {
+        setTimeout(checkSearchEngineCopilot, 400);
+      });
+      titleObserver.observe(titleEl, { childList: true, subtree: true });
+    }
   }
 
   function injectSearchCopilotCard(query) {
@@ -4161,7 +4260,10 @@
       <div class="pesat-copilot-header">
         <div class="pesat-copilot-title-row">
           <span class="pesat-copilot-badge">⚡ PESAT AI COPILOT</span>
-          <button class="pesat-copilot-close" title="Tutup">✕</button>
+          <div class="pesat-copilot-controls">
+            <button class="pesat-copilot-minimize" title="Ciutkan / Buka">_</button>
+            <button class="pesat-copilot-close" title="Tutup">✕</button>
+          </div>
         </div>
         <div class="pesat-copilot-query">"${escapeHtmlText(query)}"</div>
       </div>
@@ -4176,10 +4278,107 @@
 
     root.appendChild(card);
 
+    // Pulihkan posisi tersimpan jika pernah digeser oleh pengguna
+    try {
+      const savedPos = localStorage.getItem("pesat_copilot_pos");
+      if (savedPos) {
+        const { x, y } = JSON.parse(savedPos);
+        if (typeof x === "number" && typeof y === "number") {
+          const safeX = Math.min(window.innerWidth - 80, Math.max(8, x));
+          const safeY = Math.min(window.innerHeight - 60, Math.max(8, y));
+          card.style.setProperty("left", `${safeX}px`, "important");
+          card.style.setProperty("top", `${safeY}px`, "important");
+          card.style.setProperty("right", "auto", "important");
+          card.style.setProperty("bottom", "auto", "important");
+        }
+      }
+    } catch (_) {}
+
+    // Handler Drag & Drop Panel (seperti tombol FAB)
+    const headerEl = card.querySelector(".pesat-copilot-header");
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let initialLeft = 0;
+    let initialTop = 0;
+
+    const handleDragStart = (clientX, clientY) => {
+      isDragging = true;
+      startX = clientX;
+      startY = clientY;
+      const rect = card.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+      if (headerEl) headerEl.style.cursor = "grabbing";
+    };
+
+    const handleDragMove = (clientX, clientY) => {
+      if (!isDragging) return;
+      const dx = clientX - startX;
+      const dy = clientY - startY;
+      const newLeft = Math.min(window.innerWidth - 80, Math.max(8, initialLeft + dx));
+      const newTop = Math.min(window.innerHeight - 60, Math.max(8, initialTop + dy));
+      card.style.setProperty("left", `${newLeft}px`, "important");
+      card.style.setProperty("top", `${newTop}px`, "important");
+      card.style.setProperty("right", "auto", "important");
+      card.style.setProperty("bottom", "auto", "important");
+    };
+
+    const handleDragEnd = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      if (headerEl) headerEl.style.cursor = "grab";
+      const rect = card.getBoundingClientRect();
+      try {
+        localStorage.setItem("pesat_copilot_pos", JSON.stringify({ x: rect.left, y: rect.top }));
+      } catch (_) {}
+    };
+
+    if (headerEl) {
+      headerEl.addEventListener("mousedown", (e) => {
+        if (e.button !== 0 || e.target.closest("button")) return;
+        handleDragStart(e.clientX, e.clientY);
+        e.preventDefault();
+
+        const onMouseMove = (me) => handleDragMove(me.clientX, me.clientY);
+        const onMouseUp = () => {
+          handleDragEnd();
+          window.removeEventListener("mousemove", onMouseMove);
+          window.removeEventListener("mouseup", onMouseUp);
+        };
+
+        window.addEventListener("mousemove", onMouseMove);
+        window.addEventListener("mouseup", onMouseUp);
+      });
+
+      headerEl.addEventListener("touchstart", (e) => {
+        if (e.target.closest("button") || e.touches.length !== 1) return;
+        handleDragStart(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: true });
+
+      headerEl.addEventListener("touchmove", (e) => {
+        if (!isDragging || e.touches.length !== 1) return;
+        handleDragMove(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: true });
+
+      headerEl.addEventListener("touchend", handleDragEnd);
+    }
+
+    const minimizeBtn = card.querySelector(".pesat-copilot-minimize");
     const closeBtn = card.querySelector(".pesat-copilot-close");
     const bodyEl = card.querySelector(".pesat-copilot-body");
     const copyBtn = card.querySelector(".pesat-copilot-copy");
     const sidepanelBtn = card.querySelector(".pesat-copilot-sidepanel");
+
+    if (minimizeBtn) {
+      minimizeBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const isMin = card.classList.toggle("pesat-copilot-minimized");
+        minimizeBtn.textContent = isMin ? "□" : "_";
+        minimizeBtn.title = isMin ? "Perluas panel Copilot" : "Ciutkan panel Copilot";
+      };
+    }
 
     const handleClose = (e) => {
       if (e) {
@@ -4198,16 +4397,18 @@
     closeBtn.onclick = handleClose;
 
     sidepanelBtn.onclick = () => {
-      chrome.runtime.sendMessage({ action: "TOGGLE_SIDEPANEL" }).catch(() => {});
-      chrome.storage.session?.set({
-        pesat_pending_prompt: {
-          prompt: `Jelaskan secara mendalam mengenai topik pencarian ini:\n"${query}"`,
-          timestamp: Date.now()
-        }
-      });
+      safeSendMessage({ action: "TOGGLE_SIDEPANEL" });
+      try {
+        chrome.storage.session?.set({
+          pesat_pending_prompt: {
+            prompt: `Jelaskan secara mendalam mengenai topik pencarian ini:\n"${query}"`,
+            timestamp: Date.now()
+          }
+        });
+      } catch (_) {}
     };
 
-    chrome.runtime.sendMessage({
+    safeSendMessage({
       action: "IN_PAGE_AI_QUERY",
       taskType: "search_copilot",
       selectedText: query
