@@ -1697,23 +1697,86 @@
       cleanPlain = cleanPlain.replace(`PESATTABLEPLACEHOLDER${idx}END`, tPlain);
     });
 
-    // 4. HTML Rich Text untuk Clipboard
-    let cleanHtml = raw
-      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-      .replace(/\*\*\*(.*?)\*\*\*/gim, '<b><i>$1</i></b>')
-      .replace(/\*\*(.*?)\*\*/gim, '<b>$1</b>')
-      .replace(/\*(.*?)\*/gim, '<i>$1</i>')
-      .replace(/___(.*?)___/gim, '<b><i>$1</i></b>')
-      .replace(/__(.*?)__/gim, '<b>$1</b>')
-      .replace(/_(.*?)_/gim, '<i>$1</i>')
-      .replace(/^>\s*(.*$)/gim, '<p style="margin:4px 0 4px 12px;color:#334155;">$1</p>')
-      .replace(/^\s*[\*\-]\s+(.*$)/gim, '<li>$1</li>')
-      .replace(/\n\n+/g, '</p><p>')
-      .replace(/\n/g, '<br>');
+    // 4. HTML Rich Text Semantik untuk Clipboard (W3C Compliant agar Google Docs tidak menampilkan raw tag)
+    function formatInlineHtml(str) {
+      return String(str || "")
+        .replace(/\*\*\*(.*?)\*\*\*/g, "<b><i>$1</i></b>")
+        .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>")
+        .replace(/\*(.*?)\*/g, "<i>$1</i>")
+        .replace(/___(.*?)___/g, "<b><i>$1</i></b>")
+        .replace(/__(.*?)__/g, "<b>$1</b>")
+        .replace(/_(.*?)_/g, "<i>$1</i>")
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    }
 
-    cleanHtml = `<p>${cleanHtml}</p>`;
+    const docLines = raw.split(/\r?\n/);
+    const htmlBlocks = [];
+    let inList = null;
+
+    function closeList() {
+      if (inList) {
+        htmlBlocks.push(`</${inList}>`);
+        inList = null;
+      }
+    }
+
+    for (let i = 0; i < docLines.length; i++) {
+      const line = docLines[i].trim();
+      if (!line) {
+        closeList();
+        continue;
+      }
+
+      if (line.includes("PESATTABLEPLACEHOLDER")) {
+        closeList();
+        htmlBlocks.push(line);
+        continue;
+      }
+
+      const hMatch = line.match(/^(#{1,6})\s+(.*)$/);
+      if (hMatch) {
+        closeList();
+        const level = hMatch[1].length;
+        htmlBlocks.push(`<h${level}>${formatInlineHtml(hMatch[2])}</h${level}>`);
+        continue;
+      }
+
+      const ulMatch = line.match(/^[\*\-]\s+(.*)$/);
+      if (ulMatch) {
+        if (inList !== "ul") {
+          closeList();
+          htmlBlocks.push("<ul>");
+          inList = "ul";
+        }
+        htmlBlocks.push(`  <li>${formatInlineHtml(ulMatch[1])}</li>`);
+        continue;
+      }
+
+      const olMatch = line.match(/^\d+\.\s+(.*)$/);
+      if (olMatch) {
+        if (inList !== "ol") {
+          closeList();
+          htmlBlocks.push("<ol>");
+          inList = "ol";
+        }
+        htmlBlocks.push(`  <li>${formatInlineHtml(olMatch[1])}</li>`);
+        continue;
+      }
+
+      const qMatch = line.match(/^>\s*(.*)$/);
+      if (qMatch) {
+        closeList();
+        htmlBlocks.push(`<blockquote style="margin:4px 0 4px 12px;color:#334155;"><p>${formatInlineHtml(qMatch[1])}</p></blockquote>`);
+        continue;
+      }
+
+      closeList();
+      htmlBlocks.push(`<p>${formatInlineHtml(line)}</p>`);
+    }
+    closeList();
+
+    let cleanHtml = htmlBlocks.join("\n");
 
     // Restore HTML tables
     tablesHtml.forEach((tHtml, idx) => {
@@ -1722,7 +1785,6 @@
     });
 
     cleanPlain = cleanPlain.replace(/^[ \t]*>[ \t]*/gm, "");
-    cleanHtml = cleanHtml.replace(/<blockquote>([\s\S]*?)<\/blockquote>/gi, '<p style="margin:4px 0 4px 12px;color:#334155;">$1</p>');
 
     cleanHtml = `<html><body><!--StartFragment-->${cleanHtml}<!--EndFragment--></body></html>`;
 
@@ -2213,15 +2275,27 @@
       // Jika mode replace/ganti isi dokumen: pilih seluruh isi dokumen dan bersihkan sebelum menulis
       if (actionData && actionData.replace) {
         try {
-          const targetForSelect = innerTextarea || innerDoc || iframe || editorCanvas || document.body;
-          targetForSelect.dispatchEvent(new KeyboardEvent("keydown", { key: "a", code: "KeyA", keyCode: 65, which: 65, ctrlKey: !isMac, metaKey: isMac, bubbles: true }));
-          if (innerDoc) innerDoc.execCommand("selectAll", false, null);
-          document.execCommand("selectAll", false, null);
-
-          targetForSelect.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace", code: "Backspace", keyCode: 8, which: 8, bubbles: true }));
-          if (innerDoc) innerDoc.execCommand("delete", false, null);
-          document.execCommand("delete", false, null);
+          const targets = [innerTextarea, innerDoc, iframe?.contentWindow, editorCanvas, document].filter(Boolean);
+          targets.forEach(t => {
+            try {
+              t.dispatchEvent(new KeyboardEvent("keydown", { key: "a", code: "KeyA", keyCode: 65, which: 65, ctrlKey: !isMac, metaKey: isMac, bubbles: true, cancelable: true }));
+              t.dispatchEvent(new KeyboardEvent("keyup", { key: "a", code: "KeyA", keyCode: 65, which: 65, ctrlKey: !isMac, metaKey: isMac, bubbles: true, cancelable: true }));
+            } catch (_) {}
+          });
+          if (innerDoc) {
+            try { innerDoc.execCommand("selectAll", false, null); } catch (_) {}
+          }
           await new Promise(r => setTimeout(r, 60));
+          targets.forEach(t => {
+            try {
+              t.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace", code: "Backspace", keyCode: 8, which: 8, bubbles: true, cancelable: true }));
+              t.dispatchEvent(new KeyboardEvent("keyup", { key: "Backspace", code: "Backspace", keyCode: 8, which: 8, bubbles: true, cancelable: true }));
+            } catch (_) {}
+          });
+          if (innerDoc) {
+            try { innerDoc.execCommand("delete", false, null); } catch (_) {}
+          }
+          await new Promise(r => setTimeout(r, 80));
         } catch (_) {}
       }
 

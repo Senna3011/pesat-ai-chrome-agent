@@ -3755,7 +3755,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
           await new Promise(r => setTimeout(r, 2000));
         }
 
-        const isReplaceDocIntent = /(?:ganti|ubah|edit|perbarui|modifikasi|replace|hapus)/i.test(userPrompt) || isDocsSite;
+        const isReplaceDocIntent = /(?:ganti\s+isi|timpa\s+isi|hapus\s+semua|bersihkan\s+dokumen|replace\s+all)/i.test(userPrompt);
 
         showStatusIndicator("Menuliskan dokumen langsung ke Google Docs...");
         appendLog("📄 Menuliskan dokumen ke Google Docs...");
