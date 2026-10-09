@@ -3172,58 +3172,10 @@ Respon HANYA dalam format JSON valid:
     const isCurrentTabDocs = (currentTabUrl.includes("docs.google.com/document") || currentTabTitle.includes("Google Dokumen") || currentTabTitle.includes("Google Docs") || currentTabUrl.includes("word.office.com")) && !currentTabUrl.includes("/spreadsheets");
     const isCurrentTabSheets = (currentTabUrl.includes("docs.google.com/spreadsheets") || currentTabTitle.includes("Google Spreadsheet") || currentTabTitle.includes("Google Sheets") || currentTabUrl.includes("excel.office.com"));
 
-    // Deteksi cerdas antara Perintah Aksi Fisik di Web vs Pembuatan/Modifikasi Konten/Artikel/Analisis Langsung
-    const isDocsTarget = isCurrentTabDocs || /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|ke|di|dalam|pada)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen)/i.test(userPrompt);
-    const hasTableCreation = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan|tabel\b)/i.test(userPrompt);
-
-    const isSpreadsheetAction = !isDocsTarget && (
-      isCurrentTabSheets ||
-      /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan spreadsheet)/i.test(userPrompt) ||
-      hasTableCreation
-    );
-
-    const isEmailAction = /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt);
-    const isFormAction = !isSpreadsheetAction && !isDocsTarget && /(?:isi\s+form|isi\s+formulir|isi\s+field|\blogin\b|\bsign\s*in\b|\bmasuk\s+(?:ke|akun)\b|autofill|isi\s+email|isi\s+password|isi\s+kolom|masukkan\s+email|masukkan\s+password|isi\s+akun)/i.test(userPrompt);
-
-    const isDocsModificationIntent = isCurrentTabDocs && /(?:ganti|ubah|edit|perbarui|modifikasi|hapus|tulis|buat|tambahkan|isi|masukkan|top\s*\d+|perusahaan|artikel|paragraf|tabel)/i.test(userPrompt);
-
-    // Deteksi intent analisis komprehensif (analisa profil bisnis, website, review, audit, bedah, evaluasi)
-    const isAnalysisIntent = !isEmailAction && !isFormAction && /(?:^|\b)(?:analisa|analisis|analyze|analysis|audit|review|tinjau|bedah|evaluasi|periksa|cek|riset)\b/i.test(userPrompt);
-
-    const isContentOrWriting = !isEmailAction && !isFormAction && (
-      isSpreadsheetAction ||
-      isDocsTarget ||
-      isDocsModificationIntent ||
-      isAnalysisIntent ||
-      hasTableCreation ||
-      /(?:buatkan|tuliskan|tulis|buat|draft|ketik|isi|generate|ceritakan|cerita|bahas|ulas|jelaskan|paparkan|ganti|ubah|edit|perbarui|modifikasi)\s+(?:(?:\d+\s+)?(?:paragraf|kalimat|artikel|surat|konten|esai|tulisan|laporan|draf|copywriting|catatan|cerita|tabel|teori)|tentang|mengenai)/i.test(userPrompt) ||
-      /(?:buatkan artikel|tulis artikel|buat artikel|artikel edukasi|buatkan draf artikel|buat draf artikel|surat penawaran|rangkum|ringkas|summarize|ringkasan|rangkuman|analisis seo|audit seo|audit keamanan|keamanan web|salin seluruh teks)/i.test(userPrompt) ||
-      /(?:tulis|ketik|isi|buat|bahas|ganti|ubah|edit).*di\s+(?:google\s+docs|goole\s+docs|docs|dokumen|lembar\s+kerja)/i.test(userPrompt) ||
-      // Deteksi eksplisit permintaan N paragraf atau cerita pendek
-      /\d+\s+(?:paragraf|kalimat|bait|bab)/i.test(userPrompt) ||
-      /(?:cerita\s+(?:pendek|singkat|fiksi|rakyat|dongeng)|prosa|puisi|narasi)/i.test(userPrompt)
-    );
-
-    const hasPhysicalActionVerb = isEmailAction || isFormAction || (!isContentOrWriting && (
-      /(?:^(?:buka|kunjungi|open|go to|navigate to|kirim|send|klik|click|select|pilih|hapus|delete|upload|download|login|masuk|daftar|register|pesan|checkout|scroll|jalankan|posting|post|isi|fill|ketik|masukkan|input|autofill)\b)/i.test(userPrompt) ||
-      /(?:(?:dan|lalu|kemudian)\s+(?:buka|kirim|klik|pilih|posting|post|isi|ketik|masukkan))/i.test(userPrompt) ||
-      /(?:buka tab|buka x\.com|buka twitter|buka gmail|buka linkedin|posting ke|post ke|tweet ke|isi form|isi email|isi password)/i.test(userPrompt)
-    ));
-
-    const isDirectAnalysisOnly = !isEmailAction && !isFormAction && (
-      isAnalysisIntent ||
-      isContentOrWriting ||
-      (!hasPhysicalActionVerb && (
-        /(?:^(?:apa|apakah|siapa|bagaimana|mengapa|kenapa|dimana|berapa|kapan|jelaskan|terangkan|ceritakan|sebutkan|tolong jelaskan|info|informasi|what|who|how|why|where|when|which|is this|explain|tell me|ini apa|ini platform apa|ini website apa|halaman apa ini|bisakah|bisa)\b)/i.test(userPrompt) ||
-        /\?$/.test(userPrompt)
-      ))
-    );
-
-    if (isDirectAnalysisOnly) {
-      await runAnalysisFlow(userPrompt, contextSourcesToSend);
-      return;
-    }
-
+    // ══ OPSI A: UNIFIED DIRECT AGENT ENTRY POINT ══
+    // Nol penyekatan regex kaku. Seluruh instruksi pengguna (pertanyaan, analisis,
+    // penulisan dokumen/tabel, konsultasi kode, maupun otomasi klik/ketik/navigasi peramban)
+    // dialirkan langsung ke Unified Autonomous Agent (startTask) dengan latency tunggal.
     await startTask(userPrompt, contextSourcesToSend);
   }
 
@@ -4141,19 +4093,22 @@ ATURAN KETAT:
 						        return;
 						      }
 
-						      const isGeneralAnalysisGoal = /(?:^|\b)(?:analisa|analisis|analyze|analysis|audit|review|tinjau|bedah|evaluasi|periksa|cek|riset)\b/i.test(goal) &&
-						        !/(?:klik|click|isi\s+form|login|register|checkout|pesan|scroll|ketik|input)/i.test(goal);
-						      if (isGeneralAnalysisGoal) {
-						        appendLog("🔍 Mengalihkan ke Intelligence & Analysis Engine...");
-						        setAgentRunning(false);
-						        if (activeTask) {
-						          activeTask.status = "COMPLETED";
-						          clearPersistedTask();
-						          activeTask = null;
-						        }
-						        await runAnalysisFlow(goal, contextSources);
-						        return;
-						      }
+							      const isGeneralAnalysisGoal = (
+							        /(?:^|\b)(?:analisa|analisis|analyze|analysis|audit|review|tinjau|bedah|evaluasi|periksa|cek|riset)\b/i.test(goal) ||
+							        /(?:^|\b)(?:gimana|gmn|bagaimana|bgm|apa|apakah|kenapa|mengapa|siapa|dimana|kapan|berapa|how|what|why|where|when|which|fix|cara|solusi|perbaiki|remediasi|mengatasi|jelaskan|terangkan|bahas|ulas|kode|contoh|panduan|langkah|rekomendasi)\b/i.test(goal) ||
+							        /\?/.test(goal)
+							      ) && !/(?:klik|click|isi\s+form|login|register|checkout|pesan|scroll|ketik|input|buka\s+https?:\/\/)/i.test(goal);
+							      if (isGeneralAnalysisGoal) {
+							        appendLog("🔍 Mengalihkan ke Intelligence & Analysis Engine...");
+							        setAgentRunning(false);
+							        if (activeTask) {
+							          activeTask.status = "COMPLETED";
+							          clearPersistedTask();
+							          activeTask = null;
+							        }
+							        await runAnalysisFlow(goal, contextSources);
+							        return;
+							      }
 
 	      // ══ FAST PATH FOR DIRECT NAVIGATION (Single clean step, no noisy ReAct loops) ══
 	      const directNavRegex = /^(?:tolong\s+|mohon\s+)?(?:buka|kunjungi|open|go\s*to|akses)\s+(?:website\s+|web\s+|situs\s+|halaman\s+|url\s+)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?|https?:\/\/[^\s]+)\s*$/i;
@@ -4313,51 +4268,14 @@ ATURAN KETAT:
         }
       }
 
-      // ══ FASE PLAN ══
-      const initialScan = await scanPage(true);
-      const contextPrompt = typeof PesatContextEngine !== "undefined" && activeTask?.contextSources?.length
-        ? "\n" + PesatContextEngine.formatStructuredContextPrompt(activeTask.contextSources)
-        : "";
-      const planPrompt = `
-[KONDISI AWAL HALAMAN]
-Judul: ${initialScan.title} | URL: ${initialScan.url} | Elemen: ${initialScan.elementsCount}
-${contextPrompt}
-${activeTask.confirmAllGranted ? "" : ""}
-[INSTRUKSI PENGGUNA]
-"${goal}"
-
-Susun rencana subtask (maksimal 7) untuk mencapai goal di atas.
-`.trim();
-
-      let plan = null;
-      try {
-        const planReply = await callLLM("plan", planPrompt);
-        const parsed = parseActionJSON(planReply);
-        if (parsed && Array.isArray(parsed.plan) && parsed.plan.length > 0) {
-          plan = parsed.plan
-            .map((s, i) => ({
-              id: s.id || (i + 1),
-              description: String(s.description || s).substring(0, 200),
-              status: "pending"
-            }))
-            .slice(0, 7);
-        }
-      } catch (err) {
-        appendLog(`Planner error: ${err.message}`, "WARN");
-      }
-
-      if (!plan) {
-        // Fallback: satu subtask = goal itu sendiri
-        plan = [{ id: 1, description: goal.substring(0, 200), status: "pending" }];
-      }
-
+      // ══ FASE EKSEKUSI UNIFIED DIRECT (Opsi A) ══
+      // ponytail: single-step direct execution removes extra network latency, dynamic replan handles failures
+      const plan = [{ id: 1, description: goal.substring(0, 200), status: "pending" }];
       activeTask.plan = plan;
       activeTask.status = "EXECUTING";
-      const firstSub = currentSubtaskObj();
-      activeTask.currentSubtask = firstSub ? firstSub.id : null;
+      activeTask.currentSubtask = 1;
 
       await persistTask();
-      appendLog(`🗓️ Rencana disusun (${plan.length} subtask).`);
       await executeTaskLoop();
     } catch (err) {
       if (err.name === "AbortError" || shouldStopAgent) {
@@ -4440,22 +4358,54 @@ ${buildPageContext(pageData, fullScan, stepNum)}${tabsCtx}${contextPrompt}
 [SUBTASK AKTIF #${sub.id}]
 ${sub.description}
 
-[PERINTAH]
-Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif menuju goal. Jika seluruh goal sudah tercapai, kembalikan finish.
+[INSTRUKSI PENYELESAIAN (PROTOKOL UNIFIED DIRECT)]
+- Jika instruksi merupakan pertanyaan, analisis, penjelasan, pemecahan masalah (troubleshooting/fix), saran, atau penulisan konten/tabel:
+  Sajikan jawaban secara LANGSUNG, mendalam, dan terstruktur rapi dalam teks Markdown. DILARANG memanggil tool manipulasi jika pengguna hanya meminta informasi atau panduan.
+- Jika instruksi membutuhkan manipulasi fisik halaman web:
+  Panggil tool yang sesuai (navigate_to, click_element, type_text, press_key, finish_task).
+- Jika instruksi selesai sepenuhnya, sajikan teks jawaban akhir atau panggil finish_task.
 `.trim();
 
       showStatusIndicator();
       appendLog(`─── Step ${stepNum} (subtask #${sub.id}) ───`);
 
+      let streamBubble = null;
+      let streamContainer = null;
+      const onChunk = (delta, accumulated) => {
+        if (!streamBubble) {
+          const chatAreaEl = document.getElementById("chatArea");
+          if (chatAreaEl) {
+            streamContainer = document.createElement("div");
+            streamContainer.className = "message-row assistant streaming-bubble";
+            streamBubble = document.createElement("div");
+            streamBubble.className = "message-bubble markdown-body";
+            streamContainer.appendChild(streamBubble);
+            chatAreaEl.appendChild(streamContainer);
+          }
+        }
+        if (streamBubble) {
+          streamBubble.innerHTML = parseIncrementalMarkdown(accumulated);
+          const chatAreaEl = document.getElementById("chatArea");
+          if (chatAreaEl) chatAreaEl.scrollTop = chatAreaEl.scrollHeight;
+        }
+      };
+
       let reply;
       try {
-        reply = await callLLM("act", actPrompt, { image: activeTask._pendingScreenshot || null });
+        reply = await callLLM("act", actPrompt, {
+          image: activeTask._pendingScreenshot || null,
+          onChunk
+        });
       } catch (err) {
         if (err.name === "AbortError" || shouldStopAgent) break;
         appendLog(`Navigator error: ${err.message}`, "ERROR");
         addMessageToCurrentSession("assistant", `❌ Gagal menghubungi AI Engine: ${err.message}`);
         await finalizeTask("failed", `Gagal menghubungi AI Engine: ${err.message}`);
         return;
+      } finally {
+        if (streamContainer && streamContainer.parentNode) {
+          streamContainer.parentNode.removeChild(streamContainer);
+        }
       }
       activeTask._pendingScreenshot = null;
 
@@ -4706,31 +4656,15 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
           return;
         }
 
-        const remainingPlan = (activeTask.plan || []).filter(s => s.status !== "done");
-        if (remainingPlan.length > 0 && stepNum <= 3) {
-          appendLog(`⚠️ Navigator memberikan respon tekstual di Step ${stepNum}. Mencatat observasi dan meminta aksi lanjutan...`, "WARN");
-          activeTask.scratchpad.push({
-            step: stepNum,
-            subtask: sub.id,
-            observation: `Respon AI: "${reply.slice(0, 180)}..."`,
-            action: "text_guidance",
-            result: "info"
-          });
-          persistTask();
-
-          // Cek apakah ada tab target yang belum dibuka
-          const matchTab = (activeTask.contextSources || []).find(s => s.type === "BrowserTab" && s.metadata?.tabId);
-          if (matchTab && matchTab.metadata?.tabId) {
-            resObj = { action: "switch_tab", tabId: matchTab.metadata.tabId, matchTitle: matchTab.name };
-          } else {
-            continue;
-          }
-        } else {
-          // Jawaban teks biasa di langkah akhir → tampilkan & akhiri
-          addMessageToCurrentSession("assistant", reply);
-          await finalizeTask("done", reply || "AI memberikan jawaban akhir.");
-          return;
-        }
+        // Zero Text Suppression (Pilar 2 Rencana Arsitektur):
+        // Jika Navigator menghasilkan respon penjelasan/panduan/jawaban tekstual tanpa aksi DOM,
+        // tampilkan langsung ke obrolan pengguna dan selesaikan tugas tanpa membungkam teks tersebut.
+        addMessageToCurrentSession("assistant", reply);
+        (activeTask.plan || []).forEach(s => { s.status = "done"; });
+        refreshTaskCard();
+        await persistTask();
+        await finalizeTask("done", reply || "AI telah memberikan jawaban secara lengkap.");
+        return;
       }
 
       // 3. Konfirmasi aksi berisiko (Phase 7.1)
@@ -4950,7 +4884,10 @@ Kembalikan SATU aksi JSON terbaik berikutnya untuk menyelesaikan subtask aktif m
       }
 
       if (verdict.verdict === "DONE" && exec.success) {
-        await finalizeTask("done", "✅ Validator menilai seluruh tujuan pengguna telah tercapai.");
+        const finalDoneMsg = (exec.message && exec.message !== "Aksi sukses dijalankan.")
+          ? exec.message
+          : (verdict.reason ? `✅ ${verdict.reason}` : "✅ Validator menilai seluruh tujuan pengguna telah tercapai.");
+        await finalizeTask("done", finalDoneMsg);
         return;
       }
       if (verdict.verdict === "RETRY") {
@@ -5068,7 +5005,12 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     const heading = isSuccess ? "✅ **Selesai**" : (isCancelled ? "⏹️ **Dihentikan**" : "⚠️ **Belum selesai**");
     const resultText = String(message || (isSuccess ? "Tugas selesai." : "Tugas belum dapat diselesaikan.")).trim();
 
-    addMessageToCurrentSession("assistant", `${heading}\n\n${resultText}`);
+    const curSession = getCurrentSession();
+    const lastMsg = curSession?.messages?.[curSession.messages.length - 1];
+    // Cegah bubble ganda jika teks jawaban sudah ditampilkan sebelumnya
+    if (!lastMsg || lastMsg.role !== "assistant" || (lastMsg.content !== resultText && !lastMsg.content.includes(resultText.slice(0, 40)))) {
+      addMessageToCurrentSession("assistant", `${heading}\n\n${resultText}`);
+    }
     appendLog(
       `🏁 Task ${activeTask.status}: ${activeTask.goal} (${activeTask.stepsUsed} langkah)`,
       isSuccess ? "ACTION" : "WARN",

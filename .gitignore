@@ -49,5 +49,10 @@ build/
 .cache/
 .zcode/
 
-# Internal Roadmaps & Benchmarks
+# Internal Roadmaps, Docs & Notes
 ROADMAP_AITOPIA_BENCHMARK.md
+To-do-list.md
+coldstart.md
+docs/
+*.tmp
+*.log

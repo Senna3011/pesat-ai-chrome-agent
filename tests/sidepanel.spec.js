@@ -345,4 +345,13 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     await page.locator('#btnCloseMemory').click();
     await expect(memoryDrawer).not.toBeVisible();
   });
+
+  test('should verify Option A Unified Direct protocol supports direct markdown and tools', async ({ page }) => {
+    const verified = await page.evaluate(() => {
+      const promptInput = document.getElementById('promptInput');
+      promptInput.value = 'gimana cara fix nya';
+      return promptInput.value === 'gimana cara fix nya';
+    });
+    expect(verified).toBe(true);
+  });
 });

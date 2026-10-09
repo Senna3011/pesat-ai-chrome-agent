@@ -3867,18 +3867,58 @@
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  let contextCheckInterval = null;
+
+  function isContextValid() {
+    try {
+      return typeof chrome !== "undefined" && !!chrome.runtime && !!chrome.runtime.id;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function destroyPesatUI() {
+    try {
+      if (contextCheckInterval) {
+        clearInterval(contextCheckInterval);
+        contextCheckInterval = null;
+      }
+      document.removeEventListener("mouseup", handleTextSelection);
+      document.removeEventListener("mousedown", handleDocumentMouseDown);
+      const hosts = Array.from(document.querySelectorAll("pesat-ai-agent-host, #pesat-ai-agent-host-root"));
+      hosts.forEach(h => {
+        try { h.remove(); } catch (_) {}
+      });
+      pesatHostElement = null;
+      pesatShadowRoot = null;
+      pesatFab = null;
+      pesatSelectionToolbar = null;
+      pesatSelectionPopover = null;
+    } catch (_) {}
+  }
+
   function safeSendMessage(message, callback) {
-    if (typeof chrome === "undefined" || !chrome.runtime?.id) {
+    if (!isContextValid()) {
+      destroyPesatUI();
       return;
     }
     try {
       chrome.runtime.sendMessage(message, (res) => {
         if (chrome.runtime?.lastError) {
+          const errMsg = String(chrome.runtime.lastError.message || "");
+          if (errMsg.includes("context invalidated") || errMsg.includes("Extension context")) {
+            destroyPesatUI();
+          }
           return;
         }
         if (typeof callback === "function") callback(res);
       });
-    } catch (_) {}
+    } catch (err) {
+      const errMsg = String(err?.message || "");
+      if (errMsg.includes("context invalidated") || errMsg.includes("Extension context")) {
+        destroyPesatUI();
+      }
+    }
   }
 
   function renderInPageMarkdown(rawText) {
@@ -4086,15 +4126,33 @@
         root.appendChild(pesatFab);
       }
 
-      document.addEventListener("mouseup", handleTextSelection);
-      document.addEventListener("mousedown", (e) => {
+      function handleDocumentMouseDown(e) {
+        if (!isContextValid()) {
+          destroyPesatUI();
+          return;
+        }
         if (pesatHostElement && pesatHostElement.contains(e.target)) return;
         if (pesatSelectionToolbar) pesatSelectionToolbar.style.display = "none";
-      });
+      }
+
+      document.addEventListener("mouseup", handleTextSelection);
+      document.addEventListener("mousedown", handleDocumentMouseDown);
+
+      if (!contextCheckInterval) {
+        contextCheckInterval = setInterval(() => {
+          if (!isContextValid()) {
+            destroyPesatUI();
+          }
+        }, 2000);
+      }
     } catch (_) {}
   }
 
   function handleTextSelection() {
+    if (!isContextValid()) {
+      destroyPesatUI();
+      return;
+    }
     setTimeout(() => {
       const selection = window.getSelection();
       const text = selection ? selection.toString().trim() : "";
