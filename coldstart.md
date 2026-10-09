@@ -306,9 +306,29 @@
 	- [x] **Anti-Loop Validator & Deterministic Menu Completion (`ai-engine.js`, `sidepanel/sidepanel.js`)**:
 	  - Isolasi pemanggilan tools (`requestBody.tools`) hanya untuk `phase === "act"`; fase `validate` dan `plan` diproteksi dengan prompt JSON evaluasi murni.
 	  - Fast-path deterministik di `runValidator` dan evaluasi ReAct loop (`isNavOrMenuIntent`): menandai subtask langsung `done` dan mengakhiri task jika tujuan membuka menu telah tercapai.
-	- [x] **Verifikasi & Sinkronisasi Build**:
-	  - Sinkronisasi penuh file ke direktori `extension/`.
-	  - Seluruh 18 pengujian Playwright lulus 100% (`npm test`).
-
-
+		### 🗓️ Day 12 (Unified Direct Agentic Architecture, Google Docs Rich-Text Engine, & Content Script Auto-Cleanup)
+		- [x] **Investigasi & Analisis Rigiditas Intent System**:
+		  - Analisis kasus prompt informal pengguna (seperti *"gimana cara fix nya"*) setelah audit keamanan web yang sempat terhenti tanpa jawaban karena salah diarahkan ke otomasi DOM fisik (`startTask`).
+		  - Penyusunan dokumen arsitektur dan strategi transformasi sistem pada `docs/RENCANA_PENGEMBANGAN_FLEKSIBILITAS_AGENT.md`.
+		- [x] **Implementasi Opsi A: Unified Direct Autonomous Agent (`sidepanel.js`, `ai-engine.js`)**:
+		  - **Nol Penyekatan Regex Kaku**: Menghilangkan percabangan rapuh berbasis 40+ aturan kata kunci regex. Seluruh instruksi pengguna dialirkan langsung ke Autonomous Agent dalam satu jalur terpadu.
+		  - **Pangkas Latensi Ganda (Single-Pass Direct Execution)**: Menghilangkan pemanggilan tahap perencana (`plan`) yang lambat di awal; model langsung menerima prompt pengguna bersama ringkasan DOM pada langkah pertama.
+		  - **Protokol 6 Unified Direct (`ai-engine.js`)**:
+		    * Permintaan penjelasan, konsultasi, analisis, solusi koding, dan troubleshooting dijawab langsung dalam format Markdown komprehensif tanpa memicu aksi DOM kosong.
+		    * Permintaan manipulasi browser fisik memicu pemanggilan native tools resmi (`navigate_to`, `click_element`, `type_text`, `press_key`, `finish_task`).
+		    * Permintaan campuran (analisis + aksi) memicu penjelasan teks sekaligus eksekusi tools yang relevan.
+		  - **Streaming Real-Time Respons Teks**: Integrasi *incremental markdown parser* dan *onChunk callback* pada loop navigator sehingga teks jawaban mengalir secara langsung (efek ketik halus).
+		  - **Zero Text Suppression**: Seluruh respons teks substantif yang dihasilkan model langsung disajikan ke bubble obrolan pengguna tanpa ditelan atau ditimpa oleh pesan generik validator.
+		- [x] **Pembersihan Otomatis Content Script & Context Invalidation (`content.js`)**:
+		  - Menambahkan pengecekan integritas konteks ekstensi (`isContextValid()`) dan pemantauan `chrome.runtime.lastError` (*"context invalidated"*).
+		  - Helper `destroyPesatUI()` yang secara otomatis menghapus elemen Shadow DOM host, tombol FAB `⚡`, toolbar seleksi teks, popover, dan event listener dari halaman web saat ekstensi dimatikan di `chrome://extensions` tanpa perlu me-reload tab browser.
+		- [x] **Perbaikan Mesin Injeksi Google Docs & Rich-Text Canvas (`content.js`, `sidepanel.js`)**:
+		  - **Koreksi Malformed HTML Generator (`convertMarkdownToRichDoc`)**: Mengganti pembungkusan tag bersarang yang salah (`<p><h2>...</h2><br><li>...</li></p>`) menjadi struktur blok semantik W3C murni (`<h2>`, `<ul><li>`, `<ol><li>`, `<p>`, `<blockquote>`, `<table>`). Menghilangkan total kebocoran teks tag mentah (`<li>`, `<i>`, `<br>`) pada canvas editor Google Docs.
+		  - **Koreksi Replace Intent (`sidepanel.js`)**: Menghilangkan pemaksaan `replace: true` otomatis pada tab Google Docs aktif. Mode pembersihan total hanya aktif jika pengguna secara eksplisit meminta (*"ganti isi"*, *"timpa"*, *"bersihkan dokumen"*, *"replace all"*), sehingga penambahan draf teks baru menyisip rapi pada posisi kursor.
+		  - **Robust Canvas Key Dispatch**: Penambahan siklus keyboard event `keydown` dan `keyup` lengkap (`Ctrl+A` / `Backspace`) melintasi inner textarea, iframe, dan canvas Google Docs untuk reset isi dokumen yang bersih.
+		- [x] **Hardening `.gitignore` & Proteksi Berkas Sensitif**:
+		  - Penambahan folder `docs/`, `To-do-list.md`, `coldstart.md`, `*.tmp`, dan `*.log` ke dalam `.gitignore` untuk mencegah kebocoran roadmap dan strategi internal ke repositori publik.
+		- [x] **Verifikasi Otomatisasi & QA**:
+		  - Seluruh 19 pengujian Playwright E2E lulus 100% (`npx playwright test tests/sidepanel.spec.js`).
+		  - Sinkronisasi penuh berkas ke direktori `extension/` dan validasi sintaks JavaScript bersih (`node -c`).
 
