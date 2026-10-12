@@ -328,7 +328,12 @@
 		  - **Robust Canvas Key Dispatch**: Penambahan siklus keyboard event `keydown` dan `keyup` lengkap (`Ctrl+A` / `Backspace`) melintasi inner textarea, iframe, dan canvas Google Docs untuk reset isi dokumen yang bersih.
 		- [x] **Hardening `.gitignore` & Proteksi Berkas Sensitif**:
 		  - Penambahan folder `docs/`, `To-do-list.md`, `coldstart.md`, `*.tmp`, dan `*.log` ke dalam `.gitignore` untuk mencegah kebocoran roadmap dan strategi internal ke repositori publik.
-		- [x] **Verifikasi Otomatisasi & QA**:
-		  - Seluruh 19 pengujian Playwright E2E lulus 100% (`npx playwright test tests/sidepanel.spec.js`).
-		  - Sinkronisasi penuh berkas ke direktori `extension/` dan validasi sintaks JavaScript bersih (`node -c`).
+			- [x] **Verifikasi Otomatisasi & QA**:
+			  - Seluruh 20 pengujian Playwright E2E lulus 100% (`npx playwright test tests/sidepanel.spec.js`).
+			  - Sinkronisasi penuh berkas ke direktori `extension/` dan validasi sintaks JavaScript bersih (`node -c`).
+			- [x] **Penyempurnaan Mention Context & Multi-Tab Summary (Masukan Mas Alfu)**:
+			  - **Kompensasi Ukuran Menu Mention (@)**: Sizing `.mention-picker` direfaktor menjadi kompak (`max-height: 185px`, padding rapi 5px, icon 16px, domain subtitle 11px) agar tidak mendominasi panel.
+			  - **Tampilkan Judul Halaman Asli (Gantikan `@tab2`)**: Dropdown dan komposer kini menampilkan judul asli halaman web (`@"Judul Halaman"` dan chip nama tab) sehingga pengguna awam langsung tahu tab yang dirujuk.
+			  - **Pembersihan Kolom Input (Chip-Only Mention)**: Saat memilih tab/konektor, item hanya masuk ke tray chip di atas kolom input (dengan tombol batal `✕`). Trigger `@` otomatis dibersihkan dari textarea agar tidak mengotori kalimat perintah.
+			  - **Perbaikan Rangkuman Multi-Tab**: Permintaan perangkuman/analisis tab lain kini otomatis dialirkan ke `runAnalysisFlow` dengan ekstraksi latar belakang via background worker + fallback `document.body.innerText`. Menghilangkan bug respons kosong.
 

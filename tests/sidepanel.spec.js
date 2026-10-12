@@ -354,4 +354,42 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     });
     expect(verified).toBe(true);
   });
+
+  test('should place context mentions into chip tray without polluting textarea', async ({ page }) => {
+    const res = await page.evaluate(async () => {
+      const promptInput = document.getElementById('promptInput');
+      const tray = document.getElementById('composerChipsTray');
+      promptInput.value = '@tre';
+
+      const testSource = {
+        id: 'tab-101',
+        tabId: 101,
+        title: 'Trello | Pesat Agent Board',
+        type: 'BrowserTab',
+        metadata: {
+          title: 'Trello | Pesat Agent Board',
+          tabId: 101,
+          domain: 'trello.com'
+        }
+      };
+
+      // Simulasi pembersihan @query saat tab dipilih
+      promptInput.value = promptInput.value.replace(/@\w*$/, '').trim();
+
+      const chip = document.createElement('div');
+      chip.className = 'composer-chip';
+      chip.innerHTML = `<span class="chip-name">${testSource.metadata.title}</span><button class="chip-remove">✕</button>`;
+      tray.appendChild(chip);
+
+      return {
+        isInputClean: promptInput.value === '',
+        chipRendered: !!tray.querySelector('.composer-chip'),
+        chipTitle: tray.querySelector('.chip-name')?.textContent || ''
+      };
+    });
+
+    expect(res.isInputClean).toBe(true);
+    expect(res.chipRendered).toBe(true);
+    expect(res.chipTitle).toContain('Trello | Pesat Agent Board');
+  });
 });

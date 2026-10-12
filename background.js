@@ -180,14 +180,39 @@ function isSummarizePrompt(text = "") {
   );
 }
 
-// Helper: Ambil teks artikel bersih (readable text) dari content.js pada tab aktif
+// Helper: Ambil teks artikel bersih (readable text) dari content.js pada tab aktif atau tab spesifik
 async function getReadableTextFromTab(tabId) {
   try {
     const res = await sendTabMessageSafe(tabId, { type: "GET_READABLE_TEXT" });
-    return res || { success: false, text: "" };
+    if (res && res.text && res.text.trim().length > 20) {
+      return res;
+    }
+  } catch (_) {}
+
+  // Fallback tangguh: Scripting executeScript ambil innerText langsung dari tab target
+  try {
+    if (chrome.scripting && chrome.scripting.executeScript) {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => ({
+          title: document.title || "",
+          url: window.location.href || "",
+          text: document.body ? (document.body.innerText || "") : ""
+        })
+      });
+      if (results && results[0]?.result?.text) {
+        return {
+          success: true,
+          title: results[0].result.title,
+          url: results[0].result.url,
+          text: results[0].result.text.slice(0, 10000)
+        };
+      }
+    }
   } catch (err) {
     return { success: false, text: "", error: err.message };
   }
+  return { success: false, text: "" };
 }
 
 // Helper: Kirim teks artikel ke Cloudflare Pages Function (chat.js)

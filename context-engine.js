@@ -27,8 +27,8 @@
               tabsResult.push({
                 id: `tab-${tab.id}`,
                 tabId: tab.id,
-                name: tabName,
-                title: `[@${tabName}] ${title}`,
+                name: title,
+                title: title,
                 url: url,
                 icon: tab.favIconUrl || "🌐",
                 type: "BrowserTab",
@@ -40,7 +40,8 @@
                   domain: domain,
                   active: !!tab.active,
                   favIconUrl: tab.favIconUrl,
-                  index: idx + 1
+                  index: idx + 1,
+                  tabName: tabName
                 }
               });
             }

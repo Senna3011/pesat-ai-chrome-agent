@@ -3087,11 +3087,13 @@ Respon HANYA dalam format JSON valid:
     attachedContextSources = [];
     renderComposerChips();
 
-    // Auto-detect dan resolve mention tab inline (misal "@tab1", "@tab2") jika diketik langsung oleh user
-    const tabMentions = userPrompt.match(/@tab(\d+)/gi);
-    if (tabMentions && typeof chrome !== "undefined" && chrome.tabs) {
+    // Auto-detect dan resolve mention tab inline (misal @"Judul Halaman", "@tab1", "@tab2")
+    const quotedMentions = userPrompt.match(/@"([^"]+)"/g) || [];
+    const tabMentions = userPrompt.match(/@tab(\d+)/gi) || [];
+    if ((quotedMentions.length > 0 || tabMentions.length > 0) && typeof chrome !== "undefined" && chrome.tabs) {
       try {
         const allTabs = await new Promise(res => chrome.tabs.query({ currentWindow: true }, res));
+        // 1. Resolve @tabN
         for (const tm of tabMentions) {
           const tIdx = parseInt(tm.replace(/@tab/i, ""), 10);
           if (tIdx >= 1 && tIdx <= allTabs.length) {
@@ -3100,22 +3102,44 @@ Respon HANYA dalam format JSON valid:
               contextSourcesToSend.push({
                 id: `tab-${targetTab.id}`,
                 tabId: targetTab.id,
-                name: `tab${tIdx}`,
-                title: `[@tab${tIdx}] ${targetTab.title || "Tab"}`,
+                name: targetTab.title || `Tab ${tIdx}`,
+                title: targetTab.title || `Tab ${tIdx}`,
                 url: targetTab.url || "",
                 type: "BrowserTab",
                 metadata: {
                   tabId: targetTab.id,
                   title: targetTab.title,
                   url: targetTab.url,
+                  active: !!targetTab.active,
                   index: tIdx
                 }
               });
             }
           }
         }
+        // 2. Resolve @"Judul Halaman"
+        for (const qm of quotedMentions) {
+          const rawQ = qm.replace(/^@"|"$/g, "").toLowerCase().trim();
+          const targetTab = allTabs.find(t => (t.title && t.title.toLowerCase().includes(rawQ)) || (t.url && t.url.toLowerCase().includes(rawQ)));
+          if (targetTab && !contextSourcesToSend.some(s => s.metadata?.tabId === targetTab.id || s.id === `tab-${targetTab.id}`)) {
+            contextSourcesToSend.push({
+              id: `tab-${targetTab.id}`,
+              tabId: targetTab.id,
+              name: targetTab.title || "Tab",
+              title: targetTab.title || "Tab",
+              url: targetTab.url || "",
+              type: "BrowserTab",
+              metadata: {
+                tabId: targetTab.id,
+                title: targetTab.title,
+                url: targetTab.url,
+                active: !!targetTab.active
+              }
+            });
+          }
+        }
       } catch (err) {
-        console.warn("[Sidepanel] Inline @tab resolve error:", err);
+        console.warn("[Sidepanel] Inline tab mention resolve error:", err);
       }
     }
 
@@ -3136,8 +3160,8 @@ Respon HANYA dalam format JSON valid:
     let displayPrompt = userPrompt;
     if (contextSourcesToSend.length > 0) {
       const extraChips = contextSourcesToSend
-        .filter(s => s && s.name && (s.type === "File" || s.type === "Image" || !userPrompt.includes(`@${s.name}`)))
-        .map(s => s.type === "BrowserTab" ? `@${s.name}` : (s.type === "Connector" ? `@${s.name}` : `📎 ${s.name}`))
+        .filter(s => s && (s.type === "File" || s.type === "Image" || (!userPrompt.includes(s.title || s.name) && !userPrompt.includes(`@${s.name}`))))
+        .map(s => (s.type === "BrowserTab" || s.type === "tab") ? `[Tab: ${s.title || s.name}]` : (s.type === "Connector" ? `@${s.name}` : `📎 ${s.name}`))
         .filter(c => c && !c.includes("undefined"));
       if (extraChips.length > 0) {
         displayPrompt = `${extraChips.join(" ")}\n${userPrompt}`;
@@ -3172,10 +3196,22 @@ Respon HANYA dalam format JSON valid:
     const isCurrentTabDocs = (currentTabUrl.includes("docs.google.com/document") || currentTabTitle.includes("Google Dokumen") || currentTabTitle.includes("Google Docs") || currentTabUrl.includes("word.office.com")) && !currentTabUrl.includes("/spreadsheets");
     const isCurrentTabSheets = (currentTabUrl.includes("docs.google.com/spreadsheets") || currentTabTitle.includes("Google Spreadsheet") || currentTabTitle.includes("Google Sheets") || currentTabUrl.includes("excel.office.com"));
 
-    // ══ OPSI A: UNIFIED DIRECT AGENT ENTRY POINT ══
-    // Nol penyekatan regex kaku. Seluruh instruksi pengguna (pertanyaan, analisis,
-    // penulisan dokumen/tabel, konsultasi kode, maupun otomasi klik/ketik/navigasi peramban)
-    // dialirkan langsung ke Unified Autonomous Agent (startTask) dengan latency tunggal.
+    // Deteksi aksi otomasi browser fisik (klik, login, isi form, navigasi direct, posting medsos)
+    const isPhysicalAutomation = (
+      /(?:posting|post|tweet|unggah|publikasikan)\s+(?:ke\s+)?(?:x(?:\.com)?|twitter|threads(?:\.net|\.com)?|linkedin|medsos|media sosial)/i.test(userPrompt) ||
+      /^(?:tolong\s+|mohon\s+)?(?:buka|kunjungi|open|go\s*to|akses)\s+(?:website\s+|web\s+|situs\s+|halaman\s+|url\s+)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?|https?:\/\/[^\s]+)\s*$/i.test(userPrompt.trim()) ||
+      /(?:isi\s+form|isi\s+formulir|isi\s+field|\blogin\b|\bsign\s*in\b|\bmasuk\s+(?:ke|akun)\b|autofill|isi\s+email|isi\s+password|isi\s+kolom|masukkan\s+email|masukkan\s+password|isi\s+akun)/i.test(userPrompt) ||
+      /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt) && /(?:kirim|tulis|compose|buat|send)/i.test(userPrompt) ||
+      /(?:^(?:klik|click|select|pilih|centang|check|uncheck|tekan|press|scroll|gulir|download|unduh|checkout|pesan sekarang|beli sekarang)\b)/i.test(userPrompt.trim()) ||
+      /(?:(?:tolong\s+|mohon\s+)?(?:klik|click|pilih|centang|tekan|scroll)\s+(?:tombol|button|link|tautan|menu|tab|kolom|elemen))/i.test(userPrompt) ||
+      /^(?:tolong\s+|mohon\s+)?(?:cari|search|carikan|temukan)\s+.+\s+(?:di|pada|ke)\s+[a-zA-Z0-9.-]+/i.test(userPrompt)
+    ) && !/(?:rangkum|ringkas|summarize|ringkasan|rangkuman|intisari|jelaskan|analisa|analisis|apa\s+isi|baca\s+tab)/i.test(userPrompt);
+
+    if (!isPhysicalAutomation) {
+      await runAnalysisFlow(userPrompt, contextSourcesToSend);
+      return;
+    }
+
     await startTask(userPrompt, contextSourcesToSend);
   }
 
@@ -3236,24 +3272,37 @@ Respon HANYA dalam format JSON valid:
         appendLog(`🖼️ Mempersiapkan gambar lampiran untuk analisis visual: ${attachedImages[0].name || attachedImages[0].title || "Gambar"}`);
       }
 
-      // 1. Cek apakah ada referensi BrowserTab yang dilampirkan atau di-mention (@tab1, @tab2, dll.)
-      const referencedTab = (contextSources || []).find(s => s && (s.type === "BrowserTab" || s.type === "tab") && s.metadata?.tabId);
+      // 1. Cek apakah ada referensi BrowserTab yang dilampirkan atau di-mention
+      const referencedTabs = (contextSources || []).filter(s => s && (s.type === "BrowserTab" || s.type === "tab") && (s.metadata?.tabId || s.tabId));
 
       let cleanText = "";
       let pageTitle = (attachedFiles[0]?.name) || activeTabInfo?.title || "Halaman Web";
       let pageUrl = activeTabInfo?.url || "";
 
-      if (referencedTab && referencedTab.metadata?.tabId) {
-        appendLog(`📖 Membaca referensi dari [${referencedTab.name || 'Tab'}] ${referencedTab.metadata.title || referencedTab.title}...`);
-        const tabTextRes = await sendToBackground({
-          action: "GET_READABLE_TEXT",
-          tabId: referencedTab.metadata.tabId
-        });
-        if (tabTextRes && tabTextRes.text && tabTextRes.text.length > 20) {
-          cleanText = tabTextRes.text;
-          pageTitle = tabTextRes.title || referencedTab.metadata.title || referencedTab.name;
-          pageUrl = tabTextRes.url || referencedTab.metadata.url || "";
+      if (referencedTabs.length > 0) {
+        for (const refTab of referencedTabs) {
+          const tId = refTab.metadata?.tabId || refTab.tabId;
+          const rTitle = refTab.metadata?.title || refTab.title || refTab.name || "Tab";
+          appendLog(`📖 Membaca konten referensi dari [${rTitle}]...`);
+          try {
+            const tabTextRes = await sendToBackground({
+              action: "GET_READABLE_TEXT",
+              tabId: tId
+            });
+            const tText = tabTextRes?.text || "";
+            if (tText && tText.trim().length > 20) {
+              cleanText += `\n\n[KONTEN DARI TAB: "${rTitle}" (${tabTextRes?.url || refTab.url || ""})]:\n${tText.trim()}`;
+              pageTitle = tabTextRes?.title || rTitle;
+              pageUrl = tabTextRes?.url || refTab.url || pageUrl;
+              appendLog(`✓ Berhasil membaca ${tText.trim().length} karakter dari tab "${rTitle}".`);
+            } else {
+              appendLog(`⚠️ Tab "${rTitle}" tidak memuat teks yang cukup.`, "WARN");
+            }
+          } catch (e) {
+            appendLog(`Gagal membaca tab "${rTitle}": ${e.message}`, "WARN");
+          }
         }
+        cleanText = cleanText.trim();
       }
 
       // Jika belum ada cleanText dari referensi tab dan tidak ada file, ambil dari tab aktif saat ini
@@ -3916,21 +3965,41 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
     try {
       // 1. Ambil konten teks dari seluruh tab referensi di latar belakang (tanpa gonta-ganti tab fisik)
       for (const src of (contextSources || [])) {
-        if (src.type === "BrowserTab" && src.metadata?.tabId) {
+        if (src.type === "BrowserTab" && (src.metadata?.tabId || src.tabId)) {
+          const targetTabId = src.metadata?.tabId || src.tabId;
           try {
-            const tabRes = await new Promise((resolve) => {
-              chrome.tabs.sendMessage(src.metadata.tabId, { type: "GET_READABLE_TEXT" }, (response) => {
-                if (chrome.runtime.lastError) resolve(null);
-                else resolve(response);
-              });
+            const tabRes = await sendToBackground({
+              action: "GET_READABLE_TEXT",
+              tabId: targetTabId
             });
             if (tabRes && tabRes.text && tabRes.text.length > 20) {
               src.content = tabRes.text;
-              src.metadata.extractedText = tabRes.text.slice(0, 4500);
-              appendLog(`📖 Referensi "${src.name}" berhasil diekstrak di latar belakang (${src.metadata.extractedText.length} karakter).`);
+              src.metadata = src.metadata || {};
+              src.metadata.extractedText = tabRes.text.slice(0, 6000);
+              appendLog(`📖 Referensi "${src.title || src.name}" berhasil diekstrak di latar belakang (${src.metadata.extractedText.length} karakter).`);
             }
           } catch (e) {}
         }
+      }
+
+      // 1.5. Cek apakah ini instruksi analisis, penjelasan, atau perangkuman (tanpa aksi manipulasi fisik)
+      const isAnalysisOrSummaryGoal = (
+        /(?:rangkum|ringkas|summarize|ringkasan|rangkuman|intisari|poin\s+penting)\b/i.test(goal) ||
+        /(?:^|\b)(?:analisa|analisis|analyze|analysis|audit|review|tinjau|bedah|evaluasi|periksa|cek|riset)\b/i.test(goal) ||
+        /(?:^|\b)(?:gimana|gmn|bagaimana|bgm|apa|apakah|kenapa|mengapa|siapa|dimana|kapan|berapa|how|what|why|where|when|which|fix|cara|solusi|perbaiki|remediasi|mengatasi|jelaskan|terangkan|bahas|ulas|kode|contoh|panduan|langkah|rekomendasi)\b/i.test(goal) ||
+        /\?/.test(goal)
+      ) && !/(?:klik|click|isi\s+form|login|register|checkout|pesan|scroll|ketik\s+di|input\s+ke|centang|select|tekan)/i.test(goal);
+
+      if (isAnalysisOrSummaryGoal) {
+        appendLog("🔍 Mengalihkan ke Intelligence & Analysis Engine...");
+        setAgentRunning(false);
+        if (activeTask) {
+          activeTask.status = "COMPLETED";
+          clearPersistedTask();
+          activeTask = null;
+        }
+        await runAnalysisFlow(goal, contextSources);
+        return;
       }
 
       // 2. Cek tab aktif saat ini & tentukan apakah perlu switch tab
@@ -5215,7 +5284,9 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
         else if (ext === "json" || ext === "js" || ext === "ts" || ext === "html") icon = "📄";
       }
 
-      const displayName = src.name || src.title || "File";
+      const displayName = (src.type === "BrowserTab" || src.type === "tab")
+        ? (src.metadata?.title || src.title || src.name || "Tab")
+        : (src.name || src.title || "File");
       const sizeStr = src.metadata?.sizeFormatted || (src.metadata?.size ? `${Math.round(src.metadata.size / 1024)} KB` : "");
 
       chip.innerHTML = `
@@ -5271,10 +5342,10 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
         item.className = `mention-picker-item${flatIdx === 0 ? " active" : ""}`;
         item.setAttribute("data-flat-index", flatIdx);
 
-        const titleText = src.title || src.metadata?.title || src.name;
+        const titleText = src.metadata?.title || src.title || src.name;
         const subText = src.metadata?.domain || src.subtitle || src.metadata?.description || src.url || "";
         const badge = (src.type === "BrowserTab" || src.type === "tab")
-          ? (src.metadata?.active ? "Aktif" : (src.name ? `@${src.name}` : "Tab"))
+          ? (src.metadata?.active ? "Aktif" : (src.metadata?.domain || `Tab ${src.metadata?.index || ""}`.trim()))
           : (src.type === "Connector" ? "Konektor" : "");
 
         item.innerHTML = `
@@ -5312,8 +5383,8 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       const { connectors, tabs } = await PesatContextEngine.getFilteredGrouped(query);
       if (thisQuery !== mentionQueryCounter) return; // stale result
       groups = [
-        { title: "Connectors", items: connectors },
-        { title: "Browser Tabs", items: tabs.slice(0, 20) }
+        { title: "Browser Tabs", items: tabs.slice(0, 20) },
+        { title: "Connectors", items: connectors }
       ];
     }
 
@@ -5362,30 +5433,26 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       renderComposerChips();
     }
 
-    // Smart insertion: replace @query with @Name at caret position, preserving surrounding text
+    // Bersihkan trigger @query dari textarea agar kolom teks tetap bersih untuk instruksi murni pengguna
     const val = promptInput.value;
     const pos = promptInput.selectionStart ?? val.length;
     const trigger = findMentionTrigger();
-    const mentionName = source.name || (source.metadata?.index ? `tab${source.metadata.index}` : (source.title || "tab").replace(/\s+/g, "_"));
 
-    let before, after, insertText;
+    let before, after;
     if (trigger) {
       before = val.slice(0, trigger.atPos);
       after = val.slice(pos);
-      insertText = `@${mentionName} `;
     } else {
       before = val.slice(0, pos);
       after = val.slice(pos);
-      const needSpace = pos > 0 && !/\s/.test(val[pos - 1]);
-      insertText = `${needSpace ? " " : ""}@${mentionName} `;
     }
 
-    if (insertText.endsWith(" ") && after.startsWith(" ")) {
+    if (before.endsWith(" ") && after.startsWith(" ")) {
       after = after.slice(1);
     }
 
-    promptInput.value = before + insertText + after;
-    const newPos = before.length + insertText.length;
+    promptInput.value = (before + after).trimStart();
+    const newPos = before.length;
     promptInput.setSelectionRange(newPos, newPos);
 
     promptInput.style.height = "auto";
