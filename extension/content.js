@@ -327,36 +327,6 @@
         0% { transform: scale(1); }
         100% { transform: scale(1.015); }
       }
-      #pesat-fab-toggle {
-        position: fixed !important;
-        bottom: 24px;
-        right: 24px;
-        width: 48px !important;
-        height: 48px !important;
-        border-radius: 50% !important;
-        background: #0f172a !important;
-        border: 2px solid #38bdf8 !important;
-        color: #38bdf8 !important;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 12px rgba(56, 189, 248, 0.4) !important;
-        cursor: grab !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        z-index: 2147483647 !important;
-        pointer-events: auto !important;
-        user-select: none !important;
-        -webkit-user-select: none !important;
-        touch-action: none !important;
-        transition: transform 0.15s, box-shadow 0.15s !important;
-      }
-      #pesat-fab-toggle:hover {
-        transform: scale(1.08) !important;
-        box-shadow: 0 6px 24px rgba(56, 189, 248, 0.6) !important;
-      }
-      #pesat-fab-toggle:active {
-        cursor: grabbing !important;
-        transform: scale(0.96) !important;
-      }
       #pesat-selection-toolbar {
         position: absolute !important;
         display: none;
@@ -3934,7 +3904,6 @@
   // ─────────────────────────────────────────────────────
   let pesatSelectionToolbar = null;
   let pesatSelectionPopover = null;
-  let pesatFab = null;
 
   function escapeHtmlText(str) {
     if (!str) return "";
@@ -3951,6 +3920,15 @@
     }
   }
 
+  function handleDocumentMouseDown(e) {
+    if (!isContextValid()) {
+      destroyPesatUI();
+      return;
+    }
+    if (pesatHostElement && pesatHostElement.contains(e.target)) return;
+    if (pesatSelectionToolbar) pesatSelectionToolbar.style.display = "none";
+  }
+
   function destroyPesatUI() {
     try {
       if (contextCheckInterval) {
@@ -3965,7 +3943,6 @@
       });
       pesatHostElement = null;
       pesatShadowRoot = null;
-      pesatFab = null;
       pesatSelectionToolbar = null;
       pesatSelectionPopover = null;
     } catch (_) {}
@@ -4072,143 +4049,6 @@
 
   function initInPageAssistance() {
     try {
-      const root = getOrCreatePesatShadowRoot();
-      const existingFabs = Array.from(root.querySelectorAll("#pesat-fab-toggle"));
-      if (existingFabs.length > 0) {
-        pesatFab = existingFabs[0];
-        for (let i = 1; i < existingFabs.length; i++) {
-          try { existingFabs[i].remove(); } catch (_) {}
-        }
-        return;
-      }
-
-      if (!root.querySelector("#pesat-fab-toggle")) {
-        pesatFab = document.createElement("button");
-        pesatFab.id = "pesat-fab-toggle";
-        pesatFab.title = "Pesat AI Agent (Tahan & Geser untuk pindah posisi, Klik untuk Sidepanel)";
-        pesatFab.innerHTML = `<span style="font-size:22px;line-height:1;pointer-events:none;">⚡</span>`;
-
-        // Pulihkan posisi tersimpan dari localStorage
-        try {
-          const raw = localStorage.getItem("pesat_fab_pos");
-          if (raw) {
-            const pos = JSON.parse(raw);
-            if (Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
-              const clampedX = Math.min(window.innerWidth - 56, Math.max(10, pos.x));
-              const clampedY = Math.min(window.innerHeight - 56, Math.max(10, pos.y));
-              pesatFab.style.left = `${clampedX}px`;
-              pesatFab.style.top = `${clampedY}px`;
-              pesatFab.style.right = "auto";
-              pesatFab.style.bottom = "auto";
-            }
-          }
-        } catch (_) {}
-
-        // Drag and Drop State
-        let isDragging = false;
-        let startX = 0, startY = 0;
-        let initialLeft = 0, initialTop = 0;
-        let hasMoved = false;
-
-        const handleDragStart = (clientX, clientY) => {
-          isDragging = true;
-          hasMoved = false;
-          startX = clientX;
-          startY = clientY;
-          const rect = pesatFab.getBoundingClientRect();
-          initialLeft = rect.left;
-          initialTop = rect.top;
-          pesatFab.style.cursor = "grabbing";
-          pesatFab.style.transition = "none";
-        };
-
-        const handleDragMove = (clientX, clientY) => {
-          if (!isDragging) return;
-          const dx = clientX - startX;
-          const dy = clientY - startY;
-          if (Math.hypot(dx, dy) > 4) {
-            hasMoved = true;
-          }
-          const newLeft = Math.min(window.innerWidth - 54, Math.max(8, initialLeft + dx));
-          const newTop = Math.min(window.innerHeight - 54, Math.max(8, initialTop + dy));
-          pesatFab.style.left = `${newLeft}px`;
-          pesatFab.style.top = `${newTop}px`;
-          pesatFab.style.right = "auto";
-          pesatFab.style.bottom = "auto";
-        };
-
-        const handleDragEnd = () => {
-          if (!isDragging) return;
-          isDragging = false;
-          pesatFab.style.cursor = "grab";
-          pesatFab.style.transition = "transform 0.15s, box-shadow 0.15s";
-
-          if (hasMoved) {
-            const rect = pesatFab.getBoundingClientRect();
-            try {
-              localStorage.setItem("pesat_fab_pos", JSON.stringify({ x: rect.left, y: rect.top }));
-            } catch (_) {}
-          }
-        };
-
-        // Mouse Dragging
-        pesatFab.addEventListener("mousedown", (e) => {
-          if (e.button !== 0) return;
-          handleDragStart(e.clientX, e.clientY);
-          e.preventDefault();
-
-          const onMouseMove = (me) => handleDragMove(me.clientX, me.clientY);
-          const onMouseUp = () => {
-            handleDragEnd();
-            window.removeEventListener("mousemove", onMouseMove);
-            window.removeEventListener("mouseup", onMouseUp);
-          };
-
-          window.addEventListener("mousemove", onMouseMove);
-          window.addEventListener("mouseup", onMouseUp);
-        });
-
-        // Touch Dragging (untuk perangkat sentuh / touch emulator)
-        pesatFab.addEventListener("touchstart", (e) => {
-          if (e.touches.length === 1) {
-            handleDragStart(e.touches[0].clientX, e.touches[0].clientY);
-          }
-        }, { passive: true });
-
-        pesatFab.addEventListener("touchmove", (e) => {
-          if (e.touches.length === 1) {
-            handleDragMove(e.touches[0].clientX, e.touches[0].clientY);
-          }
-        }, { passive: true });
-
-        pesatFab.addEventListener("touchend", () => {
-          handleDragEnd();
-        });
-
-        // Click Action (hanya dieksekusi jika tidak sedang digeser)
-        pesatFab.addEventListener("click", (e) => {
-          e.stopPropagation();
-          if (hasMoved) return;
-
-          safeSendMessage({ action: "TOGGLE_SIDEPANEL" }, (res) => {
-            if (res?.success === false) {
-              showReadingHUD("⚡ Sidepanel: Klik ikon Pesat AI di toolbar browser untuk membuka.");
-            }
-          });
-        });
-
-        root.appendChild(pesatFab);
-      }
-
-      function handleDocumentMouseDown(e) {
-        if (!isContextValid()) {
-          destroyPesatUI();
-          return;
-        }
-        if (pesatHostElement && pesatHostElement.contains(e.target)) return;
-        if (pesatSelectionToolbar) pesatSelectionToolbar.style.display = "none";
-      }
-
       document.addEventListener("mouseup", handleTextSelection);
       document.addEventListener("mousedown", handleDocumentMouseDown);
 
