@@ -1,6 +1,42 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "pesat-ai-chrome-agent",
-  "main": "index.js",
-  "compatibility_date": "2026-09-16"
+  "main": "index.mjs",
+  "compatibility_date": "2026-09-16",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pesat-agent",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "ORIGINALS", "bucket_name": "pesat-originals" },
+    { "binding": "ARTIFACTS", "bucket_name": "pesat-artifacts" }
+  ],
+  "vectorize": [
+    { "binding": "VECTORIZE", "index_name": "pesat-knowledge" }
+  ],
+  "ai": { "binding": "AI" },
+  "ratelimits": [
+    {
+      "name": "API_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 120, "period": 60 }
+    },
+    {
+      "name": "AUTH_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "production",
+    "EMBEDDING_MODEL": "@cf/baai/bge-m3",
+    "CHAT_MODEL": "@cf/meta/llama-3.1-8b-instruct",
+    "ALLOWED_CHAT_MODELS": "@cf/meta/llama-3.1-8b-instruct",
+    "MAX_CHAT_TOKENS": "4096",
+    "ALLOWED_ORIGINS": ""
+  }
 }

@@ -1,20 +1,69 @@
-# ⚡ Pesat AI Browser Agent
+# Pesat AI Browser Agent
 
-Chrome Extension (Manifest V3) berbasis AI Browser Automation yang terintegrasi dengan API AI Internal via Cloudflare Pages (Serverless Functions).
+Chrome Extension Manifest V3 dengan typed browser-agent loop dan backend RAG Cloudflare-native.
 
-## 📁 Struktur Proyek
-- `/extension`: Source code Chrome Extension (Side Panel UI, Background Service Worker, Content Scripts).
-- `/functions`: Cloudflare Pages Functions (`/api/chat.js`) sebagai middleware/proxy aman untuk API AI Internal.
+## Struktur
 
-## 🚀 Cara Menjalankan Ekstensi Secara Lokal
-1. Buka `chrome://extensions/` di Google Chrome.
-2. Aktifkan **Developer mode** di pojok kanan atas.
-3. Klik **Load unpacked** dan pilih folder `extension/`.
-4. Buka website apa saja dan klik ikon ekstensi di toolbar untuk membuka Side Panel.
+- `extension/`: source canonical Chrome Extension.
+- `worker/` + `index.mjs`: Cloudflare Worker canonical.
+- `migrations/`: schema D1.
+- `functions/`: Pages Functions lama; tidak dipakai deployment canonical baru.
 
-## ☁️ Deployment Cloudflare Pages
-1. Hubungkan repository ini ke Cloudflare Pages.
-2. Atur Environment Variables di dashboard Cloudflare Pages:
-   - `AI_BASE_URL`: Endpoint API AI Internal
-   - `AI_API_KEY`: API Key internal perusahaan
-   - `AI_MODEL_NAME`: Nama model LLM yang digunakan
+## Menjalankan extension
+
+1. Buka `chrome://extensions/`.
+2. Aktifkan **Developer mode**.
+3. Klik **Load unpacked** dan pilih `extension/`.
+4. Isi PesatRouter API key, atau hubungkan Google untuk authenticated Worker fallback dan knowledge base.
+
+## Provisioning backend RAG
+
+Resource yang dibutuhkan:
+
+```bash
+npx wrangler d1 create pesat-agent
+npx wrangler r2 bucket create pesat-originals
+npx wrangler r2 bucket create pesat-artifacts
+npx wrangler vectorize create pesat-knowledge --dimensions=1024 --metric=cosine
+npx wrangler vectorize create-metadata-index pesat-knowledge --property-name=tenant_id --type=string
+npx wrangler vectorize create-metadata-index pesat-knowledge --property-name=source_type --type=string
+```
+
+`1024` harus sama dengan dimensi `EMBEDDING_MODEL`. Bila model diganti, buat index dengan dimensi model tersebut.
+
+Isi `wrangler.jsonc`:
+
+- D1 `database_id` nyata.
+- `ALLOWED_EXTENSION_ID` atau exact `ALLOWED_ORIGINS`.
+- `GOOGLE_OAUTH_CLIENT_IDS`: allowlist OAuth client ID yang boleh menukar Google token menjadi session.
+
+Set secrets:
+
+```bash
+npx wrangler secret put SESSION_SECRET
+# Opsional bila memakai provider eksternal:
+npx wrangler secret put CHAT_API_KEY
+npx wrangler secret put EMBEDDING_API_KEY
+```
+
+Terapkan schema dan validasi:
+
+```bash
+npx wrangler d1 migrations apply pesat-agent --remote
+npm run validate:deploy
+npx wrangler deploy --dry-run
+npx wrangler deploy
+```
+
+`npm run validate:deploy` sengaja gagal selama placeholder deployment belum diganti.
+
+## Batas ingestion sinkron
+
+Versi ini menerima teks/Markdown/HTML/CSV sampai 48 KiB dan maksimum 40 chunks per request. File besar memerlukan durable asynchronous ingestion sebelum batas dinaikkan.
+
+## Tests
+
+```bash
+node --test tests/agent-core.test.js tests/knowledge-skill.test.js tests/backend/*.test.mjs
+npm test -- --reporter=line
+```
