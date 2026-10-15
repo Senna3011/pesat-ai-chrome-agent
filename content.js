@@ -2426,7 +2426,7 @@
     }
 
     // ── Dedicated Spreadsheet & Data Grid Table Input Handler ──
-    async function handleSpreadsheetGridInput(dataInput, targetElement = null) {
+    async function handleSpreadsheetGridInput(dataInput, targetElement = null, opts = {}) {
       if (!dataInput) {
         return { success: false, error: "Data tabel / spreadsheet kosong.", errorType: "TOOL_INVALID_ARGUMENT" };
       }
@@ -2521,7 +2521,7 @@
         }
 
         // Jika mode replace, hapus isi grid lama terlebih dahulu
-        if (actionData.replace) {
+        if (opts?.replace || (typeof actionData !== "undefined" && actionData?.replace)) {
           const targetForKeys = activeInput || gridCanvas || document.body;
           try {
             targetForKeys.dispatchEvent(new KeyboardEvent("keydown", { key: "a", code: "KeyA", keyCode: 65, which: 65, ctrlKey: !isMac, metaKey: isMac, bubbles: true }));
@@ -2551,6 +2551,10 @@
             primaryTarget.dispatchEvent(new KeyboardEvent("keydown", { key: "v", code: "KeyV", keyCode: 86, ctrlKey: !isMac, metaKey: isMac, bubbles: true }));
           } catch (_) {}
         }
+
+        try {
+          document.execCommand("paste");
+        } catch (_) {}
 
         // B. Spreadsheet Grid Direct Typing (Tab antar kolom & Enter ganti baris)
         const formulaInput = document.querySelector("#t-formula-bar-input") ||
@@ -2743,6 +2747,7 @@
         const normIdent = ident.toLowerCase().trim();
         const isEmailIdent = /email|surel|user|username|akun/i.test(normIdent);
         const isPassIdent = /pass|password|sandi|kata sandi/i.test(normIdent);
+        const isAddressIdent = /alamat|address|currentAddress/i.test(normIdent);
 
         // 1. Semantic type match
         if (isEmailIdent) {
@@ -2752,6 +2757,10 @@
         if (isPassIdent) {
           const passEl = elements.find(e => e.type === "password" || (e.autocomplete && e.autocomplete.includes("password")));
           if (passEl) return passEl;
+        }
+        if (isAddressIdent) {
+          const addrEl = elements.find(e => (e.tagName === "TEXTAREA" || e.type === "text") && /address|alamat/i.test(`${e.id} ${e.name} ${e.placeholder}`));
+          if (addrEl) return addrEl;
         }
 
         // 2. Exact match on name, id, placeholder, aria-label
@@ -2820,13 +2829,121 @@
 
       fields.forEach(f => {
         const ident = (f.identifier || f.name || f.field || "").toLowerCase().trim();
-        const val = f.value ?? "";
-        const el = findMatchingField(ident, allElements);
+        const val = String(f.value ?? "").trim();
 
+        // 1. Khusus Radio Button (Gender / Jenis Kelamin)
+        if (ident === "gender" || /^(male|female|other|pria|wanita)$/i.test(val)) {
+          const targetVal = val.toLowerCase();
+          const radioEl = allElements.find(e => {
+            if (e.type !== "radio") return false;
+            const v = (e.value || "").toLowerCase();
+            const id = (e.id || "").toLowerCase();
+            const lbl = document.querySelector(`label[for="${e.id}"]`)?.textContent.toLowerCase() || "";
+            const pLbl = e.closest("label")?.textContent.toLowerCase() || "";
+            return v === targetVal || id.includes(targetVal) || lbl.includes(targetVal) || pLbl.includes(targetVal);
+          });
+          if (radioEl) {
+            radioEl.checked = true;
+            radioEl.dispatchEvent(new Event("change", { bubbles: true }));
+            radioEl.click();
+            const parentLbl = radioEl.closest("label") || document.querySelector(`label[for="${radioEl.id}"]`);
+            if (parentLbl) parentLbl.click();
+            filledCount++;
+            return;
+          }
+        }
+
+        // 2. Khusus Checkbox (Hobi / Hobbies: Sports & Reading)
+        if (ident === "hobbies" || ident === "hobi") {
+          const hobbyTokens = val.split(/[&,]/).map(t => t.trim().toLowerCase()).filter(Boolean);
+          hobbyTokens.forEach(ht => {
+            const chkEl = allElements.find(e => {
+              if (e.type !== "checkbox") return false;
+              const v = (e.value || "").toLowerCase();
+              const id = (e.id || "").toLowerCase();
+              const lbl = document.querySelector(`label[for="${e.id}"]`)?.textContent.toLowerCase() || "";
+              const pLbl = e.closest("label")?.textContent.toLowerCase() || "";
+              return v === ht || id.includes(ht) || lbl.includes(ht) || pLbl.includes(ht);
+            });
+            if (chkEl) {
+              chkEl.checked = true;
+              chkEl.dispatchEvent(new Event("change", { bubbles: true }));
+              chkEl.click();
+              const parentLbl = chkEl.closest("label") || document.querySelector(`label[for="${chkEl.id}"]`);
+              if (parentLbl) parentLbl.click();
+              filledCount++;
+            }
+          });
+          return;
+        }
+
+        // 3. Standard Field Matching (Input teks, textarea, select)
+        const el = findMatchingField(ident, allElements);
         if (el) {
           setNativeInputValue(el, val);
           filledCount++;
         }
+      });
+
+      // 4. Deteksi dan pengisian cerdas kolom daerah / wilayah (State, City, Provinsi, Kota / React-Select & Select2)
+      const stateContainer = document.querySelector("#state") ||
+                             document.querySelector("[id*='state' i]") ||
+                             document.querySelector("[aria-label*='state' i]") ||
+                             document.querySelector(".state-select");
+      if (stateContainer) {
+        try {
+          const control = stateContainer.querySelector("[class*='control']") || stateContainer.querySelector("input") || stateContainer;
+          control.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+          control.click?.();
+          await new Promise(r => setTimeout(r, 120));
+          const option = document.querySelector("[id*='react-select'][id*='-option-'], [class*='-menu'] [class*='-option'], .css-26l3qy-menu div");
+          if (option) {
+            option.click();
+            filledCount++;
+            await new Promise(r => setTimeout(r, 150));
+          } else {
+            const inp = stateContainer.querySelector("input");
+            if (inp) {
+              inp.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", keyCode: 40, bubbles: true }));
+              inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true }));
+              filledCount++;
+            }
+          }
+        } catch (_) {}
+      }
+
+      const cityContainer = document.querySelector("#city") ||
+                            document.querySelector("[id*='city' i]") ||
+                            document.querySelector("[aria-label*='city' i]") ||
+                            document.querySelector(".city-select");
+      if (cityContainer) {
+        try {
+          const control = cityContainer.querySelector("[class*='control']") || cityContainer.querySelector("input") || cityContainer;
+          control.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+          control.click?.();
+          await new Promise(r => setTimeout(r, 120));
+          const option = document.querySelector("[id*='react-select'][id*='-option-'], [class*='-menu'] [class*='-option'], .css-26l3qy-menu div");
+          if (option) {
+            option.click();
+            filledCount++;
+            await new Promise(r => setTimeout(r, 150));
+          } else {
+            const inp = cityContainer.querySelector("input");
+            if (inp) {
+              inp.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", keyCode: 40, bubbles: true }));
+              inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true }));
+              filledCount++;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Deteksi dropdown native HTML <select> yang masih di opsi default (index 0)
+      const unselectedSelects = Array.from(document.querySelectorAll("select")).filter(s => !s.disabled && s.selectedIndex <= 0 && s.options.length > 1);
+      unselectedSelects.forEach(sel => {
+        sel.selectedIndex = 1;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+        filledCount++;
       });
 
       if (actionData.submitAfter) {
@@ -2897,7 +3014,7 @@
 
       const isGoogleSheets = window.location.hostname.includes("docs.google.com") && window.location.pathname.includes("/spreadsheets");
       if (isGoogleSheets || action === "fill_spreadsheet_grid" || action === "fill_sheet") {
-        return await handleSpreadsheetGridInput(dataPayload);
+        return await handleSpreadsheetGridInput(dataPayload, null, actionData);
       }
 
       const text = typeof dataPayload === "string" ? dataPayload : String(value ?? actionData.text ?? "");
@@ -3181,7 +3298,7 @@
       if (action === "fill_spreadsheet_grid" || action === "fill_table" || action === "fill_sheet") {
         const dataPayload = actionData.data || actionData.rows || actionData.table || actionData.text || value;
         restoreOutline();
-        return await handleSpreadsheetGridInput(dataPayload, targetEl);
+        return await handleSpreadsheetGridInput(dataPayload, targetEl, actionData);
       }
 
       if (action === "type" || action === "type_text" || action === "fill") {
@@ -3190,7 +3307,7 @@
         // Khusus Google Sheets / Spreadsheet Data Grid
         if (window.location.hostname.includes("docs.google.com") && window.location.pathname.includes("/spreadsheets")) {
           restoreOutline();
-          return await handleSpreadsheetGridInput(textToFill, targetEl);
+          return await handleSpreadsheetGridInput(textToFill, targetEl, actionData);
         }
 
         // Khusus Google Docs: alihkan ke dedicated Google Docs Typing Handler
@@ -3571,9 +3688,13 @@
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .replace(/\*(.*?)\*/g, "$1")
       .replace(/^>\s*/gm, "")
+      .replace(/^(?:###\s*)?(?:📱\s*)?(?:Thread\s+Media\s+Sosial\s+Berhasil\s+Dibuat|Draf\s+Postingan|Draf\s+Thread)[^\n]*/gi, "")
+      .replace(/^Tweet\s*\d+\s*:\s*/gim, "")
       .trim();
 
     const isTwitter = /x\.com|twitter\.com/i.test(window.location.hostname);
+    const isThreads = /threads\.net|threads\.com/i.test(window.location.hostname);
+
     if (isTwitter) {
       // Cek apakah teks berbentuk multi-tweet thread (misal "Tweet 1 ... Tweet 2 ...")
       const tweet1Match = clean.match(/(?:Tweet\s*1\s*\(?[^\)]*\)?\s*:?|1\/\d+)\s*([\s\S]*?)(?=(?:Tweet\s*2|2\/\d+|$))/i);
@@ -3591,6 +3712,16 @@
       // Batasi ketat maksimal 245 karakter agar muat sempurna dalam batas 280 karakter Twitter/X
       if (clean.length > 245) {
         clean = clean.slice(0, 240).trim() + "...";
+      }
+    } else if (isThreads) {
+      // Pada Threads, jika teks berisi tweet 1 / bagian pertama, ambil teks ringkas
+      const tweet1Match = clean.match(/(?:Tweet\s*1\s*\(?[^\)]*\)?\s*:?|1\/\d+)\s*([\s\S]*?)(?=(?:Tweet\s*2|2\/\d+|$))/i);
+      if (tweet1Match && tweet1Match[1].trim().length > 10) {
+        clean = tweet1Match[1].trim();
+      }
+      clean = clean.replace(/^(?:Tweet\s*\d+|Utas\s*\d+|The\s*Hook)\s*:?\s*/i, "").trim();
+      if (clean.length > 490) {
+        clean = clean.slice(0, 485).trim() + "...";
       }
     }
 

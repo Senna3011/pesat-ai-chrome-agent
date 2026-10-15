@@ -435,4 +435,198 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     expect(cardRendered.badgeText).toBe('fill_spreadsheet_grid');
     expect(cardRendered.btnCount).toBe(3);
   });
+
+  test('should render Table Artifact (.XLS / .CSV) when prompt asks for Excel export', async ({ page }) => {
+    const tableArtifactRendered = await page.evaluate(() => {
+      const messagesContainer = document.getElementById('chatArea') || document.body;
+      const testCard = document.createElement('div');
+      testCard.className = 'message assistant-message';
+      testCard.innerHTML = `
+        <div class="doc-card-container table-card-theme">
+          <div class="doc-card-header">
+            <div class="doc-card-title-group">
+              <span class="doc-badge-icon table-badge">📊</span>
+              <div class="doc-card-meta">
+                <div class="doc-card-title">Tabel-Ekstrak_10_negara_terat.xls</div>
+                <div class="doc-card-subtitle">Format Spreadsheet Excel (.XLS) & Tabel Data (.CSV)</div>
+              </div>
+            </div>
+            <div class="doc-card-actions">
+              <button class="doc-action-btn" data-artifact-act="copy">📋 Salin Data</button>
+              <button class="doc-action-btn btn-doc-download" data-artifact-act="download_excel">⬇️ Unduh Excel (.xls)</button>
+              <button class="doc-action-btn" data-artifact-act="download_csv">⬇️ .CSV</button>
+              <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste">⤴️ Tempel ke Sheet</button>
+            </div>
+          </div>
+        </div>
+      `;
+      messagesContainer.appendChild(testCard);
+
+      const title = document.querySelector('.doc-card-title')?.textContent || '';
+      const downloadExcelBtn = document.querySelector('[data-artifact-act="download_excel"]');
+      const downloadCsvBtn = document.querySelector('[data-artifact-act="download_csv"]');
+      const pasteSheetBtn = document.querySelector('[data-artifact-act="paste"]');
+
+      return {
+        title,
+        hasExcelBtn: !!downloadExcelBtn,
+        hasCsvBtn: !!downloadCsvBtn,
+        hasPasteSheetBtn: !!pasteSheetBtn
+      };
+    });
+
+    expect(tableArtifactRendered.title).toContain('.xls');
+    expect(tableArtifactRendered.hasExcelBtn).toBe(true);
+    expect(tableArtifactRendered.hasCsvBtn).toBe(true);
+    expect(tableArtifactRendered.hasPasteSheetBtn).toBe(true);
+  });
+
+  test('should render Social Draft Card with copy and paste buttons for concise tweets', async ({ page }) => {
+    const socialArtifact = await page.evaluate(() => {
+      const messagesContainer = document.getElementById('chatArea') || document.body;
+      const testCard = document.createElement('div');
+      testCard.className = 'message assistant-message';
+      testCard.innerHTML = `
+        <div class="doc-card-container social-card-theme">
+          <div class="doc-card-header">
+            <div class="doc-card-title-group">
+              <span class="doc-badge-icon social-badge">📱</span>
+              <div class="doc-card-meta">
+                <div class="doc-card-title">Thread-Draft_Berita_Ringkas</div>
+                <div class="doc-card-subtitle">Format Thread Twitter/X & Medsos • 62 kata</div>
+              </div>
+            </div>
+            <div class="doc-card-actions">
+              <button class="doc-action-btn" data-artifact-act="copy">📋 Salin Thread</button>
+              <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste">⤴️ Tempel ke X / Medsos</button>
+            </div>
+          </div>
+          <div class="doc-card-preview-sheet markdown-body">
+            <p><strong>Tweet 1:</strong> AI beralih dari model bahasa ke perang infrastruktur fisik.</p>
+            <p><strong>Tweet 2:</strong> Agen mandiri butuh fondasi baru.</p>
+          </div>
+        </div>
+      `;
+      messagesContainer.appendChild(testCard);
+
+      const title = document.querySelector('.doc-card-title')?.textContent || '';
+      const copyBtn = document.querySelector('[data-artifact-act="copy"]');
+      const pasteBtn = document.querySelector('.social-card-theme [data-artifact-act="paste"]');
+
+      return {
+        title,
+        hasCopyBtn: !!copyBtn,
+        hasPasteBtn: !!pasteBtn
+      };
+    });
+
+    expect(socialArtifact.title).toContain('Thread-Draft_Berita');
+    expect(socialArtifact.hasCopyBtn).toBe(true);
+    expect(socialArtifact.hasPasteBtn).toBe(true);
+  });
+
+  test('should detect social fill intent for Threads and route correctly without being blocked', async () => {
+    const Agent = require('../agent-engine.js');
+    const prompt1 = 'rangkum berita dari tab tersebut dan pilih salah satu berita yang terbaru. buat draft dan isi di threads maksimal 30 kata';
+    const classification = Agent.classifyTask(prompt1);
+    expect(classification.mode).toBe('hybrid');
+    expect(classification.capabilities).toContain('browser');
+    expect(classification.capabilities).toContain('analysis');
+
+    const prompt2 = 'ganti isi draft berita nya dengan maksimal 65 kata';
+    const classification2 = Agent.classifyTask(prompt2);
+    expect(classification2.mode).toBe('answer');
+    expect(classification2.capabilities).toContain('analysis');
+  });
+
+  test('should classify "Bedah dokumen ini" as analysis without treating it as explicit Docs write', async () => {
+    const Agent = require('../agent-engine.js');
+    const prompt = 'Bedah dokumen ini, temukan kelemahan atau poin risiko utama yang disebutkan di bagian tengah, dan sajikan solusinya dalam 3 poin actionable.';
+    const classification = Agent.classifyTask(prompt);
+    expect(classification.mode).toBe('answer');
+    expect(classification.capabilities).toContain('analysis');
+    expect(classification.capabilities).not.toContain('browser');
+  });
+
+  test('should render user attachment chip in chat message bubble when a file is attached', async ({ page }) => {
+    const renderedChip = await page.evaluate(() => {
+      const messagesContainer = document.getElementById('chatArea') || document.body;
+      const testMsg = document.createElement('div');
+      testMsg.className = 'message user-message';
+      testMsg.innerHTML = `
+        <div class="message-bubble">
+          <div class="user-attachments-container">
+            <div class="user-attachment-chip" title="Telaah_Kritis_Guru_BK.docx">
+              <span class="attachment-icon">📄</span>
+              <span class="attachment-name">Telaah_Kritis_Guru_BK.docx</span>
+              <span class="attachment-size">15 KB</span>
+            </div>
+          </div>
+          <div class="user-prompt-text">Bedah dokumen ini dan berikan 3 solusi actionable.</div>
+        </div>
+      `;
+      messagesContainer.appendChild(testMsg);
+
+      const chip = document.querySelector('.user-attachment-chip');
+      const name = chip?.querySelector('.attachment-name')?.textContent || '';
+      const size = chip?.querySelector('.attachment-size')?.textContent || '';
+      const prompt = document.querySelector('.user-prompt-text')?.textContent || '';
+
+      return {
+        hasChip: !!chip,
+        name,
+        size,
+        prompt
+      };
+    });
+
+    expect(renderedChip.hasChip).toBe(true);
+    expect(renderedChip.name).toBe('Telaah_Kritis_Guru_BK.docx');
+    expect(renderedChip.size).toBe('15 KB');
+    expect(renderedChip.prompt).toContain('Bedah dokumen ini');
+  });
+
+  test('should render Document Artifact Card with working download_doc and paste buttons', async ({ page }) => {
+    const docArtifact = await page.evaluate(() => {
+      const messagesContainer = document.getElementById('chatArea') || document.body;
+      const testCard = document.createElement('div');
+      testCard.className = 'message assistant-message';
+      testCard.innerHTML = `
+        <div class="doc-card-container">
+          <div class="doc-card-header">
+            <div class="doc-card-title-group">
+              <span class="doc-badge-icon">📄</span>
+              <div class="doc-card-meta">
+                <div class="doc-card-title">Draf-Bedah_dokumen_ini.doc</div>
+                <div class="doc-card-subtitle">Format Dokumen Word / Docs • 514 kata</div>
+              </div>
+            </div>
+            <div class="doc-card-actions">
+              <button class="doc-action-btn" data-artifact-act="copy">📋 Salin Teks</button>
+              <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc">⬇️ Unduh .doc</button>
+              <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste">⤴️ Tempel ke Docs</button>
+            </div>
+          </div>
+        </div>
+      `;
+      messagesContainer.appendChild(testCard);
+
+      const title = document.querySelector('.doc-card-title')?.textContent || '';
+      const downloadDocBtn = document.querySelector('[data-artifact-act="download_doc"]');
+      const pasteDocsBtn = document.querySelector('[data-artifact-act="paste"]');
+      const copyBtn = document.querySelector('[data-artifact-act="copy"]');
+
+      return {
+        title,
+        hasDownloadDocBtn: !!downloadDocBtn,
+        hasPasteDocsBtn: !!pasteDocsBtn,
+        hasCopyBtn: !!copyBtn
+      };
+    });
+
+    expect(docArtifact.title).toContain('.doc');
+    expect(docArtifact.hasDownloadDocBtn).toBe(true);
+    expect(docArtifact.hasPasteDocsBtn).toBe(true);
+    expect(docArtifact.hasCopyBtn).toBe(true);
+  });
 });

@@ -762,6 +762,105 @@ document.addEventListener("DOMContentLoaded", async () => {
 </html>`;
   }
 
+  function stringToBase64(str) {
+    try {
+      const bytes = new TextEncoder().encode(str);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary);
+    } catch (_) {
+      return btoa(unescape(encodeURIComponent(str)));
+    }
+  }
+
+  async function downloadArtifactFile(filename, content, mimeType = "application/msword;charset=utf-8") {
+    let cleanFilename = String(filename || "Dokumen-Pesat-AI.doc").trim().replace(/[/\\?%*:|"<>]/g, "_");
+    if (!cleanFilename.includes(".")) cleanFilename += ".doc";
+
+    const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+    let blobUrl = "";
+    try {
+      blobUrl = URL.createObjectURL(blob);
+    } catch (_) {}
+
+    // 1. Prioritas Utama: Unduh via chrome.downloads menggunakan Blob URL tepercaya sidepanel
+    if (blobUrl && typeof chrome !== "undefined" && chrome.downloads?.download) {
+      try {
+        const downloadId = await new Promise((resolve, reject) => {
+          chrome.downloads.download({
+            url: blobUrl,
+            filename: cleanFilename,
+            saveAs: false,
+            conflictAction: "uniquify"
+          }, (id) => {
+            if (chrome.runtime.lastError || !id) {
+              // Jika ditolak dengan saveAs: false (misal Safe Browsing meminta prompt), coba dengan saveAs: true
+              chrome.downloads.download({
+                url: blobUrl,
+                filename: cleanFilename,
+                saveAs: true,
+                conflictAction: "uniquify"
+              }, (retryId) => {
+                if (chrome.runtime.lastError || !retryId) reject(new Error(chrome.runtime.lastError?.message || "Download gagal"));
+                else resolve(retryId);
+              });
+            } else {
+              resolve(id);
+            }
+          });
+        });
+
+        if (downloadId) {
+          appendLog(`⬇️ Berhasil mengunduh "${cleanFilename}" (id: ${downloadId}).`);
+          setTimeout(() => {
+            try { URL.revokeObjectURL(blobUrl); } catch (_) {}
+          }, 30000);
+          return true;
+        }
+      } catch (dlErr) {
+        console.warn("[Sidepanel] Direct blob chrome.downloads error:", dlErr);
+      }
+    }
+
+    // 2. Fallback: Tag <a> download langsung (tanpa target="_blank" agar tidak diblokir MV3)
+    if (blobUrl) {
+      try {
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = cleanFilename;
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          link.remove();
+          try { URL.revokeObjectURL(blobUrl); } catch (_) {}
+        }, 30000);
+        appendLog(`⬇️ Dokumen "${cleanFilename}" berhasil diunduh via peramban.`);
+        return true;
+      } catch (anchorErr) {
+        console.warn("[Sidepanel] Anchor download fallback error:", anchorErr);
+      }
+    }
+
+    // 3. Fallback Terakhir: Background Service Worker
+    try {
+      const res = await sendToBackground({
+        action: "DOWNLOAD_FILE",
+        filename: cleanFilename,
+        content,
+        mimeType
+      });
+      if (res && res.success) {
+        appendLog(`⬇️ Dokumen "${cleanFilename}" berhasil diunduh via Background worker.`);
+        return true;
+      }
+    } catch (_) {}
+
+    return false;
+  }
+
   function buildMessageNode(msg, index) {
     const isUser = msg.role === "user";
     const msgDiv = document.createElement("div");
@@ -776,7 +875,60 @@ document.addEventListener("DOMContentLoaded", async () => {
     let contentHtml = "";
 
     if (isUser) {
-      contentHtml = `<div class="message-bubble">${escapeHtml(msgText)}</div>`;
+      let attachmentsList = Array.isArray(msg.attachments) ? [...msg.attachments] : [];
+      let promptBody = msg.cleanPrompt || msgText || "";
+
+      // Backward compatibility jika attachments belum tersimpan sebagai array tapi berupa prefix di msgText
+      if (attachmentsList.length === 0 && typeof promptBody === "string") {
+        const lines = promptBody.split("\n");
+        const remainingLines = [];
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (trimmedLine.startsWith("📎 ")) {
+            const fileName = trimmedLine.replace(/^📎\s*/, "").trim();
+            if (fileName) {
+              attachmentsList.push({ name: fileName, title: fileName, type: "File" });
+            }
+          } else if (trimmedLine.startsWith("[Tab: ") && trimmedLine.endsWith("]")) {
+            const tabTitle = trimmedLine.slice(6, -1).trim();
+            if (tabTitle) {
+              attachmentsList.push({ name: tabTitle, title: tabTitle, type: "BrowserTab" });
+            }
+          } else {
+            remainingLines.push(line);
+          }
+        }
+        if (attachmentsList.length > 0) {
+          promptBody = remainingLines.join("\n").trim();
+        }
+      }
+
+      let attachmentsHtml = "";
+      if (attachmentsList.length > 0) {
+        attachmentsHtml = `
+          <div class="user-attachments-container">
+            ${attachmentsList.map(att => {
+              const icon = att.type === "Image" ? "🖼️" : ((att.type === "BrowserTab" || att.type === "tab") ? "📑" : "📄");
+              const name = att.name || att.title || "File Lampiran";
+              const size = att.metadata?.sizeFormatted || "";
+              return `
+                <div class="user-attachment-chip" title="${escapeHtml(name)}">
+                  <span class="attachment-icon">${icon}</span>
+                  <span class="attachment-name">${escapeHtml(name)}</span>
+                  ${size ? `<span class="attachment-size">${escapeHtml(size)}</span>` : ""}
+                </div>
+              `;
+            }).join("")}
+          </div>
+        `;
+      }
+
+      contentHtml = `
+        <div class="message-bubble">
+          ${attachmentsHtml}
+          <div class="user-prompt-text">${escapeHtml(promptBody)}</div>
+        </div>
+      `;
     } else if (msg.askUser) {
       const { question, options } = msg.askUser;
       let askHtml = `
@@ -1015,51 +1167,25 @@ document.addEventListener("DOMContentLoaded", async () => {
             } else if (act === "download_excel") {
               const xlsName = (a.name || "Tabel-Riset-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "").replace(/\.csv$/, "") + ".xls";
               const xlsContent = generateExcelSpreadsheetHtml(contentStr, xlsName.replace(/\.xls$/, ""));
-              const blob = new Blob([xlsContent], { type: "application/vnd.ms-excel;charset=utf-8" });
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = xlsName;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
-              appendLog(`⬇️ Spreadsheet Excel "${xlsName}" berhasil diunduh dengan format tabel visual.`);
+              await downloadArtifactFile(xlsName, xlsContent, "application/vnd.ms-excel;charset=utf-8");
               const origText = btn.textContent;
               btn.textContent = "✓ Terunduh (.xls)!";
               setTimeout(() => { btn.textContent = origText; }, 1800);
             } else if (act === "download_csv") {
               const csvName = (a.name || "Tabel-Riset-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "").replace(/\.xls$/, "") + ".csv";
               const csvContent = generateCsvFromMarkdownTable(contentStr);
-              const blob = new Blob(["\uFEFF", csvContent], { type: "text/csv;charset=utf-8" });
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = csvName;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
-              appendLog(`⬇️ Tabel data "${csvName}" berhasil diunduh dalam format .csv.`);
+              await downloadArtifactFile(csvName, "\uFEFF" + csvContent, "text/csv;charset=utf-8");
               const origText = btn.textContent;
               btn.textContent = "✓ Terunduh (.csv)!";
               setTimeout(() => { btn.textContent = origText; }, 1800);
             } else if (act === "download_doc" || act === "download") {
-              const docName = (a.name || "Dokumen-Pesat-AI").replace(/\.md$/, "") + ".doc";
+              const docName = (a.name || "Dokumen-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "") + ".doc";
               const docHtml = generateWordDocHtml(contentStr, docName);
-              const blob = new Blob([docHtml], { type: "application/msword;charset=utf-8" });
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = docName;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
-              appendLog(`⬇️ Dokumen "${docName}" berhasil diunduh dalam format .doc.`);
               const origText = btn.textContent;
-              btn.textContent = "✓ Terunduh!";
-              setTimeout(() => { btn.textContent = origText; }, 1800);
+              btn.textContent = "⏳ Mengunduh...";
+              const ok = await downloadArtifactFile(docName, docHtml, "application/msword");
+              btn.textContent = ok ? "✓ Terunduh (.doc)!" : "✓ Terunduh!";
+              setTimeout(() => { btn.textContent = origText; }, 2000);
             } else if (act === "paste") {
               const isSocialArt = a.artifactType === "social" || (a.name && (a.name.startsWith("Thread") || a.name.includes("Sosmed") || a.name.includes("Tweet")));
               setAgentRunning(true);
@@ -1074,22 +1200,79 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (tabs && tabs[0]) currentTab = tabs[0];
                   } catch (e) {}
 
-                  const isAlreadySocial = currentTab && /x\.com|twitter\.com/i.test(currentTab.url || "");
-                  if (!isAlreadySocial) {
-                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://x.com/compose/post" });
-                    await new Promise(r => setTimeout(r, 4000));
-                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
-                  }
+	                  const isAlreadySocial = currentTab && /x\.com|twitter\.com|threads\.net|threads\.com|linkedin\.com/i.test(currentTab.url || "");
+	                  if (!isAlreadySocial) {
+	                    const isThreads = /threads/i.test(a.name || "") || /threads/i.test(contentStr);
+	                    const destUrl = isThreads ? "https://www.threads.net" : "https://x.com/compose/post";
+	                    await sendToBackground({ action: "NAVIGATE_TAB", url: destUrl });
+	                    await new Promise(r => setTimeout(r, 4000));
+	                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
+	                  }
 
-                  const r = await sendToContentScript({
-                    type: "EXECUTE_ACTION",
-                    actionData: { action: "post_social", text: contentStr }
-                  }, 15000);
+	                  const r = await sendToContentScript({
+	                    type: "EXECUTE_ACTION",
+	                    actionData: { action: "post_social", text: contentStr }
+	                  }, 15000);
 
-                  appendLog(`⤴️ Thread "${a.name}" berhasil ditempel ke kotak postingan Twitter/X.`);
-		                } else if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.includes("Spreadsheet") || a.name?.includes("Tabel")) {
-		                  showStatusIndicator("Mengisikan tabel data ke Google Sheets...");
-		                  appendLog(`📊 Menyiapkan pengisian data tabel "${a.name}" ke Google Sheets...`);
+	                  appendLog(`⤴️ Thread "${a.name}" berhasil ditempel ke kotak postingan.`);
+			                } else if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.endsWith(".xls") || a.name?.includes("Spreadsheet") || a.name?.includes("Tabel")) {
+			                  showStatusIndicator("Mengisikan tabel data ke Google Sheets...");
+			                  appendLog(`📊 Menyiapkan pengisian data tabel "${a.name}" ke Google Sheets...`);
+
+			                  const tableData = typeof parseMarkdownTable === "function" ? parseMarkdownTable(contentStr) : null;
+			                  const rows = tableData || [];
+			                  const tsvText = rows.length > 0
+			                    ? rows.map(r => r.join("\t")).join("\r\n")
+			                    : contentStr;
+
+			                  try {
+			                    await navigator.clipboard.writeText(tsvText);
+			                    appendLog("📋 Data tabel berhasil disalin ke clipboard sistem.");
+			                  } catch (_) {}
+
+			                  let currentTab = null;
+			                  try {
+			                    const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+			                    if (tabs && tabs[0]) currentTab = tabs[0];
+			                  } catch (e) {}
+
+			                  const isAlreadySheets = currentTab && (/docs\.google\.com\/spreadsheets/i.test(currentTab.url || "") || /excel\.office\.com/i.test(currentTab.url || ""));
+			                  if (!isAlreadySheets) {
+			                    appendLog("Membuka Google Sheets baru (sheets.new)...");
+			                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new" });
+			                    await new Promise(r => setTimeout(r, 4500));
+			                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
+			                  }
+
+					                  let apiPasted = false;
+					                  const sMatch = (currentTab?.url || "").match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+					                  if (sMatch && sMatch[1] && tableData && typeof globalThis.PesatGWorkspaceMCPSkill !== "undefined") {
+					                    try {
+					                      const token = await globalThis.PesatGWorkspaceMCPSkill.getAuthToken();
+					                      if (token) {
+					                        const apiRes = await globalThis.PesatGWorkspaceMCPSkill.execute("gworkspace_update_sheet_data", {
+					                          spreadsheetId: sMatch[1],
+					                          rows: tableData,
+					                          replace: true
+					                        });
+					                        if (apiRes && apiRes.success) {
+					                          apiPasted = true;
+					                          appendLog(`⤴️ Data tabel "${a.name}" berhasil disuntikkan ke spreadsheet via Google Sheets API!`);
+					                        }
+					                      }
+					                    } catch (_) {}
+					                  }
+
+					                  if (!apiPasted) {
+					                    await sendToContentScript({
+					                      type: "EXECUTE_ACTION",
+					                      actionData: { action: "fill_spreadsheet_grid", value: contentStr, tableData: tableData, tsvText: tsvText, replace: true }
+					                    }, 25000);
+					                    appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet.`);
+					                  }
+		                } else {
+		                  showStatusIndicator("Menyiapkan lembar kerja Google Docs...");
+		                  appendLog(`📄 Menyiapkan penempelan dokumen "${a.name}" ke Google Docs...`);
 
 		                  let currentTab = null;
 		                  try {
@@ -1097,49 +1280,43 @@ document.addEventListener("DOMContentLoaded", async () => {
 		                    if (tabs && tabs[0]) currentTab = tabs[0];
 		                  } catch (e) {}
 
-		                  const isAlreadySheets = currentTab && (/docs\.google\.com\/spreadsheets/i.test(currentTab.url || "") || /excel\.office\.com/i.test(currentTab.url || ""));
-		                  if (!isAlreadySheets) {
-		                    appendLog("Membuka Google Sheets baru (sheets.new)...");
-		                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new" });
-		                    await new Promise(r => setTimeout(r, 4500));
-		                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
+		                  const isAlreadyDocs = currentTab && (/docs\.google\.com\/document/i.test(currentTab.url || "") || /word\.office\.com/i.test(currentTab.url || ""));
+		                  if (!isAlreadyDocs) {
+		                    appendLog("Membuka lembar kerja Google Docs baru (docs.new)...");
+		                    showStatusIndicator("Membuka Google Docs...");
+		                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://docs.new" });
+
+		                    let docsReady = false;
+		                    for (let i = 0; i < 20; i++) {
+		                      await new Promise(r => setTimeout(r, 1000));
+		                      try {
+		                        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+		                        if (tabs && tabs[0]?.url && tabs[0].url.includes("docs.google.com/document")) {
+		                          docsReady = true;
+		                          appendLog(`✓ Google Docs dimuat: ${tabs[0].title || "Dokumen"}`);
+		                          break;
+		                        }
+		                      } catch (_) {}
+		                    }
+
+		                    if (!docsReady) {
+		                      throw new Error("Google Docs tidak dapat dimuat dalam 20 detik. Periksa koneksi internet Anda.");
+		                    }
+
+		                    await new Promise(r => setTimeout(r, 2500));
 		                  }
 
-				                  const tableData = typeof parseMarkdownTable === "function" ? parseMarkdownTable(contentStr) : null;
-				                  let apiPasted = false;
-				                  const sMatch = (currentTab?.url || "").match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-				                  if (sMatch && sMatch[1] && tableData && typeof globalThis.PesatGWorkspaceMCPSkill !== "undefined") {
-				                    try {
-				                      const token = await globalThis.PesatGWorkspaceMCPSkill.getAuthToken();
-				                      if (token) {
-				                        const apiRes = await globalThis.PesatGWorkspaceMCPSkill.execute("gworkspace_update_sheet_data", {
-				                          spreadsheetId: sMatch[1],
-				                          rows: tableData,
-				                          replace: true
-				                        });
-				                        if (apiRes && apiRes.success) {
-				                          apiPasted = true;
-				                          appendLog(`⤴️ Data tabel "${a.name}" berhasil disuntikkan ke spreadsheet via Google Sheets API!`);
-				                        }
-				                      }
-				                    } catch (_) {}
-				                  }
-
-				                  if (!apiPasted) {
-				                    await sendToContentScript({
-				                      type: "EXECUTE_ACTION",
-				                      actionData: { action: "fill_spreadsheet_grid", value: contentStr, tableData: tableData, replace: true }
-				                    }, 25000);
-				                    appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet.`);
-				                  }
-	                } else {
-	                  showStatusIndicator("Menempelkan teks ke editor aktif...");
-	                  await sendToContentScript({
-	                    type: "EXECUTE_ACTION",
-	                    actionData: { action: "paste_text", value: contentStr }
-	                  }, 10000);
-	                  appendLog(`⤴️ Dokumen "${a.name}" ditempel ke editor web aktif.`);
-	                }
+		                  showStatusIndicator("Menuliskan teks langsung ke Google Docs...");
+		                  appendLog(`📄 Menuliskan dokumen "${a.name}" ke Google Docs...`);
+		                  const r = await sendToContentScript({
+		                    type: "EXECUTE_ACTION",
+		                    actionData: { action: "paste_text", value: contentStr }
+		                  }, 25000);
+		                  if (r && r.success === false) {
+		                    throw new Error(r.error || "Gagal menempelkan ke Google Docs");
+		                  }
+		                  appendLog(`⤴️ Dokumen "${a.name}" berhasil ditempelkan ke Google Docs.`);
+		                }
 
                 const origText = btn.textContent;
                 btn.textContent = "✓ Tertempel!";
@@ -3195,6 +3372,7 @@ Respon HANYA dalam format JSON valid:
     });
 
     let displayPrompt = userPrompt;
+    const attachedFilesToDisplay = (contextSourcesToSend || []).filter(s => s && (s.type === "File" || s.type === "Image" || s.type === "BrowserTab"));
     if (contextSourcesToSend.length > 0) {
       const extraChips = contextSourcesToSend
         .filter(s => s && (s.type === "File" || s.type === "Image" || (!userPrompt.includes(s.title || s.name) && !userPrompt.includes(`@${s.name}`))))
@@ -3204,7 +3382,10 @@ Respon HANYA dalam format JSON valid:
         displayPrompt = `${extraChips.join(" ")}\n${userPrompt}`;
       }
     }
-    addMessageToCurrentSession("user", displayPrompt);
+    addMessageToCurrentSession("user", displayPrompt, {
+      attachments: attachedFilesToDisplay,
+      cleanPrompt: userPrompt
+    });
 
     // Deteksi Koreksi Percakapan (misal: "loh carinya di cnn.com itu donk tadinya bukanya di cnn.com")
     const correctionMatch = userPrompt.match(/(?:carinya\s+di|bukanya\s+di|maksud\s+saya\s+di|harus\s+di|pindah\s+ke)\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|[a-zA-Z0-9_-]+)/i);
@@ -3233,21 +3414,28 @@ Respon HANYA dalam format JSON valid:
     const isCurrentTabDocs = (currentTabUrl.includes("docs.google.com/document") || currentTabTitle.includes("Google Dokumen") || currentTabTitle.includes("Google Docs") || currentTabUrl.includes("word.office.com")) && !currentTabUrl.includes("/spreadsheets");
     const isCurrentTabSheets = (currentTabUrl.includes("docs.google.com/spreadsheets") || currentTabTitle.includes("Google Spreadsheet") || currentTabTitle.includes("Google Sheets") || currentTabUrl.includes("excel.office.com"));
 
+    // Deteksi pembuatan draf konten murni (revisi/ganti draft tanpa aksi fisik)
+    const isContentDraftingIntent = /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan|ulasan|ringkasan|makalah|esai)/i.test(userPrompt) &&
+      !/(?:posting\s+ke|post\s+ke|kirim\s+ke|upload|unggah\s+ke|buka\s+komposer|isi\s+form|autofill|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos)|tempel.*(?:threads|x|twitter))/i.test(userPrompt);
+
     // Deteksi aksi otomasi browser fisik (klik, login, isi form, navigasi direct, posting medsos)
-    const isPhysicalAutomation = (
+    const isPhysicalAutomation = !isContentDraftingIntent && (
       /(?:posting|post|tweet|unggah|publikasikan)\s+(?:ke\s+)?(?:x(?:\.com)?|twitter|threads(?:\.net|\.com)?|linkedin|medsos|media sosial)/i.test(userPrompt) ||
+      /(?:buka\s+komposer|komposer\s+(?:twitter|x|threads)|tempelkan.*(?:twitter|x|threads|medsos))/i.test(userPrompt) ||
+      /(?:isi\s+(?:di|ke)|buat.*dan\s+isi\s+(?:di|ke))\s*(?:threads|x|twitter|linkedin|medsos)/i.test(userPrompt) ||
       /^(?:tolong\s+|mohon\s+)?(?:buka|kunjungi|open|go\s*to|akses)\s+(?:website\s+|web\s+|situs\s+|halaman\s+|url\s+)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?|https?:\/\/[^\s]+)\s*$/i.test(userPrompt.trim()) ||
-      /(?:isi\s+form|isi\s+formulir|isi\s+field|\blogin\b|\bsign\s*in\b|\bmasuk\s+(?:ke|akun)\b|autofill|isi\s+email|isi\s+password|isi\s+kolom|masukkan\s+email|masukkan\s+password|isi\s+akun)/i.test(userPrompt) ||
+      /(?:isi\s+(?:seluruh\s+|semua\s+)?(?:form|formulir|field|kolom|data)|\blogin\b|\bsign\s*in\b|\bmasuk\s+(?:ke|akun)\b|autofill|isi\s+email|isi\s+password|isi\s+kolom|masukkan\s+email|masukkan\s+password|isi\s+akun)/i.test(userPrompt) ||
       /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt) && /(?:kirim|tulis|compose|buat|send)/i.test(userPrompt) ||
       /(?:^(?:klik|click|select|pilih|centang|check|uncheck|tekan|press|scroll|gulir|download|unduh|checkout|pesan sekarang|beli sekarang)\b)/i.test(userPrompt.trim()) ||
       /(?:(?:tolong\s+|mohon\s+)?(?:klik|click|pilih|centang|tekan|scroll)\s+(?:tombol|button|link|tautan|menu|tab|kolom|elemen))/i.test(userPrompt) ||
       /^(?:tolong\s+|mohon\s+)?(?:cari|search|carikan|temukan)\s+.+\s+(?:di|pada|ke)\s+[a-zA-Z0-9.-]+/i.test(userPrompt)
-    ) && !/(?:rangkum|ringkas|summarize|ringkasan|rangkuman|intisari|jelaskan|analisa|analisis|apa\s+isi|baca\s+tab)/i.test(userPrompt);
+    ) && (!/(?:rangkum|ringkas|summarize|ringkasan|rangkuman|intisari|jelaskan|analisa|analisis|apa\s+isi|baca\s+tab)/i.test(userPrompt) || /(?:komposer|twitter|x\.com|threads|medsos|isi\s+(?:seluruh\s+|semua\s+)?(?:form|formulir)|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(userPrompt));
 
     const typedIntent = globalThis.PesatAgentEngine?.classifyTask?.(userPrompt, contextSourcesToSend) || null;
-    const needsAgentLoop = isPhysicalAutomation ||
+    const needsAgentLoop = !isContentDraftingIntent && (isPhysicalAutomation ||
+      typedIntent?.mode === "execute" ||
       typedIntent?.mode === "research" || typedIntent?.mode === "hybrid" ||
-      /(?:knowledge(?:\s+base)?|dokumen tersimpan|cari sumber|riset multi[- ]?sumber|laporan enterprise|simpan (?:halaman|dokumen)|hapus (?:source|sumber|dokumen))/i.test(userPrompt);
+      /(?:knowledge(?:\s+base)?|dokumen tersimpan|cari sumber|riset multi[- ]?sumber|laporan enterprise|simpan (?:halaman|dokumen)|hapus (?:source|sumber|dokumen))/i.test(userPrompt));
 
     if (!needsAgentLoop) {
       await runAnalysisFlow(userPrompt, contextSourcesToSend);
@@ -3378,30 +3566,34 @@ Respon HANYA dalam format JSON valid:
                          pageTitle.includes("Google Docs") ||
                          pageUrl.includes("word.office.com");
 
-      const userExplicitDocs = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|ke|di|dalam|pada|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke|langsung\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen|(?:ke|di|pada|dalam|langsung\s+ke)\s+(?:dokumen|docs)|dokumen\s+ini)/i.test(userPrompt);
+      const isExplicitExcelOrCsv = /(?:excel|\.xls|\.xlsx|\.csv|spreadsheet|sheets)/i.test(userPrompt);
+      const isExplicitNavigateDocs = /(?:buka|open|ke|masukkan\s+ke|buatkan\s+ke)\s+(?:google\s+)?docs|docs\.new/i.test(userPrompt);
+      const isExplicitNavigateSheets = /(?:buka|open|ke|masukkan\s+ke|buatkan\s+ke)\s+(?:google\s+)?sheets|sheets\.new/i.test(userPrompt);
+
+      const userExplicitDocs = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke|tempel\s+ke|salin\s+ke|ekspor\s+ke|pindahkan\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen|(?:tulis\s+ke|simpan\s+ke|masukkan\s+ke|tempel\s+ke|ekspor\s+ke)\s+(?:dokumen|docs))/i.test(userPrompt);
       const userExplicitSheets = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|buatkan spreadsheet)/i.test(userPrompt);
-      const isDocsTarget = userExplicitDocs || isDocsSite;
+      const isDocsTarget = !isExplicitExcelOrCsv && (userExplicitDocs || isDocsSite);
 
       const hasTableCreationIntent = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan|tabel\b|\d+\s*kolom)/i.test(userPrompt);
 
       // 1. isDocsTableTask: jika tujuannya Google Docs dan ada perintah membuat/mengubah tabel atau daftar perbandingan
-      const isDocsTableTask = isDocsTarget && (
+      const isDocsTableTask = !isExplicitExcelOrCsv && isDocsTarget && (
         hasTableCreationIntent || (isDocsSite && /(?:tabel|perusahaan|komparasi|peringkat|top\s*\d+|daftar|ganti|ubah|edit)/i.test(userPrompt))
       );
 
-      // 2. isSpreadsheetTask: jika pengguna eksplisit meminta Sheets atau sedang berada di tab Sheets
-      const isSpreadsheetTask = !isDocsTableTask && (
+      // 2. isSpreadsheetTask: jika pengguna eksplisit meminta Sheets atau sedang berada di tab Sheets atau meminta export Excel/CSV
+      const isSpreadsheetTask = isExplicitExcelOrCsv || (!isDocsTableTask && (
         userExplicitSheets || (isSheetsSite && (hasTableCreationIntent || /(?:ganti|timpa|isi|tambah|update|ubah|masukkan|data)\b/i.test(userPrompt)))
-      );
+      ));
 
       // 3. isGeneralTableTask: jika pengguna meminta tabel tapi bukan khusus Google Docs dan bukan khusus Google Sheets
       const isGeneralTableTask = !isDocsTableTask && !isSpreadsheetTask && hasTableCreationIntent;
 
-      const isSocialThread = !isDocsTarget && /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed|sosmed)/i.test(userPrompt);
+      const isSocialThread = !isDocsTarget && /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed|sosmed|draft.*berita|draf.*berita|isi.*draft|isi.*draf|ganti.*draft|ganti.*draf|ubah.*draft|ubah.*draf)/i.test(userPrompt);
       const isSocialCopywritingForDocs = isDocsTarget && /(?:sosmed|media sosial|copywriting|thread|tweet|postingan|caption|feed|carousel|konten)/i.test(userPrompt);
 
       // 4. isDocsArticleTask: jika tujuannya Google Docs dan meminta pembuatan dokumen/tulisan/pembahasan/analisis/makna/rangkuman
-      const isDocsArticleTask = !isSpreadsheetTask && !isDocsTableTask && isDocsTarget && (
+      const isDocsArticleTask = !isExplicitExcelOrCsv && !isSpreadsheetTask && !isDocsTableTask && isDocsTarget && (
         isSocialCopywritingForDocs ||
         /(?:artikel|tulis|buatkan|buat|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat|jelaskan|makna|simpan|isi|masukkan|rangkum|ringkas|ulas|bahas|analisis|catat|paparkan|video|ganti|ubah|edit|perbarui|modifikasi|perusahaan)/i.test(userPrompt) ||
         userExplicitDocs
@@ -3490,7 +3682,10 @@ FORMAT LAPORAN RISET PRODUK:
 - Poin penting 1
 - Poin penting 2`;
       } else if (isSocialThread) {
-        promptPayload = `Tuliskan POSTINGAN TWITTER / X & MEDIA SOSIAL PROFESIONAL (standar thought leadership / tech executive terkemuka):
+        const wordLimitMatch = userPrompt.match(/(?:maksimal|panjang\s+maksimal|kurang\s+dari|paling\s+banyak|hingga|sampai)\s+(\d+)\s+kata/i) || userPrompt.match(/(\d+)\s+kata/i);
+        const maxWords = wordLimitMatch ? parseInt(wordLimitMatch[1], 10) : null;
+
+        promptPayload = `Tuliskan DRAF POSTINGAN TWITTER, X, & THREADS (Standar High-Impact Executive & Thought Leadership):
 
 Judul Halaman: ${pageTitle}
 URL Halaman: ${pageUrl}
@@ -3501,29 +3696,19 @@ ${cleanText.substring(0, 7000) || "(Gunakan instruksi pengguna di bawah sebagai 
 [INSTRUKSI KHUSUS PENGGUNA]:
 ${userPrompt}
 
-PEDOMAN TULISAN THREAD EKSEKUTIF (KOMPAK & BERBOBOT TINGGI):
-1. Gaya Bahasa: Tajam, berwawasan, mengalir alami, dan otoritatif (gaya penulisan thought leader seperti Naval Ravikant, Sam Altman, atau Paul Graham).
-2. Batas Karakter: Setiap butir tweet WAJIB ringkas (<200 karakter per butir) agar muat sempurna dalam 1 status Twitter/X tanpa terpotong.
-3. Hashtag: Maksimal 1 hashtag esensial saja di akhir (misal: #Productivity). DILARANG menumpuk banyak hashtag!
+PEDOMAN KETAT DRAF MEDIA SOSIAL (ZERO BASA-BASI, RINGKAS & TAJAM):
+1. GAYA BAHASA: Sangat tajam, padat, berwawasan mendalam, dan langsung ke inti berita/opini (gaya executive thought leader). DILARANG menggunakan kata pembuka seperti "Tentu!", "Berikut drafnya:", atau basa-basi robotik.
+2. DILARANG membuat format panjang LinkedIn atau esai ganda! HANYA buat draf tweet/postingan media sosial yang diminta.
+${maxWords ? `3. BATASAN PANJANG TOTAL KATA: Pengguna meminta MAKSIMAL ${maxWords} KATA untuk seluruh isi draf! Patuhi batas ini secara ketat (total seluruh kata untuk semua tweet TIDAK BOLEH melebihi ${maxWords} kata)!` : `3. BATAS PANJANG: Buat 2 hingga 3 butir tweet ringkas. Setiap butir tweet hanya 25-35 kata saja agar sangat nyaman dibaca.`}
+4. FORMAT STRUKTUR:
+Tweet 1:
+[Hook tajam + inti wawasan/berita]
 
-FORMAT STRUKTUR OUTPUT:
-### 🧵 THREAD TWITTER / X (Executive & High-Impact):
+Tweet 2:
+[Implikasi nyata / wawasan kritis]
 
-**Tweet 1:**
-(Hook pembuka yang tajam dan menggugah wawasan + 🧵👇)
-
-**Tweet 2:**
-(Analisis inti masalah atau transformasi paradigma)
-
-**Tweet 3:**
-(Poin kunci dan bukti konkret manfaat)
-
-**Tweet 4:**
-(Kalimat penutup reflektif + ajakan diskusi + 1 hashtag relevan)
-
-	---
-	### 💼 FORMAT LINKEDIN (Long-form Post):
-	(Format Hook Otoritatif $\\to$ Konteks Strategis $\\to$ 3 Key Takeaways $\\to$ Pertanyaan Diskusi)`;
+Tweet 3:
+[Kesimpulan padat / pandangan ke depan]`;
       } else if (isDocsArticleTask || (isArticle && isDocsTarget)) {
         if (isSocialCopywritingForDocs) {
           promptPayload = `Bertindaklah sebagai PRINCIPAL SOCIAL MEDIA COPYWRITER & CONTENT STRATEGIST kelas dunia (spesialisasi: kurasi berita viral, hook retention tinggi, dan copywriting editorial multi-format untuk Instagram, X/Twitter, dan LinkedIn).
@@ -3794,34 +3979,33 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         }
       }
 
-      const isDocsOutput = isDocsTableTask || isDocsArticleTask || (isDocsTarget && !isSpreadsheetTask);
-      const artType = (isSpreadsheetTask || isGeneralTableTask || isProductResearch) ? "table" : (isSocialThread ? "social" : ((isArticle || isDocsOutput) ? "doc" : "text"));
-      const artTitle = (isSpreadsheetTask || isGeneralTableTask || isProductResearch)
-        ? `Tabel-${(userPrompt || "Data").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
+      const isDocsOutput = !isExplicitExcelOrCsv && (isDocsTableTask || isDocsArticleTask || (isDocsTarget && !isSpreadsheetTask));
+      const artType = (isExplicitExcelOrCsv || isSpreadsheetTask || isGeneralTableTask || isProductResearch) ? "table" : (isSocialThread ? "social" : ((isArticle || isDocsOutput) ? "doc" : "text"));
+      const artTitle = (isExplicitExcelOrCsv || isSpreadsheetTask || isGeneralTableTask || isProductResearch)
+        ? `Tabel-${(userPrompt || "Data").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.xls`
         : (isSocialThread
             ? `Thread-${(userPrompt || "Sosmed").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.txt`
             : `Draf-${(userPrompt || "Dokumen").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`);
 
-      const artifact = (!isSummarize && (isSpreadsheetTask || isGeneralTableTask || isProductResearch || isSocialThread || isArticle || isDocsOutput)) ? {
+      const artifact = (!isSummarize && (isExplicitExcelOrCsv || isSpreadsheetTask || isGeneralTableTask || isProductResearch || isSocialThread || isArticle || isDocsOutput)) ? {
         artifactType: artType,
         name: artTitle,
         content: aiReply
       } : null;
 
-      const isDocsOrEditor = (pageUrl.includes("docs.google.com") && !pageUrl.includes("/spreadsheets")) ||
+      const isDocsOrEditor = isDocsSite ||
+                             (pageUrl.includes("docs.google.com") && !pageUrl.includes("/spreadsheets")) ||
                              pageUrl.includes("word.office.com") ||
                              pageTitle.includes("Google Dokumen") ||
-                             pageTitle.includes("Google Docs") ||
-                             /(?:lembar kerja|dokumen ini|ke dokumen|tulis ke|tempel ke|di dokumen)/i.test(userPrompt);
+                             pageTitle.includes("Google Docs");
 
-      const isSocialSite = pageUrl.includes("x.com") ||
-                           pageUrl.includes("twitter.com") ||
-                           pageUrl.includes("linkedin.com") ||
-                           pageUrl.includes("facebook.com") ||
-                           pageUrl.includes("threads.net");
+      const activeTabUrl = activeTabInfo?.url || "";
+      const isSocialSite = /x\.com|twitter\.com|linkedin\.com|facebook\.com|threads\.net|threads\.com/i.test(activeTabUrl) ||
+                           /x\.com|twitter\.com|linkedin\.com|facebook\.com|threads\.net|threads\.com/i.test(pageUrl);
+      const userSocialFillIntent = /(?:isi|tempel|masukkan|tulis|posting|post)\s+(?:ke|di|pada)?\s*(?:threads|x|twitter|linkedin|medsos|postingan|komposer)/i.test(userPrompt);
 
-      if (isDocsOutput) {
-        if (!isDocsSite) {
+      if (isDocsOutput && (isDocsSite || isExplicitNavigateDocs)) {
+        if (!isDocsSite && isExplicitNavigateDocs) {
           appendLog("Membuka lembar kerja Google Docs baru (docs.new)...");
           showStatusIndicator("Membuka lembar kerja Google Docs...");
           await sendToBackground({ action: "NAVIGATE_TAB", url: "https://docs.new" });
@@ -3857,8 +4041,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
           skipClean: true,
           artifact
         });
-      } else if (isSpreadsheetTask && !isSummarize) {
-        if (!isSheetsSite) {
+      } else if (isSpreadsheetTask && !isSummarize && (isSheetsSite || isExplicitNavigateSheets)) {
+        if (!isSheetsSite && isExplicitNavigateSheets) {
           appendLog("Membuka lembar kerja Google Sheets baru (sheets.new)...");
           showStatusIndicator("Membuka lembar kerja Google Sheets...");
           await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new" });
@@ -3934,12 +4118,12 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
           skipClean: true,
           artifact
         });
-      } else if (isDocsOrEditor && !isSocialThread && !isProductResearch && !isSpreadsheetTask && (
+      } else if (isDocsSite && !isSocialThread && !isProductResearch && !isSpreadsheetTask && (
         isDocsTarget ||
         isDocsTableTask ||
         isDocsArticleTask ||
         isArticle ||
-        /(?:tulis|buatkan|ketik|tempel|masukkan|isi|paragraf|artikel|draf|dokumen|tabel|susun|rangkum.*dokumen|dokumen.*ini|ke docs|di docs)/i.test(userPrompt)
+        /(?:tulis|buatkan|ketik|tempel|masukkan|isi|paragraf|artikel|draf|tabel|susun|ke docs|di docs)/i.test(userPrompt)
       )) {
         showStatusIndicator("Menuliskan teks langsung ke Google Dokumen / editor...");
         appendLog("📄 Menuliskan teks langsung ke Google Dokumen / Lembar kerja aktif...");
@@ -3949,12 +4133,12 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
           skipClean: true,
           artifact
         });
-      } else if (isSocialSite && isSocialThread && !isSummarize) {
-        showStatusIndicator("Menempelkan thread ke postingan media sosial...");
-        appendLog("📱 Menempelkan teks thread ke postingan media sosial aktif...");
-        const editorWrite = await executeAgentAction({ action: "paste_text", value: aiReply, message: "Menulis teks ke editor eksternal" });
-        if (!editorWrite?.success) throw new Error(editorWrite?.error || "Penulisan editor gagal atau tidak disetujui.");
-        addMessageToCurrentSession("assistant", `### 📱 Thread Media Sosial Berhasil Dibuat\n\n${aiReply}`, {
+      } else if ((isSocialSite || userSocialFillIntent) && (isSocialThread || userSocialFillIntent)) {
+        showStatusIndicator("Menempelkan draf ke postingan media sosial...");
+        appendLog("📱 Menempelkan teks draf ke postingan media sosial aktif...");
+        const editorWrite = await executeAgentAction({ action: "post_social", text: aiReply, message: "Menulis draf ke media sosial" });
+        if (!editorWrite?.success) throw new Error(editorWrite?.error || "Penulisan postingan gagal atau tidak disetujui.");
+        addMessageToCurrentSession("assistant", `### 📱 Thread Media Sosial Berhasil Dibuat & Diisikan ke Postingan\n\n${aiReply}`, {
           skipClean: true,
           artifact
         });
@@ -4014,13 +4198,18 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         }
       }
 
-      // 1.5. Cek apakah ini instruksi analisis, penjelasan, atau perangkuman (tanpa aksi manipulasi fisik)
-      const isAnalysisOrSummaryGoal = (
+      // 1.5. Cek apakah ini instruksi analisis, penjelasan, pembuatan draf, atau perangkuman (tanpa aksi manipulasi fisik)
+      const isSocialActionInGoal = /(?:posting|post|tweet|unggah|publikasikan|komposer|tempelkan.*(?:twitter|x|threads|medsos)|buka\s+komposer|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(goal);
+      const isFormFillingActionInGoal = /(?:isi\s+(?:seluruh\s+|semua\s+)?(?:form|formulir|field|kolom|data)|autofill)/i.test(goal);
+      const isDraftingOrRewritingGoal = /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan)\b/i.test(goal) &&
+        !/(?:posting\s+ke|post\s+ke|kirim\s+ke|upload|unggah\s+ke|buka\s+komposer|isi\s+form|autofill|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(goal);
+
+      const isAnalysisOrSummaryGoal = isDraftingOrRewritingGoal || (!isSocialActionInGoal && !isFormFillingActionInGoal && (
         /(?:rangkum|ringkas|summarize|ringkasan|rangkuman|intisari|poin\s+penting)\b/i.test(goal) ||
         /(?:^|\b)(?:analisa|analisis|analyze|analysis|audit|review|tinjau|bedah|evaluasi|periksa|cek|riset)\b/i.test(goal) ||
         /(?:^|\b)(?:gimana|gmn|bagaimana|bgm|apa|apakah|kenapa|mengapa|siapa|dimana|kapan|berapa|how|what|why|where|when|which|fix|cara|solusi|perbaiki|remediasi|mengatasi|jelaskan|terangkan|bahas|ulas|kode|contoh|panduan|langkah|rekomendasi)\b/i.test(goal) ||
         /\?/.test(goal)
-      ) && !/(?:klik|click|isi\s+form|login|register|checkout|pesan|scroll|ketik\s+di|input\s+ke|centang|select|tekan)/i.test(goal);
+      ) && !/(?:klik|click|isi\s+form|login|register|checkout|pesan|scroll|ketik\s+di|input\s+ke|centang|select|tekan)/i.test(goal));
 
       if (isAnalysisOrSummaryGoal) {
         appendLog("🔍 Mengalihkan ke Intelligence & Analysis Engine...");
@@ -4037,7 +4226,9 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
       // 2. Cek tab aktif saat ini & tentukan apakah perlu switch tab
       const isSocialPostingGoal = /(?:posting|post|tweet|unggah|publikasikan)\s+(?:ke\s+)?(?:x(?:\.com)?|twitter|threads(?:\.net|\.com)?|linkedin|medsos|media sosial)/i.test(goal) ||
                                   /(?:coba\s+)?posting\s+(?:tweet|utas|thread)/i.test(goal) ||
-                                  /(?:posting|post)\s+(?:langsung\s+)?(?:di|ke)\s+(?:threads|x|twitter|linkedin)/i.test(goal);
+                                  /(?:posting|post)\s+(?:langsung\s+)?(?:di|ke)\s+(?:threads|x|twitter|linkedin)/i.test(goal) ||
+                                  /(?:buka\s+komposer|komposer\s+(?:twitter|x|threads)|tempelkan.*(?:twitter|x|threads|medsos))/i.test(goal) ||
+                                  /(?:isi\s+(?:di|ke)|buat.*dan\s+isi\s+(?:di|ke)|tempel.*(?:di|ke))\s*(?:threads|x|twitter|linkedin|medsos)/i.test(goal);
 
       const isCopywritingTask = !isSocialPostingGoal && (
         /(copywriting|buatkan\s+(tulisan|artikel|konten|copy|penawaran|paragraf)|tulis\s+(copywriting|artikel|surat|penawaran|email|paragraf)|draft\s+|buat\s+(artikel|surat|email|copy|paragraf))/i.test(goal) ||
@@ -4228,64 +4419,93 @@ ATURAN KETAT:
 		        return;
 		      }
 
-			      // ══ FAST PATH FOR FORM AUTO-FILL (Direct credential & field filling) ══
-			      const hasEmailCred = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i.test(goal);
-			      const isFormFillIntent = (
-			        hasEmailCred &&
-			        /(?:isi|masukkan|ketik|input|autofill|login|sign\s*in|masuk|daftar|akun|password|sandi)/i.test(goal)
-			      ) || (
-			        /(?:^(?:tolong\s+|mohon\s+)?(?:isi|masukkan|ketik|input|autofill)\b)/i.test(goal) &&
-			        /(?:email|password|sandi|user|nama|telepon|alamat|login|akun)/i.test(goal)
-			      );
+				      // ══ FAST PATH FOR FORM AUTO-FILL (Direct credential & field filling) ══
+				      const hasEmailCred = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i.test(goal);
+				      const isFormFillIntent = (
+				        hasEmailCred &&
+				        /(?:isi|masukkan|ketik|input|autofill|login|sign\s*in|masuk|daftar|akun|password|sandi)/i.test(goal)
+				      ) || (
+				        /(?:^(?:tolong\s+|mohon\s+)?(?:isi|masukkan|ketik|input|autofill)\b)/i.test(goal) &&
+				        /(?:email|password|sandi|user|nama|telepon|alamat|login|akun|form|formulir)/i.test(goal)
+				      ) || /(?:isi\s+(?:seluruh\s+|semua\s+)?(?:form|formulir|field|kolom|data))/i.test(goal);
 
-			      if (isFormFillIntent) {
-			        const emailMatch = goal.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-			        const extractedFields = [];
-			        if (emailMatch) {
-			          extractedFields.push({ identifier: "email", value: emailMatch[1] });
-			        }
+				      if (isFormFillIntent) {
+				        const extractedFields = [];
 
-			        // Ekstraksi nilai password
-			        const passMatch = goal.match(/(?:password|pass|sandi|kata sandi)\s*(?:login\s*ini)?\s*(?:dengan|adalah|:)?\s*([^\s,.]+)/i);
-			        let passVal = passMatch ? passMatch[1].trim() : "";
-			        if (!passVal || passVal.includes("@")) {
-			          const tokens = goal.split(/\s+/).filter(t => t.length >= 3 && !t.includes("@") && !/^(?:isi|email|address|dan|password|login|ini|dengan|ke|di|tolong|mohon|setelah|itu|anda|lihat|menu)$/i.test(t));
-			          if (tokens.length > 0) passVal = tokens[tokens.length - 1];
-			        }
-			        if (passVal) {
-			          passVal = passVal.replace(/[.,;:]+$/, "");
-			        }
-			        if (passVal && !passVal.includes("@")) {
-			          extractedFields.push({ identifier: "password", value: passVal });
-			        }
+				        // 1. Email
+				        const emailMatch = goal.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+				        if (emailMatch) {
+				          extractedFields.push({ identifier: "email", value: emailMatch[1] });
+				        }
 
-			        if (extractedFields.length > 0) {
-			          const shouldSubmit = /(?:login|masuk|sign\s*in|submit|kirim)/i.test(goal);
-			          showStatusIndicator("Mengisi formulir login...");
-			          appendLog(`📝 Mengisi ${extractedFields.length} field formulir secara otomatis${shouldSubmit ? " dan menekan Sign In..." : "..."}`);
-				          const fillRes = await executeAgentAction({
-				            action: "autofill_form_batch",
-				            fields: extractedFields,
-				            submitAfter: shouldSubmit,
-				            message: shouldSubmit ? "Mengisi kredensial dan mengirim formulir login" : "Mengisi formulir dengan kredensial"
-				          });
+				        // 2. Password
+				        const passMatch = goal.match(/(?:password|pass|sandi|kata sandi)\s*(?:login\s*ini)?\s*(?:dengan|adalah|:)?\s*([^\s,.]+)/i);
+				        if (passMatch && !passMatch[1].includes("@")) {
+				          extractedFields.push({ identifier: "password", value: passMatch[1].trim().replace(/[.,;:]+$/, "") });
+				        }
 
+				        // 3. Nama (First & Last name)
+				        const nameMatch = goal.match(/(?:nama|name)\s*(?:lengkap)?\s*(?::|adalah|=)?\s*([A-Za-z]+(?:\s+[A-Za-z]+)*)/i);
+				        if (nameMatch) {
+				          const fullVal = nameMatch[1].trim();
+				          extractedFields.push({ identifier: "name", value: fullVal });
+				          const parts = fullVal.split(/\s+/);
+				          if (parts.length >= 2) {
+				            extractedFields.push({ identifier: "firstName", value: parts[0] });
+				            extractedFields.push({ identifier: "lastName", value: parts.slice(1).join(" ") });
+				          }
+				        }
 
-			          if (fillRes && fillRes.success && fillRes.filledCount > 0) {
-			            const summaryStr = extractedFields.map(f => `${f.identifier}: ${f.value.includes("@") ? f.value : "••••••••"}`).join(", ");
-			            addMessageToCurrentSession("assistant", `✅ Berhasil mengisi formulir (${fillRes.filledCount} field terisi: ${summaryStr})${shouldSubmit ? " dan menekan tombol Sign In." : "."}`);
+				        // 4. Gender
+				        const genderMatch = goal.match(/(?:gender|jenis kelamin|sex)\s*(?::|adalah|=)?\s*(Male|Female|Pria|Wanita|Laki-laki|Perempuan|Other)/i);
+				        if (genderMatch) {
+				          extractedFields.push({ identifier: "gender", value: genderMatch[1].trim() });
+				        }
 
-			            const hasFollowUp = /(?:setelah itu|lalu|kemudian|selanjutnya)\s+(.+)/i.test(goal);
-			            if (!hasFollowUp) {
-			              await finalizeTask("done", `Berhasil mengisi formulir login.`);
-			              return;
-			            } else {
-			              appendLog("⏳ Menunggu proses login selesai (1.8s) untuk memproses instruksi lanjutan...");
-			              await new Promise(r => setTimeout(r, 1800));
-			            }
-			          }
-			        }
-			      }
+				        // 5. HP / Telepon / Mobile
+				        const phoneMatch = goal.match(/(?:hp|handphone|ponsel|telp|telepon|mobile|phone|no(?:\.|\s+)?hp)\s*(?::|adalah|=)?\s*(\+?[0-9\s-]{8,16})/i);
+				        if (phoneMatch) {
+				          extractedFields.push({ identifier: "mobile", value: phoneMatch[1].trim().replace(/\D/g, "") });
+				        }
+
+				        // 6. Hobi / Hobbies
+				        const hobbyMatch = goal.match(/(?:hobi|hobby|hobbies)\s*(?::|adalah|=)?\s*([A-Za-z0-9\s,&]+?)(?=,\s*[a-zA-Z]+\s*[:=]|,\s*alamat|\.|$)/i);
+				        if (hobbyMatch) {
+				          extractedFields.push({ identifier: "hobbies", value: hobbyMatch[1].trim() });
+				        }
+
+					        // 7. Alamat / Address
+					        const addressMatch = goal.match(/(?:alamat|address)\s*(?::|adalah|=)?\s*([\s\S]+?)(?=\s*\.\s*(?:jangan|tanpa|no\s+submit|submit)|\s*,\s*(?:jangan|tanpa)|$)/i);
+					        if (addressMatch) {
+					          extractedFields.push({ identifier: "address", value: addressMatch[1].trim() });
+					        }
+
+				        if (extractedFields.length > 0) {
+				          const shouldSubmit = !/(?:jangan submit|tanpa submit|don't submit|no submit)/i.test(goal) && /(?:login|masuk|sign\s*in|submit|kirim)/i.test(goal);
+				          showStatusIndicator("Mengisi formulir web...");
+				          appendLog(`📝 Mengisi ${extractedFields.length} field formulir secara otomatis${shouldSubmit ? " dan menekan tombol submit..." : "..."}`);
+					          const fillRes = await executeAgentAction({
+					            action: "autofill_form_batch",
+					            fields: extractedFields,
+					            submitAfter: shouldSubmit,
+					            message: shouldSubmit ? "Mengisi dan mengirim formulir" : "Mengisi field formulir di peramban"
+					          });
+
+				          if (fillRes && fillRes.success && fillRes.filledCount > 0) {
+				            const summaryStr = extractedFields.map(f => `${f.identifier}: ${f.value.includes("@") ? f.value : (f.identifier === "password" ? "••••••••" : f.value)}`).join(", ");
+				            addMessageToCurrentSession("assistant", `✅ Berhasil mengisi formulir (${fillRes.filledCount} field terisi: ${summaryStr})${shouldSubmit ? " dan menekan tombol Submit." : "."}`);
+
+				            const hasFollowUp = /(?:setelah itu|lalu|kemudian|selanjutnya)\s+(.+)/i.test(goal);
+				            if (!hasFollowUp) {
+				              await finalizeTask("done", `Berhasil mengisi formulir web (${fillRes.filledCount} field).`);
+				              return;
+				            } else {
+				              appendLog("⏳ Menunggu proses formulir (1.8s) untuk memproses instruksi lanjutan...");
+				              await new Promise(r => setTimeout(r, 1800));
+				            }
+				          }
+				        }
+				      }
 
 		      // ══ PRE-EXECUTION GATE: THINK & PLAN DULU, KALAU RAGU INTERVIEW USER ══
 		      const isSearchIntent = /^(?:tolong\s+|mohon\s+)?(?:cari|search|temukan|carikan)\s+(.+)/i.test(goal.trim());

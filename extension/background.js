@@ -16,6 +16,19 @@ function bgLog(level, type, message, details = null, tabId = null) {
   } catch (e) {}
 }
 
+function stringToBase64(str) {
+  try {
+    const bytes = new TextEncoder().encode(str);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  } catch (_) {
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+}
+
 // Action history tracker untuk pencegahan infinite loop
 const actionHistoryPerTab = new Map();
 
@@ -554,19 +567,40 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "DOWNLOAD_FILE") {
     try {
       const params = request.params || request;
-      const filename = params.filename || `pesat-export-${Date.now()}.csv`;
-      const content = params.content || "";
-      const mimeType = params.mimeType || "text/csv;charset=utf-8";
+      let filename = String(params.filename || `pesat-export-${Date.now()}.doc`).trim();
+      filename = filename.replace(/[/\\?%*:|"<>]/g, "_");
+      if (!filename.includes(".")) filename += ".doc";
 
-      const dataUrl = `data:${mimeType},${encodeURIComponent(content)}`;
-      if (chrome.downloads?.download) {
+      const content = params.content || "";
+      const mimeType = params.mimeType || "application/msword";
+
+      let dataUrl = params.url || params.dataUrl;
+      if (!dataUrl) {
+        const b64 = stringToBase64(content);
+        dataUrl = `data:${mimeType};base64,${b64}`;
+      }
+
+      if (typeof chrome !== "undefined" && chrome.downloads?.download) {
         chrome.downloads.download({
           url: dataUrl,
           filename: filename,
-          saveAs: false
+          saveAs: false,
+          conflictAction: "uniquify"
         }, (downloadId) => {
-          if (chrome.runtime.lastError) {
-            sendResponse({ success: false, error: chrome.runtime.lastError.message });
+          if (chrome.runtime.lastError || !downloadId) {
+            chrome.downloads.download({
+              url: dataUrl,
+              filename: filename,
+              saveAs: true,
+              conflictAction: "uniquify"
+            }, (retryId) => {
+              if (chrome.runtime.lastError || !retryId) {
+                console.warn("[Background] chrome.downloads.download error:", chrome.runtime.lastError);
+                sendResponse({ success: false, error: chrome.runtime.lastError?.message || "Download gagal" });
+              } else {
+                sendResponse({ success: true, downloadId: retryId, filename });
+              }
+            });
           } else {
             sendResponse({ success: true, downloadId, filename });
           }

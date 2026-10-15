@@ -20,10 +20,13 @@
 
   function classifyTask(goal = "", contextRefs = []) {
     const text = String(goal).trim();
-    const mutating = /(?:\b(?:kirim|send|publish|post|hapus|delete|checkout|bayar|transfer|beli|submit|ubah|update|append|login)\b|\btulis\s+ke\b|\bisi\s+form\b)/i.test(text);
-    const browserAction = /\b(buka|open|kunjungi|akses|klik|click|ketik|isi|pilih|scroll|navigate|unduh|download)\b/i.test(text) || mutating;
+    const isContentDrafting = /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan|ulasan|ringkasan|makalah|esai)/i.test(text) &&
+      !/(?:posting\s+ke|post\s+ke|kirim\s+ke|upload|unggah\s+ke|buka\s+komposer|isi\s+form|autofill|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos)|tempel.*(?:threads|x|twitter))/i.test(text);
+
+    const mutating = !isContentDrafting && /(?:\b(?:kirim|send|publish|post|hapus|delete|checkout|bayar|transfer|beli|submit|ubah|update|append|login)\b|\btulis\s+ke\b|\bisi\s+form\b)/i.test(text);
+    const browserAction = !isContentDrafting && (/\b(buka|open|kunjungi|akses|klik|click|ketik|isi\s+form|pilih|scroll|navigate|unduh|download)\b/i.test(text) || mutating || /(?:isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(text));
     const research = /\b(riset|research|bandingkan|compare|sumber|referensi|knowledge|dokumen tersimpan|multi[- ]?site)\b/i.test(text);
-    const analysis = /\b(rangkum|ringkas|analisis|audit|jelaskan|apa|mengapa|bagaimana|rekomendasi)\b/i.test(text) || text.includes("?");
+    const analysis = isContentDrafting || /\b(rangkum|ringkas|analisis|audit|review|tinjau|bedah|evaluasi|periksa|cek|jelaskan|apa|mengapa|bagaimana|rekomendasi|tulis|buatkan|ganti|ubah|persingkat|susun)\b/i.test(text) || text.includes("?");
     const ambiguity = text.length < 3 || /\b(itu|ini|yang tadi)\b/i.test(text) && !contextRefs.length;
     let mode = "answer";
     if (browserAction && (analysis || research)) mode = "hybrid";
