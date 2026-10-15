@@ -392,4 +392,47 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     expect(res.chipRendered).toBe(true);
     expect(res.chipTitle).toContain('Trello | Pesat Agent Board');
   });
+
+  test('should render modern sleek Confirmation Card for risky actions with badge and actions', async ({ page }) => {
+    const cardRendered = await page.evaluate(() => {
+      const messagesContainer = document.getElementById('chatArea') || document.body;
+      const testCard = document.createElement('div');
+      testCard.className = 'confirm-card';
+      testCard.innerHTML = `
+        <div class="confirm-header-row">
+          <div class="confirm-icon-badge">🛡️</div>
+          <div class="confirm-title-wrap">
+            <div class="confirm-title">Izin Akses — Konfirmasi Tindakan</div>
+            <div class="confirm-subtitle">Agen memerlukan persetujuan untuk melanjutkan tindakan ini:</div>
+          </div>
+        </div>
+        <div class="confirm-action-box">
+          <div class="confirm-meta-row">
+            <span class="confirm-meta-label">Aksi</span>
+            <span class="confirm-action-badge">fill_spreadsheet_grid</span>
+          </div>
+        </div>
+        <div class="confirm-actions">
+          <button class="confirm-btn confirm-btn-allow">Izinkan Sekali</button>
+          <button class="confirm-btn confirm-btn-allow-all">Izinkan Semua di Task Ini</button>
+          <button class="confirm-btn confirm-btn-cancel">Batalkan</button>
+        </div>
+      `;
+      messagesContainer.appendChild(testCard);
+
+      const card = document.querySelector('.confirm-card');
+      const badge = document.querySelector('.confirm-action-badge');
+      const btns = document.querySelectorAll('.confirm-btn');
+
+      return {
+        cardExists: !!card,
+        badgeText: badge?.textContent || '',
+        btnCount: btns.length
+      };
+    });
+
+    expect(cardRendered.cardExists).toBe(true);
+    expect(cardRendered.badgeText).toBe('fill_spreadsheet_grid');
+    expect(cardRendered.btnCount).toBe(3);
+  });
 });

@@ -802,20 +802,58 @@ document.addEventListener("DOMContentLoaded", async () => {
       const c = msg.confirmation;
       let confHtml = `
         <div class="confirm-card">
-          <div class="confirm-title">🛡️ Konfirmasi Diperlukan — Aksi Berisiko</div>
-          <div style="font-size:14px;color:var(--text-secondary);margin-bottom:8px;">${escapeHtml(c.description || "Aksi berikut akan dieksekusi:")}</div>
-          <div class="confirm-action-desc">${escapeHtml(c.detail || "")}</div>
+          <div class="confirm-header-row">
+            <div class="confirm-icon-badge">🛡️</div>
+            <div class="confirm-title-wrap">
+              <div class="confirm-title">Izin Akses — Konfirmasi Tindakan</div>
+              <div class="confirm-subtitle">${escapeHtml(c.description || "Agen memerlukan persetujuan untuk melanjutkan tindakan ini:")}</div>
+            </div>
+          </div>
+
+          <div class="confirm-action-box">
+            <div class="confirm-meta-row">
+              <span class="confirm-meta-label">Aksi</span>
+              <span class="confirm-action-badge">${escapeHtml(c.action || "Eksekusi")}</span>
+            </div>
+            ${c.target ? `
+            <div class="confirm-meta-row">
+              <span class="confirm-meta-label">Deskripsi</span>
+              <span class="confirm-meta-val">${escapeHtml(c.target)}</span>
+            </div>` : ''}
+            ${c.preview ? `
+            <div class="confirm-meta-row" style="flex-direction:column;gap:4px;align-items:flex-start;">
+              <span class="confirm-meta-label">Pratinjau Data</span>
+              <div class="confirm-preview-box">${escapeHtml(c.preview)}</div>
+            </div>` : (!c.target && c.detail ? `
+            <div class="confirm-meta-row" style="flex-direction:column;gap:4px;align-items:flex-start;">
+              <span class="confirm-meta-label">Detail</span>
+              <div class="confirm-preview-box">${escapeHtml(c.detail)}</div>
+            </div>` : '')}
+          </div>
       `;
       if (!c.resolved) {
         confHtml += `
           <div class="confirm-actions">
-            <button class="confirm-btn confirm-btn-allow" data-conf="once">✅ Izinkan Sekali</button>
-            <button class="confirm-btn confirm-btn-allow-all" data-conf="all">🔓 Izinkan semua di task ini</button>
-            <button class="confirm-btn confirm-btn-cancel" data-conf="cancel">⛔ Batalkan</button>
+            <button class="confirm-btn confirm-btn-allow" data-conf="once">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              <span>Izinkan Sekali</span>
+            </button>
+            <button class="confirm-btn confirm-btn-allow-all" data-conf="all">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+              <span>Izinkan Semua di Task Ini</span>
+            </button>
+            <button class="confirm-btn confirm-btn-cancel" data-conf="cancel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              <span>Batalkan</span>
+            </button>
           </div>
         `;
       } else {
-        confHtml += `<div style="font-size:14px;color:var(--text-primary);">${c.approved ? "✔️ Disetujui pengguna" : "⛔ Ditolak pengguna"}</div>`;
+        confHtml += `
+          <div class="confirm-status-resolved ${c.approved ? 'resolved-approved' : 'resolved-rejected'}">
+            ${c.approved ? '✔️ Tindakan telah disetujui pengguna' : '⛔ Tindakan dibatalkan pengguna'}
+          </div>
+        `;
       }
       confHtml += `</div>`;
       contentHtml = confHtml;
@@ -2496,10 +2534,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         refreshTaskCard();
         persistTask();
       }
+
+      const actionName = resObj.action || (Array.isArray(resObj.actions) ? `batch (${resObj.actions.length} aksi)` : "Aksi Browser");
+      const targetText = resObj.message || (resObj.targetText ? `Elemen: "${resObj.targetText}"` : (resObj.url ? `URL: ${resObj.url}` : ""));
+      const previewText = String(resObj.value || resObj.text || resObj.tableData || resObj.data || "").trim();
+      const snippet = previewText ? previewText.substring(0, 260) + (previewText.length > 260 ? "..." : "") : "";
+
       addMessageToCurrentSession("assistant", "", {
         skipClean: true,
         confirmation: {
-          description: resObj.message || "Aksi berikut berpotensi mengubah data atau mengirim sesuatu:",
+          action: actionName,
+          description: "Agen meminta izin untuk mengeksekusi tindakan berikut pada peramban:",
+          target: targetText,
+          preview: snippet,
           detail: describeActionForConfirm(resObj),
           resolved: false
         }
@@ -3331,44 +3378,41 @@ Respon HANYA dalam format JSON valid:
                          pageTitle.includes("Google Docs") ||
                          pageUrl.includes("word.office.com");
 
-      const userExplicitDocs = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|ke|di|dalam|pada|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen)/i.test(userPrompt);
+      const userExplicitDocs = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|ke|di|dalam|pada|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke|langsung\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen|(?:ke|di|pada|dalam|langsung\s+ke)\s+(?:dokumen|docs)|dokumen\s+ini)/i.test(userPrompt);
       const userExplicitSheets = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|buatkan spreadsheet)/i.test(userPrompt);
       const isDocsTarget = userExplicitDocs || isDocsSite;
 
-      // Klasifikasi Intent yang Akurat (Prioritas: Summarize / SEO / Security / Social / Table Docs / Table Sheets / Table General / Docs Article / Product / Article / QA)
-      const isSummarize = /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
-      const isSeo = !isSummarize && /(?:seo|meta|kata kunci|keyword)/i.test(userPrompt);
-      const isSecurity = !isSummarize && /(?:keamanan|security|audit keamanan|ssl|https)/i.test(userPrompt);
-      const isSocialThread = !isSummarize && !isDocsTarget && /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed|sosmed)/i.test(userPrompt);
-      const isSocialCopywritingForDocs = !isSummarize && isDocsTarget && /(?:sosmed|media sosial|copywriting|thread|tweet|postingan|caption|feed|carousel|konten)/i.test(userPrompt);
-
-      const hasTableCreationIntent = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan|tabel\b)/i.test(userPrompt);
+      const hasTableCreationIntent = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan|tabel\b|\d+\s*kolom)/i.test(userPrompt);
 
       // 1. isDocsTableTask: jika tujuannya Google Docs dan ada perintah membuat/mengubah tabel atau daftar perbandingan
-      const isDocsTableTask = !isSummarize && !isSeo && !isSecurity && !isSocialThread && isDocsTarget && (
+      const isDocsTableTask = isDocsTarget && (
         hasTableCreationIntent || (isDocsSite && /(?:tabel|perusahaan|komparasi|peringkat|top\s*\d+|daftar|ganti|ubah|edit)/i.test(userPrompt))
       );
 
       // 2. isSpreadsheetTask: jika pengguna eksplisit meminta Sheets atau sedang berada di tab Sheets
-      const isSpreadsheetTask = !isSummarize && !isSeo && !isSecurity && !isSocialThread && !isDocsTableTask && (
+      const isSpreadsheetTask = !isDocsTableTask && (
         userExplicitSheets || (isSheetsSite && (hasTableCreationIntent || /(?:ganti|timpa|isi|tambah|update|ubah|masukkan|data)\b/i.test(userPrompt)))
       );
 
       // 3. isGeneralTableTask: jika pengguna meminta tabel tapi bukan khusus Google Docs dan bukan khusus Google Sheets
-      const isGeneralTableTask = !isSummarize && !isSeo && !isSecurity && !isSocialThread && !isDocsTableTask && !isSpreadsheetTask && hasTableCreationIntent;
+      const isGeneralTableTask = !isDocsTableTask && !isSpreadsheetTask && hasTableCreationIntent;
 
-      const isProductResearch = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isGeneralTableTask && !isSocialThread && /(?:riset produk|laptop|harga|rekomendasi produk|komparasi|spesifikasi|cari produk|tokopedia|shopee|produk)/i.test(userPrompt);
+      const isSocialThread = !isDocsTarget && /(?:thread|tweet|twitter|x\.com|medsos|postingan|linkedin|caption|feed|sosmed)/i.test(userPrompt);
+      const isSocialCopywritingForDocs = isDocsTarget && /(?:sosmed|media sosial|copywriting|thread|tweet|postingan|caption|feed|carousel|konten)/i.test(userPrompt);
 
       // 4. isDocsArticleTask: jika tujuannya Google Docs dan meminta pembuatan dokumen/tulisan/pembahasan/analisis/makna/rangkuman
       const isDocsArticleTask = !isSpreadsheetTask && !isDocsTableTask && isDocsTarget && (
         isSocialCopywritingForDocs ||
-        isSummarize ||
         /(?:artikel|tulis|buatkan|buat|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat|jelaskan|makna|simpan|isi|masukkan|rangkum|ringkas|ulas|bahas|analisis|catat|paparkan|video|ganti|ubah|edit|perbarui|modifikasi|perusahaan)/i.test(userPrompt) ||
         userExplicitDocs
       );
 
+      // 5. Klasifikasi intent non-Docs
+      const isSummarize = !isDocsTableTask && !isDocsArticleTask && !isSpreadsheetTask && !isGeneralTableTask && /(?:rangkum|ringkas|summarize|ringkasan|rangkuman)/i.test(userPrompt);
+      const isSeo = !isSummarize && !isDocsTarget && /(?:seo|meta|kata kunci|keyword)/i.test(userPrompt);
+      const isSecurity = !isSummarize && !isDocsTarget && /(?:keamanan|security|audit keamanan|ssl|https)/i.test(userPrompt);
+      const isProductResearch = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isGeneralTableTask && !isSocialThread && /(?:riset produk|laptop|harga|rekomendasi produk|komparasi|spesifikasi|cari produk|tokopedia|shopee|produk)/i.test(userPrompt);
       const isArticle = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isDocsArticleTask && !isGeneralTableTask && !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt);
-
       const isBusinessOrPageAnalysis = !isSummarize && !isSeo && !isSecurity && !isDocsTarget && !isSpreadsheetTask && /(?:analisa|analisis|analyze|analysis|audit|review|tinjau|bedah|evaluasi|periksa|cek|riset|business profile|google business|profil bisnis|toko|kompetitor)\b/i.test(userPrompt);
 
       let promptPayload = "";
@@ -3553,7 +3597,10 @@ PEDOMAN KETAT PENULISAN DOKUMEN GOOGLE DOCS:
    - Rincian butir-butir pembahasan utama (fakta, makna, pesan moral, atau poin analisis penting dari video/web referensi)
    - Kesimpulan atau penutup yang relevan
 6. Gaya bahasa: Mengalir alami, tajam, bernas, dan bebas klise robotik AI.
-7. DILARANG KERAS MENGGUNAKAN SIMBOL BLOCKQUOTE (>) DI AWAL BARIS! Tuliskan seluruh teks dan butir secara langsung tanpa karakter '>'.${paragraphCount ? `\n8. Pengguna meminta tepat ${paragraphCount} paragraf: Patuhi secara presisi!` : ""}`;
+7. DILARANG KERAS MENGGUNAKAN SIMBOL BLOCKQUOTE (>) DI AWAL BARIS! Tuliskan seluruh teks dan butir secara langsung tanpa karakter '>'.
+8. FORMAT PENOMORAN & DAFTAR POIN:
+   - Jika membuat daftar butir bernomor, wajib gunakan urutan angka yang benar (1., 2., 3., dst.) secara berurutan. DILARANG mengulang nomor 1. untuk setiap butir!
+   - Format setiap butir: Awali judul butir dengan huruf tebal (**Nama Butir / Topik**), lalu sertakan uraian analisisnya secara rapi.${paragraphCount ? `\n9. Pengguna meminta tepat ${paragraphCount} paragraf: Patuhi secara presisi!` : ""}`;
         }
       } else if (isArticle) {
         const paragraphMatch = userPrompt.match(/(?:tulis|buatkan|buat|ketik|isi)\s+(\d+)\s+paragraf/i);
@@ -3887,7 +3934,13 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
           skipClean: true,
           artifact
         });
-      } else if (isDocsOrEditor && !isSocialThread && !isProductResearch && !isSpreadsheetTask && !isSummarize && (isArticle || /(?:tulis|buatkan|ketik|tempel|masukkan|isi|paragraf|artikel)/i.test(userPrompt))) {
+      } else if (isDocsOrEditor && !isSocialThread && !isProductResearch && !isSpreadsheetTask && (
+        isDocsTarget ||
+        isDocsTableTask ||
+        isDocsArticleTask ||
+        isArticle ||
+        /(?:tulis|buatkan|ketik|tempel|masukkan|isi|paragraf|artikel|draf|dokumen|tabel|susun|rangkum.*dokumen|dokumen.*ini|ke docs|di docs)/i.test(userPrompt)
+      )) {
         showStatusIndicator("Menuliskan teks langsung ke Google Dokumen / editor...");
         appendLog("📄 Menuliskan teks langsung ke Google Dokumen / Lembar kerja aktif...");
         const editorWrite = await executeAgentAction({ action: "paste_text", value: aiReply, message: "Menulis teks ke editor eksternal" });

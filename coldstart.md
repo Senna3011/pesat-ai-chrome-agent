@@ -331,9 +331,16 @@
 			- [x] **Verifikasi Otomatisasi & QA**:
 			  - Seluruh 20 pengujian Playwright E2E lulus 100% (`npx playwright test tests/sidepanel.spec.js`).
 			  - Sinkronisasi penuh berkas ke direktori `extension/` dan validasi sintaks JavaScript bersih (`node -c`).
-			- [x] **Penyempurnaan Mention Context & Multi-Tab Summary (Masukan Mas Alfu)**:
-			  - **Kompensasi Ukuran Menu Mention (@)**: Sizing `.mention-picker` direfaktor menjadi kompak (`max-height: 185px`, padding rapi 5px, icon 16px, domain subtitle 11px) agar tidak mendominasi panel.
-			  - **Tampilkan Judul Halaman Asli (Gantikan `@tab2`)**: Dropdown dan komposer kini menampilkan judul asli halaman web (`@"Judul Halaman"` dan chip nama tab) sehingga pengguna awam langsung tahu tab yang dirujuk.
-			  - **Pembersihan Kolom Input (Chip-Only Mention)**: Saat memilih tab/konektor, item hanya masuk ke tray chip di atas kolom input (dengan tombol batal `✕`). Trigger `@` otomatis dibersihkan dari textarea agar tidak mengotori kalimat perintah.
-			  - **Perbaikan Rangkuman Multi-Tab**: Permintaan perangkuman/analisis tab lain kini otomatis dialirkan ke `runAnalysisFlow` dengan ekstraksi latar belakang via background worker + fallback `document.body.innerText`. Menghilangkan bug respons kosong.
+				- [x] **Penyempurnaan Mention Context & Multi-Tab Summary (Masukan Mas Alfu)**:
+				  - **Kompensasi Ukuran Menu Mention (@)**: Sizing `.mention-picker` direfaktor menjadi kompak (`max-height: 185px`, padding rapi 5px, icon 16px, domain subtitle 11px) agar tidak mendominasi panel.
+				  - **Tampilkan Judul Halaman Asli (Gantikan `@tab2`)**: Dropdown dan komposer kini menampilkan judul asli halaman web (`@"Judul Halaman"` dan chip nama tab) sehingga pengguna awam langsung tahu tab yang dirujuk.
+				  - **Pembersihan Kolom Input (Chip-Only Mention)**: Saat memilih tab/konektor, item hanya masuk ke tray chip di atas kolom input (dengan tombol batal `✕`). Trigger `@` otomatis dibersihkan dari textarea agar tidak mengotori kalimat perintah.
+				  - **Perbaikan Rangkuman Multi-Tab**: Permintaan perangkuman/analisis tab lain kini otomatis dialirkan ke `runAnalysisFlow` dengan ekstraksi latar belakang via background worker + fallback `document.body.innerText`. Menghilangkan bug respons kosong.
+				- [x] **Penyempurnaan Auto-Write Docs, Konfirmasi Izin, & Format List**:
+				  - **Auto-Fill Google Docs**: Menghapus blokade `!isSummarize`. Saat berada di Google Docs dan meminta draf/tabel, agen langsung menempelkan konten ke dokumen tanpa perlu konfirmasi berulang.
+				  - **Redesain UI Izin Akses (`confirm-card`)**: Kartu persetujuan aksi berisiko dirancang ulang dengan dark slate theme, icon badge perisai (🛡️), detail badge aksi, preview box data, dan tombol aksi terarah (`Izinkan Sekali`, `Izinkan Semua`, `Batalkan`).
+				  - **Perbaikan Numbering List Google Docs**: Memperbaiki parser `convertMarkdownToRichDoc` agar butir daftar bernomor tidak mengulang angka `1.` ketika terdapat paragraf penjelasan di bawahnya. Urutan angka kini berurutan rapi (1., 2., 3.).
+				- [x] **Verifikasi Otomatisasi & QA**:
+				  - 25/25 pengujian unit backend lulus 100% (`node --test tests/agent-core.test.js tests/knowledge-skill.test.js tests/backend/*.test.mjs`).
+				  - 21/21 pengujian Playwright E2E lulus 100% (`npx playwright test tests/sidepanel.spec.js`).
 

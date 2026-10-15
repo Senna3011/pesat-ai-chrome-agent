@@ -1663,6 +1663,39 @@
       .replace(/\n{3,}/g, "\n\n")
       .trim();
 
+    // Normalisasi penomoran daftar urut (ol) agar selalu berurutan (1., 2., 3.) secara konsisten
+    let olPlainCounter = 0;
+    const rawPlainLines = cleanPlain.split(/\r?\n/);
+    const normalizedPlainLines = [];
+    for (let i = 0; i < rawPlainLines.length; i++) {
+      const pLine = rawPlainLines[i];
+      const pTrim = pLine.trim();
+      if (!pTrim || pTrim.includes("PESATTABLEPLACEHOLDER")) {
+        let nextNonEmpty = "";
+        for (let j = i + 1; j < rawPlainLines.length; j++) {
+          if (rawPlainLines[j].trim()) {
+            nextNonEmpty = rawPlainLines[j].trim();
+            break;
+          }
+        }
+        if (!/^\d+\.\s+/.test(nextNonEmpty) && !/^[•\*\-]\s+/.test(nextNonEmpty)) {
+          olPlainCounter = 0;
+        }
+        normalizedPlainLines.push(pLine);
+        continue;
+      }
+
+      const numMatch = pTrim.match(/^(\d+)\.\s+(.*)$/);
+      if (numMatch) {
+        olPlainCounter++;
+        const leadingSpace = pLine.match(/^\s*/)[0];
+        normalizedPlainLines.push(`${leadingSpace}${olPlainCounter}. ${numMatch[2]}`);
+      } else {
+        normalizedPlainLines.push(pLine);
+      }
+    }
+    cleanPlain = normalizedPlainLines.join("\n");
+
     cleanPlainTables.forEach((tPlain, idx) => {
       cleanPlain = cleanPlain.replace(`PESATTABLEPLACEHOLDER${idx}END`, tPlain);
     });
@@ -1682,9 +1715,18 @@
 
     const docLines = raw.split(/\r?\n/);
     const htmlBlocks = [];
-    let inList = null;
+    let inList = null; // 'ul' | 'ol' | null
+    let inLi = false;
+
+    function closeLi() {
+      if (inLi) {
+        htmlBlocks.push("  </li>");
+        inLi = false;
+      }
+    }
 
     function closeList() {
+      closeLi();
       if (inList) {
         htmlBlocks.push(`</${inList}>`);
         inList = null;
@@ -1694,6 +1736,22 @@
     for (let i = 0; i < docLines.length; i++) {
       const line = docLines[i].trim();
       if (!line) {
+        // Look ahead: jika butir daftar selanjutnya bertipe sama, biarkan container list terbuka
+        let nextItemType = null;
+        for (let j = i + 1; j < docLines.length; j++) {
+          const nextTrim = docLines[j].trim();
+          if (!nextTrim) continue;
+          if (/^[\*\-]\s+/.test(nextTrim)) nextItemType = "ul";
+          else if (/^\d+\.\s+/.test(nextTrim)) nextItemType = "ol";
+          else nextItemType = "other";
+          break;
+        }
+
+        if (inList && nextItemType === inList) {
+          closeLi();
+          continue;
+        }
+
         closeList();
         continue;
       }
@@ -1708,7 +1766,9 @@
       if (hMatch) {
         closeList();
         const level = hMatch[1].length;
-        htmlBlocks.push(`<h${level}>${formatInlineHtml(hMatch[2])}</h${level}>`);
+        const fontSize = level === 1 ? "20px" : (level === 2 ? "17px" : (level === 3 ? "15px" : "14px"));
+        const margin = level === 1 ? "18px 0 8px" : (level === 2 ? "14px 0 6px" : "10px 0 4px");
+        htmlBlocks.push(`<h${level} style="margin:${margin};font-size:${fontSize};font-weight:bold;color:#0f172a;">${formatInlineHtml(hMatch[2])}</h${level}>`);
         continue;
       }
 
@@ -1716,33 +1776,44 @@
       if (ulMatch) {
         if (inList !== "ul") {
           closeList();
-          htmlBlocks.push("<ul>");
+          htmlBlocks.push(`<ul style="margin:8px 0;padding-left:24px;color:#1e293b;">`);
           inList = "ul";
+        } else {
+          closeLi();
         }
-        htmlBlocks.push(`  <li>${formatInlineHtml(ulMatch[1])}</li>`);
+        htmlBlocks.push(`  <li style="margin-bottom:6px;line-height:1.6;">${formatInlineHtml(ulMatch[1])}`);
+        inLi = true;
         continue;
       }
 
-      const olMatch = line.match(/^\d+\.\s+(.*)$/);
+      const olMatch = line.match(/^(\d+)\.\s+(.*)$/);
       if (olMatch) {
         if (inList !== "ol") {
           closeList();
-          htmlBlocks.push("<ol>");
+          htmlBlocks.push(`<ol style="margin:8px 0;padding-left:24px;color:#1e293b;">`);
           inList = "ol";
+        } else {
+          closeLi();
         }
-        htmlBlocks.push(`  <li>${formatInlineHtml(olMatch[1])}</li>`);
+        htmlBlocks.push(`  <li style="margin-bottom:8px;line-height:1.6;">${formatInlineHtml(olMatch[2])}`);
+        inLi = true;
         continue;
       }
 
       const qMatch = line.match(/^>\s*(.*)$/);
       if (qMatch) {
         closeList();
-        htmlBlocks.push(`<blockquote style="margin:4px 0 4px 12px;color:#334155;"><p>${formatInlineHtml(qMatch[1])}</p></blockquote>`);
+        htmlBlocks.push(`<blockquote style="margin:8px 0 8px 16px;padding:4px 12px;border-left:3px solid #94a3b8;color:#475569;font-style:italic;"><p style="margin:0;line-height:1.6;">${formatInlineHtml(qMatch[1])}</p></blockquote>`);
         continue;
       }
 
-      closeList();
-      htmlBlocks.push(`<p>${formatInlineHtml(line)}</p>`);
+      // Jika di dalam butir daftar aktif (<li>), simpan sebagai paragraf deskripsi yang menjorok rapi
+      if (inLi) {
+        htmlBlocks.push(`    <p style="margin:4px 0 6px 0;line-height:1.6;color:#334155;">${formatInlineHtml(line)}</p>`);
+      } else {
+        closeList();
+        htmlBlocks.push(`<p style="margin:8px 0;line-height:1.6;color:#1e293b;">${formatInlineHtml(line)}</p>`);
+      }
     }
     closeList();
 
