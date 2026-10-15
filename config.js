@@ -4,6 +4,9 @@
     DEFAULT_API_BASE_URL: "https://api.pesatrouter.com/v1",
     DEFAULT_MODEL: "pesat-flash",
     DEFAULT_API_FORMAT: "openai-chat",
+    CANONICAL_BACKEND_URL: "https://pesat-ai-chrome-agent.senna-947.workers.dev",
+    AGENT_SCHEMA_VERSION: 1,
+    MAX_PLAN_STEPS: 10,
     DEFAULT_MODELS: [
       { id: "pesat-flash", name: "Pesat Flash (Cepat & Cerdas)", context: "32K", enabled: true, provider: "pesat", badge: "Fast" },
       { id: "pesat-pro", name: "Pesat Pro (Penalaran Mendalam)", context: "128K", enabled: true, provider: "pesat", badge: "Smart" },

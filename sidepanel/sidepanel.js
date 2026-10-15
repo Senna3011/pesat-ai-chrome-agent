@@ -360,7 +360,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ═══════════════════════════════════════════════════
   function showStatusIndicator(text = "Sedang mengerjakan...") {
     if (agentStatusIndicator && statusIndicatorText) {
-      statusIndicatorText.textContent = text;
+      const raw = String(text || "").toLowerCase();
+      const generic = /cari|sumber|baca|ekstrak|ambil data/.test(raw) ? "Mencari sumber..."
+        : /analisis|susun|hasil|respon|materi|dokumen|tabel/.test(raw) ? "Menganalisis..."
+          : /verifikasi|validasi|periksa|cek/.test(raw) ? "Memverifikasi..."
+            : /buka|isi|tulis|tempel|klik|jalan|eksekusi|posting|kirim/.test(raw) ? "Menjalankan tindakan..."
+              : "Sedang mengerjakan...";
+      statusIndicatorText.textContent = generic;
       agentStatusIndicator.classList.remove("hidden");
     }
   }
@@ -901,52 +907,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         `;
       }
     } else if (msg.multiAgent) {
-      const { planner, navigator, validator, finalAnswer } = msg.multiAgent;
-      let pipelineHtml = '<div class="agent-pipeline-container">';
-
-      if (planner && planner.steps && planner.steps.length > 0) {
-        pipelineHtml += `
-          <div class="agent-card planner">
-            <div class="agent-card-header">🧠 Planner Agent</div>
-            <div class="agent-card-body">
-              <ol>${planner.steps.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
-            </div>
-          </div>
-        `;
-      }
-
-      if (navigator) {
-        pipelineHtml += `
-          <div class="agent-card navigator">
-            <div class="agent-card-header">🧭 Navigator Agent</div>
-            <div class="agent-card-body">
-              <div>${escapeHtml(navigator.description || navigator.action)}</div>
-              ${navigator.elementId ? `<span class="target-badge">Target: [${escapeHtml(String(navigator.elementId))}]</span>` : ''}
-              ${navigator.status ? `<div style="font-size:14px; color:var(--text-secondary); margin-top:4px;">Status: ${escapeHtml(navigator.status)}</div>` : ''}
-              ${navigator.screenshot ? `<img class="screenshot-thumb" src="${navigator.screenshot}" alt="Bukti visual langkah" />` : ''}
-            </div>
-          </div>
-        `;
-      }
-
-      if (validator) {
-        pipelineHtml += `
-          <div class="agent-card validator">
-            <div class="agent-card-header">🎯 Validator Agent</div>
-            <div class="agent-card-body">
-              <div>${validator.success ? '✅' : '⚠️'} ${escapeHtml(validator.message || 'Verifikasi Selesai')}</div>
-            </div>
-          </div>
-        `;
-      }
-
-      pipelineHtml += '</div>';
-
-      if (finalAnswer) {
-        pipelineHtml += `<div class="message-bubble markdown-body" style="margin-top:8px;">${parseMarkdown(finalAnswer)}</div>`;
-      }
-
-      contentHtml = pipelineHtml;
+      const { navigator, validator, finalAnswer } = msg.multiAgent;
+      const progress = validator ? (validator.success ? "Memverifikasi selesai" : "Memverifikasi") : (navigator ? "Menjalankan tindakan" : "Menganalisis");
+      contentHtml = `<div class="agent-pipeline-container"><div class="agent-card"><div class="agent-card-header">Progress</div><div class="agent-card-body">${escapeHtml(progress)}</div></div></div>`;
+      if (finalAnswer) contentHtml += `<div class="message-bubble markdown-body" style="margin-top:8px;">${parseMarkdown(finalAnswer)}</div>`;
     } else {
       contentHtml = `<div class="message-bubble markdown-body">${parseMarkdown(msgText)}</div>`;
     }
@@ -1166,23 +1130,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function renderTaskCardHtml(taskCard) {
-    const plan = taskCard.plan || [];
-    const statusIcon = { PLANNING: "🗓️", EXECUTING: "⚡", VALIDATING: "🔍", WAITING_USER: "⏸️", PAUSED: "⏸️", DONE: "✅", FAILED: "❌", CANCELLED: "⛔" };
-    let html = `
-      <div class="task-card">
-        <div class="task-card-header">${statusIcon[taskCard.status] || "⚡"} Progress Tugas — ${escapeHtml(taskCard.status || "")}</div>
-        <div class="task-card-goal">🎯 ${escapeHtml(taskCard.goal || "")}</div>
-    `;
-    for (const s of plan) {
-      const st = s.status || "pending";
-      // Simbol standar (§ 36 PRD): ✓ done, ● in_progress, ○ pending, ✕ failed
-      const check = st === "done" ? "✓" : (st === "in_progress" ? "●" : (st === "failed" ? "✕" : "○"));
-      html += `<div class="plan-item ${st}"><span class="plan-check">${escapeHtml(String(check))}</span><span>${escapeHtml(s.description)}</span></div>`;
-    }
-    html += `
-      </div>
-    `;
-    return html;
+    const label = taskCard.status === "PLANNING" ? "Menganalisis"
+      : taskCard.status === "VALIDATING" ? "Memverifikasi"
+        : taskCard.status === "WAITING_USER" ? "Menunggu konfirmasi"
+          : taskCard.status === "DONE" ? "Selesai"
+            : taskCard.status === "FAILED" ? "Belum selesai"
+              : "Menjalankan tindakan";
+    return `<div class="task-card"><div class="task-card-header">Progress Tugas</div><div class="task-card-goal">${escapeHtml(label)}</div></div>`;
   }
 
   function editPromptAt(index) {
@@ -1474,7 +1428,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function isConfigured() {
-    return Boolean(getApiKey());
+    return Boolean(getApiKey() || googleConnected);
   }
 
   function checkOnboarding() {
@@ -2051,15 +2005,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   // TASK STATE MACHINE (Phase 1)
   // ═══════════════════════════════════════════════════
   function newTask(goal, contextSources = []) {
-    return {
-      id: "task_" + Date.now(),
+    const refs = (contextSources || []).map((src) => src.sourceId || src.id).filter(Boolean);
+    const spec = globalThis.PesatAgentEngine?.createTaskSpec?.({
       goal,
+      contextRefs: refs,
       status: "PLANNING",
+      budget: { maxSteps: CFG.MAX_STEPS, maxRetriesPerStep: CFG.MAX_RETRIES_PER_SUBTASK, maxReplans: CFG.MAX_REPLANS }
+    });
+    return {
+      ...(spec || { id: "task_" + Date.now(), goal, status: "PLANNING", schemaVersion: 1 }),
       plan: [],
+      receipts: [],
       currentSubtask: null,
       scratchpad: [],
       stepsUsed: 0,
-      stepBudget: CFG.MAX_STEPS,
+      stepBudget: spec?.budget?.maxSteps || CFG.MAX_STEPS,
       replansUsed: 0,
       retries: {},
       clarifications: [],
@@ -2068,7 +2028,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       confirmAllGranted: false,
       stuckCounter: 0,
       lastPageHash: "",
-      createdAt: Date.now()
+      createdAt: spec?.createdAt || new Date().toISOString()
     };
   }
 
@@ -2120,7 +2080,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       currentSubtask: activeTask.currentSubtask,
       scratchpad: activeTask.scratchpad.slice(-CFG.SCRATCHPAD_TAIL),
       clarifications: activeTask.clarifications,
-      contextSources: activeTask.contextSources || []
+      contextSources: activeTask.contextSources || [],
+      currentUrl: activeTask.currentUrl || ""
     };
   }
 
@@ -2225,31 +2186,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ═══════════════════════════════════════════════════
   function parseActionJSON(rawReply) {
     if (!rawReply) return null;
-    const jsonMatch =
-      rawReply.match(/```json\s*([\s\S]*?)\s*```/) ||
-      rawReply.match(/\{[\s\S]*"action"[\s\S]*\}/) ||
-      rawReply.match(/\{[\s\S]*"actions"[\s\S]*\}/) ||
-      rawReply.match(/\{[\s\S]*"planner"[\s\S]*\}/) ||
-      rawReply.match(/\{[\s\S]*"plan"[\s\S]*\}/) ||
-      rawReply.match(/\{[\s\S]*"verdict"[\s\S]*\}/);
-
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[1] || jsonMatch[0]);
-      } catch (e) {
-        console.error("[Pesat] JSON parse error:", e);
-      }
+    try {
+      return globalThis.PesatAgentEngine?.parseStrictJSON
+        ? globalThis.PesatAgentEngine.parseStrictJSON(String(rawReply), "respons agent")
+        : JSON.parse(String(rawReply).trim());
+    } catch (error) {
+      appendLog(`Respons terstruktur ditolak: ${error.message}`, "WARN");
+      return null;
     }
-
-    // Coba parse seluruh teks sebagai JSON
-    const trimmed = rawReply.trim();
-    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-      try {
-        return JSON.parse(trimmed);
-      } catch (e) {}
-    }
-
-    return null;
   }
 
   // Helper ekstraksi parameter email (To, Subject, Body) yang presisi
@@ -2414,31 +2358,29 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ═══════════════════════════════════════════════════
   // RISK CLASSIFIER & CONFIRMATION GATE (Phase 7.1)
   // ═══════════════════════════════════════════════════
-  const WRITE_SKILLS = ["skill_sheets_update", "skill_sheets_append", "skill_docs_append"];
+  const WRITE_SKILLS = ["gworkspace_append_sheet_data", "gworkspace_update_sheet_data", "gworkspace_write_doc", "autofill_form_batch", "paste_text", "fill_spreadsheet_grid"];
+  const HIGH_RISK_ACTIONS = new Set(["send_email", "post_social", "post_twitter", "post_x", "tweet", "social_post", "post_threads", "delete_knowledge_source"]);
   const RISKY_TEXT_RE = /(kirim|send|bayar|pay|pembayaran|hapus|delete|post|publish|checkout|order|beli\s|transfer|password|sandi|passwd)/i;
 
-  function isRiskyAction(resObj) {
-    const actionType = resObj.action || "";
-    if (WRITE_SKILLS.includes(actionType)) return true;
-
-    // Jika pengguna sudah secara eksplisit memerintahkan aksi di prompt awal (misal kirim email/post), jangan interupsi
-    if (activeTask && /(?:kirim|send|buatkan|draft|tulis|post)\s+(?:email|pesan|surat|tweet|postingan|artikel)/i.test(activeTask.goal)) {
-      return false;
-    }
-
+  function actionRiskLevel(resObj) {
     const checkOne = (a) => {
-      if (!a || typeof a !== "object") return false;
+      if (!a || typeof a !== "object") return "low";
       const act = a.action || "";
-      if (act === "click" && RISKY_TEXT_RE.test(`${a.message || ""} ${a.elementId || ""}`)) return true;
-      if (act === "type" && /(password|sandi|passwd)/i.test(a.message || "")) return true;
-      if (WRITE_SKILLS.includes(act)) return true;
-      return false;
+      const toolRisk = globalThis.PesatSkillRegistry?.getToolMetadata?.(a._toolName || act)?.risk;
+      if (HIGH_RISK_ACTIONS.has(act) || RISKY_TEXT_RE.test(`${a.message || ""} ${a.targetText || ""}`)) return "high";
+      if (act === "click" && RISKY_TEXT_RE.test(`${a.elementId || ""} ${a.selector || ""}`)) return "high";
+      if ((act === "type" || act === "type_text") && /(password|sandi|passwd)/i.test(`${a.message || ""} ${a.targetText || ""}`)) return "high";
+      if (WRITE_SKILLS.includes(act) || toolRisk === "high") return "high";
+      if (act === "batch" && Array.isArray(a.actions)) return a.actions.some((item) => checkOne(item) === "high") ? "high" : "low";
+      if (toolRisk === "medium") return "medium";
+      return "low";
     };
+    const risks = Array.isArray(resObj.actions) ? resObj.actions.map(checkOne) : [checkOne(resObj)];
+    return risks.includes("high") ? "high" : risks.includes("medium") ? "medium" : "low";
+  }
 
-    if (Array.isArray(resObj.actions)) {
-      return resObj.actions.some(checkOne);
-    }
-    return checkOne(resObj);
+  function isRiskyAction(resObj) {
+    return actionRiskLevel(resObj) === "high";
   }
 
   function describeActionForConfirm(resObj) {
@@ -2452,6 +2394,19 @@ document.addEventListener("DOMContentLoaded", async () => {
       resObj.actions.forEach((a, i) => parts.push(`  ${i + 1}. ${a.action} ${a.elementId || ""} ${a.value ? String(a.value).substring(0, 60) : ""}`));
     }
     return parts.join("\n");
+  }
+
+  async function ensureActionApproval(resObj) {
+    if (resObj?._approvalGranted || !isRiskyAction(resObj)) return { approved: true };
+    const risk = actionRiskLevel(resObj);
+    if (risk !== "high" && activeTask?.confirmAllGranted) return { approved: true };
+    const verdict = await requestConfirmation(resObj);
+    if (!verdict || verdict.cancelled) return { approved: false, cancelled: true };
+    if (!verdict.approved) return { approved: false, cancelled: false };
+    if (verdict.allowAll && risk !== "high" && activeTask) activeTask.confirmAllGranted = true;
+    resObj._approvalGranted = true;
+    if (activeTask?.status === "WAITING_USER") activeTask.status = "EXECUTING";
+    return { approved: true };
   }
 
   function requestPlanApproval(planList, goalText) {
@@ -2695,6 +2650,9 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     if (actionType === "type_text" || actionType === "fill") actionType = "type";
     if (actionType === "click_element") actionType = "click";
     if (actionType === "finish_task") actionType = "finish";
+    resObj.action = actionType;
+    const approval = await ensureActionApproval(resObj);
+    if (!approval.approved) return { actionType, success: false, errorType: "PERMISSION_DENIED", error: approval.cancelled ? "Tindakan dibatalkan pengguna." : "Tindakan tidak disetujui pengguna." };
     if (/(?:insert_table|create_table|sisipkan.*tabel|buat.*tabel|isi.*tabel)/i.test(actionType)) {
       actionType = "paste_text";
       if (!resObj.value && !resObj.text) {
@@ -2768,7 +2726,24 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     // ── Eksekusi Modular Skills (skills.sh Registry) ──
     if (globalThis.PesatSkillRegistry?.findSkillForTool?.(actionType)) {
       appendLog(`🛠️ Mengeksekusi skill '${actionType}'...`);
-      const skillRes = await globalThis.PesatSkillRegistry.executeSkill(actionType, resObj, {
+      const skillParams = { ...resObj };
+      delete skillParams.action;
+      delete skillParams._toolName;
+      delete skillParams.planner;
+      delete skillParams.message;
+      let backendAuthToken = "";
+      if (["search_knowledge", "get_source_excerpt", "list_knowledge_sources", "save_page_to_knowledge", "upload_document_to_knowledge", "delete_knowledge_source"].includes(actionType)) {
+        const session = await sendToBackground({ action: "BACKEND_SESSION", backendBaseUrl: CFG.CANONICAL_BACKEND_URL });
+        if (!session?.success || !session.token) {
+          return { ...result, success: false, errorType: session?.errorType || "AUTH_REQUIRED", error: session?.error || "Knowledge backend membutuhkan autentikasi.", message: session?.error || "Knowledge backend membutuhkan autentikasi." };
+        }
+        backendAuthToken = session.token;
+      }
+      const skillRes = await globalThis.PesatSkillRegistry.executeSkill(actionType, skillParams, {
+        stepId: activeTask?.currentSubtask || "",
+        backendBaseUrl: CFG.CANONICAL_BACKEND_URL,
+        authToken: backendAuthToken,
+        signal: activeAbortController?.signal,
         sendToContentScript,
         sendToBackground,
         appendLog,
@@ -2778,6 +2753,16 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       result.message = skillRes?.message || skillRes?.error || `Skill ${actionType} dieksekusi.`;
       result.stateChanged = skillRes?.stateChanged !== false;
       Object.assign(result, skillRes);
+      if (Array.isArray(skillRes?.sources) && activeTask) {
+        for (const source of skillRes.sources) {
+          const contextSource = globalThis.PesatContextEngine?.createContextSource?.({
+            ...source,
+            id: `knowledge-${source.sourceId}-${source.chunkId || "document"}`,
+            type: "Knowledge"
+          }) || source;
+          if (!activeTask.contextSources.some((item) => item.sourceId === contextSource.sourceId && item.chunkId === contextSource.chunkId)) activeTask.contextSources.push(contextSource);
+        }
+      }
       return result;
     }
 
@@ -2989,9 +2974,22 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
   // ═══════════════════════════════════════════════════
   // VALIDATOR (Phase 4)
   // ═══════════════════════════════════════════════════
-  async function runValidator(lastAction, lastResult, pageAfter) {
+  async function runValidator(lastAction, lastResult, pageAfter, pageBefore = {}) {
     const sub = currentSubtaskObj();
     const safeActionType = lastAction?.actionType || lastAction?.action || lastAction?.type || "unknown";
+    const deterministic = globalThis.PesatAgentEngine?.verifyDeterministically?.({
+      action: { ...lastAction, action: safeActionType },
+      result: { ...lastAction, success: lastResult === "success" },
+      beforeState: pageBefore,
+      afterState: pageAfter,
+      successCriteria: sub?.successCriteria || []
+    });
+
+    if (deterministic?.conclusive) {
+      return deterministic.passed
+        ? { verdict: "SUCCESS", subtaskComplete: true, reason: "Verifikasi deterministik berhasil.", verification: deterministic.checks }
+        : { verdict: "RETRY", subtaskComplete: false, reason: "Verifikasi deterministik gagal.", verification: deterministic.checks, errorType: deterministic.errorType };
+    }
 
     // Jika eksekusi aksi gagal, validator langsung kembalikan RETRY tanpa meloloskan ke DONE
     if (lastResult !== "success") {
@@ -3004,15 +3002,6 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
 
     const isNavOrMenu = /(?:buka|klik|pilih|masuk|tampilkan|kunjungi|navigate|open|click)\s+(?:ke\s+)?(?:menu|sidebar|halaman|tab)?/i.test(sub?.description || activeTask?.goal || "");
     const isSingleStepGoal = (activeTask?.plan?.length || 0) <= 1;
-
-    // Fast-path deterministik: Jika aksi adalah klik menu atau navigasi dan sukses, selesaikan subtask langsung
-    if (isNavOrMenu && (safeActionType === "click" || safeActionType === "navigate")) {
-      return {
-        verdict: isSingleStepGoal ? "DONE" : "SUCCESS",
-        subtaskComplete: true,
-        reason: "Menu atau navigasi target berhasil diklik dan dibuka."
-      };
-    }
 
     const prompt = `
 [AKSI TERAKHIR]
@@ -3054,11 +3043,12 @@ Respon HANYA dalam format JSON valid:
       appendLog(`Validator error: ${err.message}`, "WARN");
     }
 
-    // Fallback: Jika aksi sukses, anggap subtask selesai jika tidak ada bukti kegagalan
+    // Fail closed: validator tidak boleh menganggap event sukses sebagai goal selesai tanpa bukti.
     return {
-      verdict: isSingleStepGoal ? "DONE" : "SUCCESS",
-      subtaskComplete: true,
-      reason: "Aksi sukses dijalankan."
+      verdict: "RETRY",
+      subtaskComplete: false,
+      reason: "Hasil verifikasi tidak meyakinkan.",
+      errorType: "VERIFICATION_FAILED"
     };
   }
 
@@ -3207,7 +3197,12 @@ Respon HANYA dalam format JSON valid:
       /^(?:tolong\s+|mohon\s+)?(?:cari|search|carikan|temukan)\s+.+\s+(?:di|pada|ke)\s+[a-zA-Z0-9.-]+/i.test(userPrompt)
     ) && !/(?:rangkum|ringkas|summarize|ringkasan|rangkuman|intisari|jelaskan|analisa|analisis|apa\s+isi|baca\s+tab)/i.test(userPrompt);
 
-    if (!isPhysicalAutomation) {
+    const typedIntent = globalThis.PesatAgentEngine?.classifyTask?.(userPrompt, contextSourcesToSend) || null;
+    const needsAgentLoop = isPhysicalAutomation ||
+      typedIntent?.mode === "research" || typedIntent?.mode === "hybrid" ||
+      /(?:knowledge(?:\s+base)?|dokumen tersimpan|cari sumber|riset multi[- ]?sumber|laporan enterprise|simpan (?:halaman|dokumen)|hapus (?:source|sumber|dokumen))/i.test(userPrompt);
+
+    if (!needsAgentLoop) {
       await runAnalysisFlow(userPrompt, contextSourcesToSend);
       return;
     }
@@ -3808,14 +3803,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
 
         showStatusIndicator("Menuliskan dokumen langsung ke Google Docs...");
         appendLog("📄 Menuliskan dokumen ke Google Docs...");
-        await sendToContentScript({
-          type: "EXECUTE_ACTION",
-          actionData: {
-            action: "paste_text",
-            value: aiReply,
-            replace: isReplaceDocIntent
-          }
-        }, 25000, 3);
+        const docsWrite = await executeAgentAction({ action: "paste_text", value: aiReply, replace: isReplaceDocIntent, message: "Menulis hasil analisis ke Google Docs" });
+        if (!docsWrite?.success) throw new Error(docsWrite?.error || "Penulisan Google Docs gagal atau tidak disetujui.");
 
         addMessageToCurrentSession("assistant", `### 📝 Dokumen Berhasil Dibuat & Dituliskan ke Google Docs\n\n${aiReply}`, {
           skipClean: true,
@@ -3860,10 +3849,12 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
             if (token) {
               appendLog("⚡ Memperbarui data tabel langsung via Google Sheets REST API v4...");
               showStatusIndicator("Memperbarui data di Google Sheets...");
-              const apiRes = await globalThis.PesatGWorkspaceMCPSkill.execute("gworkspace_update_sheet_data", {
+              const apiRes = await executeAgentAction({
+                action: "gworkspace_update_sheet_data",
                 spreadsheetId: sMatch[1],
                 rows: tableData,
-                replace: isReplaceIntent
+                replace: isReplaceIntent,
+                message: "Memperbarui data Google Sheets"
               });
               if (apiRes && apiRes.success) {
                 filledViaApi = true;
@@ -3879,15 +3870,13 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
           showStatusIndicator("Mengisikan data tabel langsung ke Google Sheets...");
           appendLog("📊 Mengisikan baris & kolom data langsung ke Google Sheets...");
 
-          const fillResult = await sendToContentScript({
-            type: "EXECUTE_ACTION",
-            actionData: {
-              action: "fill_spreadsheet_grid",
-              value: aiReply,
-              tableData: tableData,
-              replace: isReplaceIntent
-            }
-          }, 25000, 3);
+          const fillResult = await executeAgentAction({
+            action: "fill_spreadsheet_grid",
+            value: aiReply,
+            tableData,
+            replace: isReplaceIntent,
+            message: "Mengisi data ke spreadsheet eksternal"
+          });
 
           if (!fillResult.success) {
             appendLog(`⚠️ Peringatan pengisian sel: ${fillResult.error || "Gagal mengisi sel otomatis"}`, "WARN");
@@ -3901,13 +3890,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
       } else if (isDocsOrEditor && !isSocialThread && !isProductResearch && !isSpreadsheetTask && !isSummarize && (isArticle || /(?:tulis|buatkan|ketik|tempel|masukkan|isi|paragraf|artikel)/i.test(userPrompt))) {
         showStatusIndicator("Menuliskan teks langsung ke Google Dokumen / editor...");
         appendLog("📄 Menuliskan teks langsung ke Google Dokumen / Lembar kerja aktif...");
-        await sendToContentScript({
-          type: "EXECUTE_ACTION",
-          actionData: {
-            action: "paste_text",
-            value: aiReply
-          }
-        });
+        const editorWrite = await executeAgentAction({ action: "paste_text", value: aiReply, message: "Menulis teks ke editor eksternal" });
+        if (!editorWrite?.success) throw new Error(editorWrite?.error || "Penulisan editor gagal atau tidak disetujui.");
         addMessageToCurrentSession("assistant", `### 📝 Teks Berhasil Dibuat & Dituliskan ke Dokumen\n\n${aiReply}`, {
           skipClean: true,
           artifact
@@ -3915,13 +3899,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
       } else if (isSocialSite && isSocialThread && !isSummarize) {
         showStatusIndicator("Menempelkan thread ke postingan media sosial...");
         appendLog("📱 Menempelkan teks thread ke postingan media sosial aktif...");
-        await sendToContentScript({
-          type: "EXECUTE_ACTION",
-          actionData: {
-            action: "paste_text",
-            value: aiReply
-          }
-        });
+        const editorWrite = await executeAgentAction({ action: "paste_text", value: aiReply, message: "Menulis teks ke editor eksternal" });
+        if (!editorWrite?.success) throw new Error(editorWrite?.error || "Penulisan editor gagal atau tidak disetujui.");
         addMessageToCurrentSession("assistant", `### 📱 Thread Media Sosial Berhasil Dibuat\n\n${aiReply}`, {
           skipClean: true,
           artifact
@@ -4034,13 +4013,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         showStatusIndicator("Menyusun teks & menulis ke Google Docs...");
         const aiText = await callLLM("chat", `Tolong tuliskan konten/teks berikut secara lengkap, mendalam, dan rapi sesuai instruksi:\n\n[PERINTAH]\n${goal}\n\n[KONTEKS DOKUMEN]\nJudul: ${activeTabInfo.title || ""}\nURL: ${activeTabInfo.url || ""}`);
         if (aiText) {
-          await sendToContentScript({
-            type: "EXECUTE_ACTION",
-            actionData: {
-              action: "paste_text",
-              value: aiText
-            }
-          });
+          const writeResult = await executeAgentAction({ action: "paste_text", value: aiText, message: "Menulis konten ke dokumen eksternal" });
+          if (!writeResult?.success) throw new Error(writeResult?.error || "Penulisan dokumen tidak disetujui atau gagal.");
           const artifact = {
             artifactType: "doc",
             name: `Draf-${(goal || "Dokumen").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`,
@@ -4236,14 +4210,13 @@ ATURAN KETAT:
 			          const shouldSubmit = /(?:login|masuk|sign\s*in|submit|kirim)/i.test(goal);
 			          showStatusIndicator("Mengisi formulir login...");
 			          appendLog(`📝 Mengisi ${extractedFields.length} field formulir secara otomatis${shouldSubmit ? " dan menekan Sign In..." : "..."}`);
-			          const fillRes = await sendToContentScript({
-			            type: "EXECUTE_ACTION",
-			            actionData: {
-			              action: "autofill_form_batch",
-			              fields: extractedFields,
-			              submitAfter: shouldSubmit
-			            }
-			          });
+				          const fillRes = await executeAgentAction({
+				            action: "autofill_form_batch",
+				            fields: extractedFields,
+				            submitAfter: shouldSubmit,
+				            message: shouldSubmit ? "Mengisi kredensial dan mengirim formulir login" : "Mengisi formulir dengan kredensial"
+				          });
+
 
 			          if (fillRes && fillRes.success && fillRes.filledCount > 0) {
 			            const summaryStr = extractedFields.map(f => `${f.identifier}: ${f.value.includes("@") ? f.value : "••••••••"}`).join(", ");
@@ -4337,12 +4310,37 @@ ATURAN KETAT:
         }
       }
 
-      // ══ FASE EKSEKUSI UNIFIED DIRECT (Opsi A) ══
-      // ponytail: single-step direct execution removes extra network latency, dynamic replan handles failures
-      const plan = [{ id: 1, description: goal.substring(0, 200), status: "pending" }];
-      activeTask.plan = plan;
+      // Initial planner hanya untuk tugas kompleks; direct task tetap tanpa round-trip tambahan.
+      const usePlanner = globalThis.PesatAgentEngine?.shouldUsePlanner?.(goal, contextSources) === true;
+      if (usePlanner) {
+        showStatusIndicator("Menganalisis...");
+        const availableTools = globalThis.PesatSkillRegistry?.getAllTools?.() || [];
+        const plannerReply = await callLLM("plan", `Susun rencana eksekusi tervalidasi untuk tujuan berikut:\n${goal}\n\nTool tersedia: ${availableTools.map(t => t.function?.name).filter(Boolean).join(", ")}`);
+        const plannerData = globalThis.PesatAgentEngine.parseStrictJSON(String(plannerReply), "rencana");
+        const validated = globalThis.PesatAgentEngine.validatePlan(plannerData, {
+          availableTools,
+          maxSteps: CFG.MAX_PLAN_STEPS || 10,
+          taskRisk: activeTask.risk || "high"
+        });
+        if (!validated.valid) throw Object.assign(new Error(`Rencana ditolak: ${validated.errors.join("; ")}`), { code: "INVALID_INPUT" });
+        activeTask.plan = validated.plan;
+        if (currentAgentMode === "planning") {
+          const approval = await requestAskUser("Rencana tindakan siap dijalankan. Lanjutkan?", ["Lanjutkan", "Batalkan"]);
+          if (!approval || approval === "Batalkan") {
+            await finalizeTask("cancelled", "Tugas dibatalkan sebelum eksekusi.");
+            return;
+          }
+        }
+      } else {
+        // ponytail: satu langkah menjaga latency task sederhana; planner dipakai saat classifier mendeteksi kompleksitas.
+        activeTask.plan = [{
+          id: "step-1", objective: goal.substring(0, 500), description: goal.substring(0, 500),
+          kind: "act", dependencies: [], tool: null, inputs: {}, successCriteria: [],
+          sideEffect: "none", risk: activeTask.risk || "low", maxAttempts: 2, status: "pending"
+        }];
+      }
       activeTask.status = "EXECUTING";
-      activeTask.currentSubtask = 1;
+      activeTask.currentSubtask = activeTask.plan[0]?.id || null;
 
       await persistTask();
       await executeTaskLoop();
@@ -4397,6 +4395,8 @@ ATURAN KETAT:
       const fullScan = stepNum === 1 || lastNavigationWasRecent;
       lastNavigationWasRecent = false;
       const pageData = await scanPage(fullScan);
+      activeTask.currentUrl = pageData?.url || activeTask.currentUrl || "";
+      activeTask.currentPage = { url: pageData?.url || "", title: pageData?.title || "", elementsCount: pageData?.elementsCount || 0 };
       const tabsCtx = await getTabsContext();
 
       if (shouldStopAgent) break;
@@ -4484,18 +4484,28 @@ ${sub.description}
 
       // 1. Cek Native Tool Calls (OpenAI standard format)
       if (reply && reply.tool_calls && Array.isArray(reply.tool_calls) && reply.tool_calls.length > 0) {
+        if (reply.tool_calls.length !== 1) {
+          throw Object.assign(new Error(`Respons berisi ${reply.tool_calls.length} tool calls; hanya satu tool call per browser step diizinkan.`), { code: "INVALID_INPUT" });
+        }
         const tc = reply.tool_calls[0];
         const fnName = tc.function?.name;
-        let fnArgs = {};
+        let fnArgs;
         try {
-          fnArgs = typeof tc.function?.arguments === "string" ? JSON.parse(tc.function.arguments) : (tc.function?.arguments || {});
-        } catch (e) {
-          fnArgs = {};
+          fnArgs = typeof tc.function?.arguments === "string"
+            ? globalThis.PesatAgentEngine.parseStrictJSON(tc.function.arguments, `argumen ${fnName}`)
+            : (tc.function?.arguments || {});
+        } catch (error) {
+          throw Object.assign(new Error(`Tool call ditolak: ${error.message}`), { code: "PARSE_ERROR" });
+        }
+        const validation = globalThis.PesatSkillRegistry?.validateToolCall?.(fnName, fnArgs);
+        if (!validation?.valid) {
+          throw Object.assign(new Error(`Tool call '${fnName}' tidak valid: ${(validation?.errors || []).join("; ")}`), { code: "INVALID_INPUT" });
         }
 
         resObj = {
           action: fnName,
-          ...fnArgs
+          _toolName: fnName,
+          ...validation.value
         };
 
         if (fnName === "navigate_to") {
@@ -4528,6 +4538,10 @@ ${sub.description}
         }
       } else {
         resObj = parseActionJSON(reply);
+        const looksStructured = /^\s*(?:```json\b|[\[{])/i.test(String(reply || ""));
+        if (looksStructured && !resObj) {
+          throw Object.assign(new Error("Respons aksi terstruktur tidak valid."), { code: "PARSE_ERROR" });
+        }
         if (!resObj || (!resObj.action && !resObj.actions && !resObj.message && !resObj.question)) {
           resObj = tryParseNaturalLanguageActions(reply, activeTask.goal);
         }
@@ -4545,13 +4559,13 @@ ${sub.description}
             activeTask.maxReActSteps += 8;
             appendLog(`User mengizinkan penambahan langkah (Batas baru: ${activeTask.maxReActSteps} langkah). Melanjutkan...`);
           } else {
-            appendLog("Pengguna memilih menyelesaikan tugas pada batas langkah tercapai.", "INFO");
-            await finalizeTask("done", "✅ Tugas telah diproses hingga batas langkah yang disetujui pengguna.");
+            appendLog("Pengguna menghentikan tugas pada batas langkah.", "INFO");
+            await finalizeTask("cancelled", "Tugas dihentikan sebelum hasil dapat diverifikasi.");
             return;
           }
         } else {
-          appendLog("⚠️ Mencapai batas maksimum ReAct Loop keseluruhan. Mengakhiri tugas secara aman.", "WARN");
-          await finalizeTask("done", "✅ Tugas telah diproses hingga batas maksimum yang aman.");
+          appendLog("Mencapai batas maksimum eksekusi tanpa bukti penyelesaian.", "WARN");
+          await finalizeTask("failed", "Tugas belum selesai karena batas maksimum eksekusi tercapai.");
           return;
         }
       }
@@ -4580,10 +4594,8 @@ ${sub.description}
           const typeSig = `${resObj.elementId || resObj.targetText || ""}::${String(resObj.text || resObj.value || "").length}`;
           if (!activeTask._filledTextboxSigs) activeTask._filledTextboxSigs = new Set();
           if (activeTask._filledTextboxSigs.has(typeSig)) {
-            appendLog(`✍️ Elemen textbox sudah pernah diisi dengan teks yang sama (Anti-Loop). Melanjutkan ke subtask berikutnya.`, "INFO");
-            markSubtask(sub.id, "done");
-            refreshTaskCard();
-            await persistTask();
+            appendLog("Input yang sama terdeteksi berulang. Mencoba strategi lain.", "WARN");
+            await tryReplanOrFail(sub, "Input identik terdeteksi berulang tanpa bukti hasil.");
             continue;
           }
           activeTask._filledTextboxSigs.add(typeSig);
@@ -4622,11 +4634,10 @@ ${sub.description}
         }
 
         if (activeTask.repeatActionCount >= 3) {
-          appendLog(`⚠️ Deteksi aksi berulang "${resObj.action}" 3x (Anti-Loop Circuit Breaker). Mencoba beralih ke subtask berikutnya...`, "WARN");
-          markSubtask(sub.id, "done");
-          refreshTaskCard();
+          appendLog(`Aksi "${resObj.action}" terdeteksi berulang tanpa bukti hasil. Mencoba strategi lain.`, "WARN");
           activeTask.repeatActionCount = 0;
           activeTask.lastActionSig = null;
+          await tryReplanOrFail(sub, `Aksi ${resObj.action} berulang tiga kali tanpa bukti hasil.`);
           continue;
         }
       }
@@ -4736,30 +4747,7 @@ ${sub.description}
         return;
       }
 
-      // 3. Konfirmasi aksi berisiko (Phase 7.1)
-      if (isRiskyAction(resObj) && !activeTask.confirmAllGranted) {
-        const verdict = await requestConfirmation(resObj);
-        if (shouldStopAgent || !verdict || verdict.cancelled) {
-          await finalizeTask("cancelled", "⛔ Task dibatalkan: aksi berisiko tidak disetujui.");
-          return;
-        }
-        if (!verdict.approved) {
-          // Ditolak → catat & minta Navigator pilih aksi lain
-          activeTask.scratchpad.push({
-            step: stepNum, subtask: sub.id,
-            observation: `Pengguna MENOLAK aksi ${resObj.action || "batch"}: ${resObj.message || ""}`,
-            action: "user_denied", result: "failed"
-          });
-          persistTask();
-          continue;
-        }
-        if (verdict.allowAll) {
-          activeTask.confirmAllGranted = true;
-        }
-        if (activeTask.status === "WAITING_USER") {
-          activeTask.status = "EXECUTING";
-        }
-      }
+      // Approval enforcement berada di dispatcher agar fast path dan loop memakai policy yang sama.
 
       // 4. Ask_user → pause
       if (resObj.action === "ask_user" || resObj.question) {
@@ -4777,19 +4765,41 @@ ${sub.description}
         continue;
       }
 
-      // 5. Eksekusi aksi
-      showStatusIndicator();
+      // 5. Eksekusi aksi + structured receipt
+      showStatusIndicator("Menjalankan tindakan...");
       const currentActionType = resObj?.action || resObj?.type || (Array.isArray(resObj?.actions) ? "batch" : "unknown");
       appendLog(`▶ [Step ${stepNum}] ${(Array.isArray(resObj.actions) ? `batch(${resObj.actions.length})` : currentActionType)} ${resObj.elementId ? `[${resObj.elementId}]` : ""} ${resObj.url ? resObj.url : ""}`);
+      const receiptStartedAt = new Date().toISOString();
+      const receiptTool = resObj._toolName || currentActionType;
+      const receiptParams = { ...resObj };
+      delete receiptParams.action;
+      delete receiptParams._toolName;
+      delete receiptParams.planner;
+      const receiptInput = globalThis.PesatSkillRegistry?.redactToolInput?.(receiptTool, receiptParams)
+        || globalThis.PesatAgentEngine?.redact?.(receiptParams)
+        || receiptParams;
 
       let exec;
       try {
         exec = await executeAgentAction(resObj);
       } catch (err) {
-        exec = { success: false, actionType: currentActionType, message: err.message };
+        exec = { success: false, actionType: currentActionType, message: err.message, errorType: err.code || "EXECUTION_FAILED" };
       }
 
       const execActionType = exec?.actionType || currentActionType;
+      const receipt = globalThis.PesatAgentEngine?.createActionReceipt?.({
+        stepId: sub.id,
+        tool: receiptTool || execActionType,
+        validatedInput: receiptInput,
+        startedAt: receiptStartedAt,
+        success: exec.success === true,
+        errorType: exec.success ? null : (exec.errorType || "EXECUTION_FAILED"),
+        observationRef: exec.observationRef || null,
+        beforeState: { url: pageData.url, title: pageData.title, elementsCount: pageData.elementsCount },
+        afterState: null,
+        verification: []
+      });
+      if (receipt) activeTask.receipts.push(receipt);
 
       // 6. Catat scratchpad
       activeTask.scratchpad.push({
@@ -4840,18 +4850,8 @@ ${sub.description}
         lastNavigationWasRecent = true;
       }
 
-      // 8. Finish langsung
-      if (exec.isFinished) {
-        // Aksi end-to-end khusus seperti post_social atau send_email langsung menyelesaikan seluruh alur tugas
-        const isEndToEndAction = ["post_social", "post_twitter", "post_x", "send_email", "compose_email"].includes(execActionType);
-        if (isEndToEndAction) {
-          (activeTask.plan || []).forEach(p => { p.status = "done"; });
-          refreshTaskCard();
-          await persistTask();
-          await finalizeTask("done", exec.message);
-          return;
-        }
-
+      // 8. Finish langsung hanya untuk finish_task; aksi mutasi tetap harus diverifikasi.
+      if (exec.isFinished && execActionType === "finish") {
         // Cegah finish prematur untuk tugas umum jika masih banyak subtask yang belum dijalankan
         const pendingSubs = (activeTask.plan || []).filter(s => s.id !== sub.id && s.status === "pending");
         const isTrivialPending = pendingSubs.every(s => /tunggu|verifikasi|konfirmasi|selesai|cek/i.test(s.description || ""));
@@ -4907,10 +4907,17 @@ ${sub.description}
       }
 
       // 10. VALIDATE
-      showStatusIndicator();
+      showStatusIndicator("Memverifikasi...");
       setAgentRunning(true);
       const after = await scanPage(false);
-      const verdict = await runValidator(exec, exec.success ? "success" : "failed", after);
+      const verdict = await runValidator({ ...resObj, ...exec }, exec.success ? "success" : "failed", after, pageData);
+      if (receipt) {
+        receipt.afterState = { url: after.url, title: after.title, elementsCount: after.elementsCount };
+        receipt.verification = verdict.verification || [];
+        receipt.success = exec.success === true && verdict.verdict !== "RETRY" && verdict.verdict !== "REPLAN";
+        receipt.errorType = receipt.success ? null : (verdict.errorType || receipt.errorType || "VERIFICATION_FAILED");
+      }
+      await persistTask();
 
       // Update kartu validator pada pesan terakhir
       const session = getCurrentSession();
@@ -4932,8 +4939,7 @@ ${sub.description}
       const isSubDone = exec.success && (
         verdict.subtaskComplete ||
         verdict.verdict === "DONE" ||
-        verdict.verdict === "SUCCESS" ||
-        (isNavOrMenuIntent && (execActionType === "click" || execActionType === "navigate"))
+        verdict.verdict === "SUCCESS"
       );
 
       if (isSubDone) {
@@ -5035,14 +5041,15 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       const parsed = parseActionJSON(reply);
       if (parsed && Array.isArray(parsed.plan) && parsed.plan.length > 0) {
         const doneItems = activeTask.plan.filter(s => s.status === "done");
-        const newItems = parsed.plan
-          .map((s, i) => ({
-            id: s.id || (100 + i),
-            description: String(s.description || s).substring(0, 200),
-            status: "pending"
-          }))
-          .slice(0, 7);
-        activeTask.plan = [...doneItems, ...newItems].slice(0, 10);
+        const availableTools = globalThis.PesatSkillRegistry?.getAllTools?.() || [];
+        const validated = globalThis.PesatAgentEngine?.validatePlan?.(parsed, {
+          availableTools,
+          maxSteps: Math.max(1, Math.min(7, (CFG.MAX_PLAN_STEPS || 10) - doneItems.length)),
+          taskRisk: activeTask.risk || "high"
+        });
+        if (!validated?.valid) throw Object.assign(new Error(`Rencana alternatif ditolak: ${(validated?.errors || []).join("; ")}`), { code: "INVALID_INPUT" });
+        const newItems = validated.plan;
+        activeTask.plan = [...doneItems, ...newItems].slice(0, CFG.MAX_PLAN_STEPS || 10);
         activeTask.retries = {};
         refreshTaskCard();
         await persistTask();

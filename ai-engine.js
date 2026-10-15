@@ -3,103 +3,25 @@
   const DEFAULT_CF_WORKER = "https://pesat-ai-chrome-agent.senna-947.workers.dev";
   const DEFAULT_PESATROUTER = "https://api.pesatrouter.com/v1";
 
-  // Skema 6 Native Tools Resmi OpenAI
-  const AGENTIC_TOOLS = [
-    {
-      type: "function",
-      function: {
-        name: "navigate_to",
-        description: "Berpindah atau membuka URL baru pada tab peramban aktif",
-        parameters: {
-          type: "object",
-          properties: {
-            url: { type: "string", description: "URL lengkap target (contoh: 'https://mail.google.com' atau 'https://google.com')" }
-          },
-          required: ["url"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: "click_element",
-        description: "Mengklik tombol atau elemen interaktif pada halaman web menggunakan hybrid selector (ID semantik [@e1], teks tombol, atau selector)",
-        parameters: {
-          type: "object",
-          properties: {
-            elementId: { type: "string", description: "ID semantik elemen seperti '@e1', '@e12' (disarankan)" },
-            targetText: { type: "string", description: "Teks pada tombol (contoh: 'Tulis', 'Compose', 'Kirim', 'Submit')" },
-            selector: { type: "string", description: "CSS selector alternatif (opsional)" }
-          }
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: "type_text",
-        description: "Mengisikan teks ke dalam elemen input, textarea, form pencarian, atau editor web",
-        parameters: {
-          type: "object",
-          properties: {
-            elementId: { type: "string", description: "ID semantik elemen seperti '@e2', '@e5'" },
-            targetText: { type: "string", description: "Label atau placeholder kolom input (contoh: 'Kepada', 'Subjek', 'Search')" },
-            text: { type: "string", description: "Teks yang akan diisikan" },
-            pressEnter: { type: "boolean", description: "Set true jika perlu menekan tombol Enter setelah mengetik (misal kolom pencarian / tag email)" }
-          },
-          required: ["text"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: "press_key",
-        description: "Menekan tombol keyboard khusus seperti Enter, Tab, Escape, atau panah",
-        parameters: {
-          type: "object",
-          properties: {
-            key: { type: "string", description: "Nama tombol (contoh: 'Enter', 'Tab', 'Escape')" },
-            elementId: { type: "string", description: "ID elemen target fokus (opsional)" }
-          },
-          required: ["key"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: "ask_user",
-        description: "Meminta konfirmasi atau klarifikasi kepada pengguna jika instruksi ambigu atau akan melakukan aksi penting/sensitif (misal: tombol 'Kirim Email', 'Delete', 'Checkout')",
-        parameters: {
-          type: "object",
-          properties: {
-            question: { type: "string", description: "Pertanyaan atau konfirmasi untuk pengguna" },
-            options: {
-              type: "array",
-              items: { type: "string" },
-              description: "Pilihan jawaban cepat untuk pengguna (contoh: ['Ya, Kirim Sekarang', 'Batal'])"
-            }
-          },
-          required: ["question"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: "finish_task",
-        description: "Menandai bahwa seluruh instruksi/tugas pengguna telah selesai dikerjakan secara tuntas di halaman web",
-        parameters: {
-          type: "object",
-          properties: {
-            message: { type: "string", description: "Laporan atau ringkasan hasil kerja untuk pengguna" }
-          },
-          required: ["message"]
-        }
-      }
-    }
-  ];
+  function resolveChatEndpoint(value) {
+    const baseUrl = String(value || "").trim() || DEFAULT_PESATROUTER;
+    let parsed;
+    try { parsed = new URL(baseUrl); } catch (_) { throw new Error("Base URL API tidak valid."); }
+    if (parsed.protocol !== "https:") throw new Error("Base URL API wajib menggunakan HTTPS agar API key tidak bocor.");
+    return baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+  }
+
+  const canonicalBackendUrl = () => String(globalThis.PESAT_CONFIG?.CANONICAL_BACKEND_URL || DEFAULT_CF_WORKER).replace(/\/+$/, "");
+
+  async function getBackendSessionToken() {
+    if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) throw new Error("Backend session tidak tersedia.");
+    const response = await chrome.runtime.sendMessage({ action: "BACKEND_SESSION", backendBaseUrl: canonicalBackendUrl() });
+    if (!response?.success || !response.token) throw new Error(response?.error || "Hubungkan akun Google untuk memakai backend Pesat.");
+    return response.token;
+  }
+
+  // Tool contract canonical berada di PesatSkillRegistry; engine hanya mengirim schema OpenAI-compatible.
+  const getAgenticTools = () => globalThis.PesatSkillRegistry?.getAllTools?.() || [];
 
   const SYSTEM_AGENTIC_PROMPT = `Kamu adalah Pesat AI Autonomous Crew Agent - Asisten peramban cerdas, teliti, dan mandiri untuk membantu produktivitas tim dan mempermudah pekerjaan manusia di browser.
 
@@ -173,8 +95,7 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
 
   const PesatAIEngine = {
     getTools() {
-      const skillTools = globalThis.PesatSkillRegistry?.getAllTools?.() || [];
-      return [...AGENTIC_TOOLS, ...skillTools];
+      return getAgenticTools();
     },
 
     async testConnection(cfg = {}) {
@@ -183,8 +104,7 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
 
       try {
         if (apiKey) {
-          const baseUrl = (cfg.apiBaseUrl || "").trim() || DEFAULT_PESATROUTER;
-          const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+          const endpoint = resolveChatEndpoint(cfg.apiBaseUrl);
           
           const res = await fetch(endpoint, {
             method: "POST",
@@ -211,14 +131,11 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
             message: "Koneksi PesatRouter aktif & terverifikasi"
           };
         } else {
-          const res = await fetch(`${DEFAULT_CF_WORKER}/api/chat`, {
+          const backendToken = await getBackendSessionToken();
+          const res = await fetch(`${canonicalBackendUrl()}/api/chat`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              prompt: "ping",
-              phase: "plan",
-              model: "pesat-flash"
-            })
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${backendToken}` },
+            body: JSON.stringify({ prompt: "ping", phase: "plan" })
           });
 
           if (!res.ok && res.status !== 200) {
@@ -268,13 +185,25 @@ Format respon HANYA berupa JSON valid:
   "reason": "Penjelasan singkat status hasil aksi"
 } `;
       } else if (phase === "plan") {
-        basePrompt = `Kamu adalah Planner AI - Perencana langkah kerja otomasi peramban web yang ringkas dan efisien.
-Format respon HANYA berupa JSON valid:
+        basePrompt = `Kamu adalah Planner AI. Kembalikan keputusan terstruktur tanpa chain-of-thought atau reasoning mentah.
+Format respon HANYA JSON valid tanpa teks tambahan:
 {
   "plan": [
-    { "id": 1, "description": "Langkah kerja yang jelas" }
+    {
+      "id": "step-1",
+      "objective": "Tujuan hasil langkah",
+      "kind": "retrieve|observe|analyze|act|verify|compose",
+      "dependencies": [],
+      "tool": null,
+      "inputs": {},
+      "successCriteria": [{ "type": "result_field_equals", "field": "success", "value": true }],
+      "sideEffect": "none|local|external",
+      "risk": "low|medium|high",
+      "maxAttempts": 2
+    }
   ]
-}`;
+}
+Gunakan hanya tool yang tersedia. Maksimal 10 langkah. Langkah act wajib memiliki tool dan successCriteria.`;
       }
 
       const isAgenticAct = phase === "act" || (!phase && !isSummarize && phase !== "chat" && phase !== "validate" && phase !== "plan");
@@ -307,14 +236,10 @@ Format respon HANYA berupa JSON valid:
       }
 
       const maxTokens = Number(config.maxTokens || config.max_tokens) || 4096;
-      const combinedTools = [
-        ...AGENTIC_TOOLS,
-        ...(globalThis.PesatSkillRegistry?.getAllTools?.() || [])
-      ];
+      const combinedTools = getAgenticTools();
 
       if (apiKey) {
-        const baseUrl = (config.apiBaseUrl || "").trim() || DEFAULT_PESATROUTER;
-        const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+        const endpoint = resolveChatEndpoint(config.apiBaseUrl);
 
         const requestBody = {
           model: model,
@@ -400,55 +325,20 @@ Format respon HANYA berupa JSON valid:
         };
       } else {
         // Fallback Cloudflare Worker
-        const workerEndpoint = `${DEFAULT_CF_WORKER}/api/chat`;
-
-        if (typeof onChunk === "function" && (phase === "chat" || isSummarize) && typeof globalThis.fetchStreamSSE === "function") {
-          const streamRes = await globalThis.fetchStreamSSE(
-            workerEndpoint,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                messages: payloadMessages,
-                prompt: promptText,
-                phase: phase,
-                model: model,
-                max_tokens: maxTokens,
-                domTree: domTree,
-                isSummarize: isSummarize,
-                stream: true
-              }),
-              signal: signal
-            },
-            onChunk
-          );
-          const finalReply = streamRes.reply || "";
-          const usage = {
-            prompt_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length) / 4),
-            completion_tokens: Math.ceil(finalReply.length / 4),
-            total_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length + finalReply.length) / 4)
-          };
-          return {
-            success: true,
-            reply: finalReply,
-            message: { role: "assistant", content: finalReply },
-            tool_calls: null,
-            usage
-          };
-        }
+        const workerEndpoint = `${canonicalBackendUrl()}/api/chat`;
+        const backendToken = await getBackendSessionToken();
 
         const safeFetch = typeof globalThis.apiFetchWithRetry === "function" ? globalThis.apiFetchWithRetry : fetch;
         const res = await safeFetch(workerEndpoint, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${backendToken}` },
           body: JSON.stringify({
-            messages: payloadMessages,
-            prompt: promptText,
+            messages: payloadMessages.filter(message => message.role !== "system"),
             phase: phase,
-            model: model,
             max_tokens: maxTokens,
             domTree: domTree,
-            isSummarize: isSummarize
+            isSummarize: isSummarize,
+            ...(useTools && isAgenticAct ? { tools: combinedTools } : {})
           }),
           signal: signal
         });

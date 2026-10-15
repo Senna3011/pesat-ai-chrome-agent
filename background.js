@@ -580,6 +580,49 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === "BACKEND_SESSION") {
+    (async () => {
+      try {
+        const storageArea = (chrome.storage && chrome.storage.session) ? chrome.storage.session : chrome.storage.local;
+        const cached = await storageArea.get(["pesatBackendToken", "pesatBackendTokenExpiresAt", "googleAuthToken"]);
+        const expiresAt = Date.parse(cached.pesatBackendTokenExpiresAt || "");
+        if (cached.pesatBackendToken && Number.isFinite(expiresAt) && expiresAt > Date.now() + 60_000) {
+          sendResponse({ success: true, token: cached.pesatBackendToken, expiresAt: cached.pesatBackendTokenExpiresAt });
+          return;
+        }
+        let googleToken = cached.googleAuthToken;
+        if (!googleToken) {
+          const local = await chrome.storage.local.get(["googleAuthToken"]);
+          googleToken = local.googleAuthToken;
+        }
+        if (!googleToken) {
+          sendResponse({ success: false, errorType: "AUTH_REQUIRED", error: "Hubungkan akun Google untuk memakai knowledge base." });
+          return;
+        }
+        const base = String(request.backendBaseUrl || "").replace(/\/+$/, "");
+        if (!base.startsWith("https://")) {
+          sendResponse({ success: false, errorType: "INVALID_INPUT", error: "Canonical backend HTTPS belum dikonfigurasi." });
+          return;
+        }
+        const response = await fetch(`${base}/api/auth/google`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: googleToken })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.token) {
+          sendResponse({ success: false, errorType: response.status === 401 ? "AUTH_REQUIRED" : "NETWORK_ERROR", error: data.message || data.error || `Backend auth HTTP ${response.status}` });
+          return;
+        }
+        await storageArea.set({ pesatBackendToken: data.token, pesatBackendTokenExpiresAt: data.expiresAt });
+        sendResponse({ success: true, token: data.token, expiresAt: data.expiresAt });
+      } catch (err) {
+        sendResponse({ success: false, errorType: "NETWORK_ERROR", error: err.message });
+      }
+    })();
+    return true;
+  }
+
   if (request.action === "GOOGLE_STATUS") {
     const storageArea = (chrome.storage && chrome.storage.session) ? chrome.storage.session : chrome.storage.local;
     storageArea.get(["googleAuthToken", "googleUserEmail"], (res) => {
@@ -615,36 +658,58 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           "https://www.googleapis.com/auth/documents",
           "https://www.googleapis.com/auth/userinfo.email"
         ].join(" ");
+        const randomBase64Url = (size = 32) => {
+          const bytes = crypto.getRandomValues(new Uint8Array(size));
+          let binary = "";
+          bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+          return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        };
+        const verifier = randomBase64Url(48);
+        const state = randomBase64Url(24);
+        const challengeBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+        let challengeBinary = "";
+        new Uint8Array(challengeBytes).forEach(byte => { challengeBinary += String.fromCharCode(byte); });
+        const challenge = btoa(challengeBinary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+        authUrl.search = new URLSearchParams({
+          client_id: clientId,
+          response_type: "code",
+          redirect_uri: redirectUri,
+          scope: scopes,
+          prompt: "consent",
+          state,
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }).toString();
 
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&prompt=consent`;
-
-        chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, async (responseUrl) => {
+        chrome.identity.launchWebAuthFlow({ url: authUrl.toString(), interactive: true }, async (responseUrl) => {
           if (chrome.runtime.lastError || !responseUrl) {
             sendResponse({ success: false, error: chrome.runtime.lastError?.message || "Autentikasi Google dibatalkan." });
             return;
           }
           try {
             const urlObj = new URL(responseUrl);
-            const params = new URLSearchParams(urlObj.hash.substring(1));
-            const token = params.get("access_token");
-            if (token) {
-              const storageArea = (chrome.storage && chrome.storage.session) ? chrome.storage.session : chrome.storage.local;
-              await storageArea.set({ googleAuthToken: token });
-              // Ambil info email user
-              try {
-                const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-                  headers: { Authorization: `Bearer ${token}` }
-                });
-                if (userRes.ok) {
-                  const userData = await userRes.json();
-                  if (userData.email) await storageArea.set({ googleUserEmail: userData.email });
-                }
-              } catch (_) {}
-
-              sendResponse({ success: true, message: "Berhasil terhubung ke Google Workspace!" });
-            } else {
-              sendResponse({ success: false, error: "Gagal mendapatkan access token dari Google." });
-            }
+            if (urlObj.searchParams.get("state") !== state) throw new Error("OAuth state tidak valid.");
+            const code = urlObj.searchParams.get("code");
+            if (!code) throw new Error(urlObj.searchParams.get("error_description") || "Authorization code Google tidak tersedia.");
+            const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({ client_id: clientId, code, code_verifier: verifier, redirect_uri: redirectUri, grant_type: "authorization_code" })
+            });
+            const tokenData = await tokenRes.json().catch(() => ({}));
+            const token = tokenData.access_token;
+            if (!tokenRes.ok || !token) throw new Error(tokenData.error_description || tokenData.error || "Gagal menukar authorization code Google.");
+            const storageArea = (chrome.storage && chrome.storage.session) ? chrome.storage.session : chrome.storage.local;
+            await storageArea.set({ googleAuthToken: token });
+            try {
+              const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", { headers: { Authorization: `Bearer ${token}` } });
+              if (userRes.ok) {
+                const userData = await userRes.json();
+                if (userData.email) await storageArea.set({ googleUserEmail: userData.email });
+              }
+            } catch (_) {}
+            sendResponse({ success: true, message: "Berhasil terhubung ke Google Workspace!" });
           } catch (e) {
             sendResponse({ success: false, error: e.message });
           }
@@ -658,9 +723,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === "GOOGLE_DISCONNECT") {
     if (chrome.storage && chrome.storage.session) {
-      chrome.storage.session.remove(["googleAuthToken", "googleUserEmail"], () => {});
+      chrome.storage.session.remove(["googleAuthToken", "googleUserEmail", "pesatBackendToken", "pesatBackendTokenExpiresAt"], () => {});
     }
-    chrome.storage.local.remove(["googleAuthToken", "googleUserEmail"], () => {
+    chrome.storage.local.remove(["googleAuthToken", "googleUserEmail", "pesatBackendToken", "pesatBackendTokenExpiresAt"], () => {
       sendResponse({ success: true });
     });
     return true;
