@@ -735,6 +735,426 @@ document.addEventListener("DOMContentLoaded", async () => {
 </html>`;
   }
 
+  function crc32(buf) {
+    let crc = -1;
+    const table = new Int32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      table[i] = c;
+    }
+    for (let i = 0; i < buf.length; i++) {
+      crc = (crc >>> 8) ^ table[(crc ^ buf[i]) & 0xff];
+    }
+    return (crc ^ -1) >>> 0;
+  }
+
+  function createZipBuffer(files) {
+    const fileEntries = [];
+    let offset = 0;
+    const chunks = [];
+
+    for (const { name, data } of files) {
+      const nameBytes = new TextEncoder().encode(name);
+      const dataBytes = data instanceof Uint8Array ? data : new TextEncoder().encode(String(data || ""));
+      const crc = crc32(dataBytes);
+      const size = dataBytes.length;
+
+      const header = new Uint8Array(30 + nameBytes.length);
+      const view = new DataView(header.buffer);
+      view.setUint32(0, 0x04034b50, true);
+      view.setUint16(4, 10, true);
+      view.setUint16(6, 0, true);
+      view.setUint16(8, 0, true);
+      view.setUint16(10, 0, true);
+      view.setUint16(12, 0, true);
+      view.setUint32(14, crc, true);
+      view.setUint32(18, size, true);
+      view.setUint32(22, size, true);
+      view.setUint16(26, nameBytes.length, true);
+      view.setUint16(28, 0, true);
+      header.set(nameBytes, 30);
+
+      fileEntries.push({ nameBytes, crc, size, offset });
+      offset += header.length + size;
+      chunks.push(header, dataBytes);
+    }
+
+    const cdStart = offset;
+    for (const { nameBytes, crc, size, offset: localOffset } of fileEntries) {
+      const cd = new Uint8Array(46 + nameBytes.length);
+      const view = new DataView(cd.buffer);
+      view.setUint32(0, 0x02014b50, true);
+      view.setUint16(4, 20, true);
+      view.setUint16(6, 10, true);
+      view.setUint16(8, 0, true);
+      view.setUint16(10, 0, true);
+      view.setUint16(12, 0, true);
+      view.setUint16(14, 0, true);
+      view.setUint32(16, crc, true);
+      view.setUint32(20, size, true);
+      view.setUint32(24, size, true);
+      view.setUint16(28, nameBytes.length, true);
+      view.setUint16(30, 0, true);
+      view.setUint16(32, 0, true);
+      view.setUint16(34, 0, true);
+      view.setUint16(36, 0, true);
+      view.setUint32(38, 0, true);
+      view.setUint32(42, localOffset, true);
+      cd.set(nameBytes, 46);
+
+      chunks.push(cd);
+      offset += cd.length;
+    }
+
+    const cdSize = offset - cdStart;
+    const eocd = new Uint8Array(22);
+    const view = new DataView(eocd.buffer);
+    view.setUint32(0, 0x06054b50, true);
+    view.setUint16(4, 0, true);
+    view.setUint16(6, 0, true);
+    view.setUint16(8, fileEntries.length, true);
+    view.setUint16(10, fileEntries.length, true);
+    view.setUint32(12, cdSize, true);
+    view.setUint32(16, cdStart, true);
+    view.setUint16(20, 0, true);
+    chunks.push(eocd);
+
+    const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
+    const out = new Uint8Array(totalLength);
+    let pos = 0;
+    for (const c of chunks) {
+      out.set(c, pos);
+      pos += c.length;
+    }
+    return out;
+  }
+
+  function escapeXml(unsafe) {
+    return String(unsafe || "").replace(/[<>&"\x27]/g, (c) => {
+      switch (c) {
+        case "<": return "&lt;";
+        case ">": return "&gt;";
+        case "&": return "&amp;";
+        case '"': return "&quot;";
+        case "'": return "&apos;";
+        default: return c;
+      }
+    });
+  }
+
+  function parseInlineDocxFormatting(text, opts = {}) {
+    const parts = String(text || "").split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
+    let xml = "";
+
+    for (const part of parts) {
+      if (!part) continue;
+      if (part.startsWith("**") && part.endsWith("**") && part.length >= 4) {
+        const boldText = part.slice(2, -2);
+        xml += `<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:color w:val="0F172A"/><w:sz w:val="23"/></w:rPr><w:t xml:space="preserve">${escapeXml(boldText)}</w:t></w:r>`;
+      } else if (part.startsWith("*") && part.endsWith("*") && part.length >= 2) {
+        const itText = part.slice(1, -1);
+        xml += `<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:i/><w:color w:val="${opts.color || "334155"}"/><w:sz w:val="23"/></w:rPr><w:t xml:space="preserve">${escapeXml(itText)}</w:t></w:r>`;
+      } else if (part.startsWith("`") && part.endsWith("`") && part.length >= 2) {
+        const codeText = part.slice(1, -1);
+        xml += `<w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/><w:color w:val="B45309"/><w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(codeText)}</w:t></w:r>`;
+      } else {
+        xml += `<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>${opts.italic ? "<w:i/>" : ""}<w:color w:val="${opts.color || "1E293B"}"/><w:sz w:val="23"/></w:rPr><w:t xml:space="preserve">${escapeXml(part)}</w:t></w:r>`;
+      }
+    }
+    return xml;
+  }
+
+  function generateWordDocx(markdownContent, title = "Dokumen Pesat AI") {
+    const rawLines = String(markdownContent || "").split(/\r?\n/);
+    let bodyXml = "";
+
+    // 1. Temukan judul dokumen yang sesungguhnya dari baris heading pertama
+    let docHeadline = "";
+    let firstHeadingIdx = -1;
+    for (let i = 0; i < rawLines.length; i++) {
+      const t = rawLines[i].trim();
+      if (t.startsWith("# ")) {
+        docHeadline = t.slice(2).trim();
+        firstHeadingIdx = i;
+        break;
+      } else if (!docHeadline && t.startsWith("## ")) {
+        docHeadline = t.slice(3).trim();
+        firstHeadingIdx = i;
+        break;
+      }
+    }
+
+    if (!docHeadline) {
+      docHeadline = String(title || "Rangkuman Eksekutif").replace(/^Draf[-_]/i, "").replace(/[_-]/g, " ").trim();
+    }
+
+    // 2. Banner Kategori & Header Dokumen Elegan ala Copywriter Expert
+    bodyXml += `
+      <w:p>
+        <w:pPr>
+          <w:spacing w:before="60" w:after="80"/>
+        </w:pPr>
+        <w:r>
+          <w:rPr>
+            <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+            <w:b/>
+            <w:color w:val="2563EB"/>
+            <w:sz w:val="18"/>
+          </w:rPr>
+          <w:t xml:space="preserve">LAPORAN ANALISIS &amp; RANGKUMAN EKSEKUTIF • PESAT AI</w:t>
+        </w:r>
+      </w:p>
+      <w:p>
+        <w:pPr>
+          <w:spacing w:before="60" w:after="160"/>
+          <w:pBdr>
+            <w:bottom w:val="single" w:sz="18" w:space="10" w:color="2563EB"/>
+          </w:pBdr>
+        </w:pPr>
+        <w:r>
+          <w:rPr>
+            <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+            <w:b/>
+            <w:color w:val="0F172A"/>
+            <w:sz w:val="42"/>
+          </w:rPr>
+          <w:t>${escapeXml(docHeadline)}</w:t>
+        </w:r>
+      </w:p>
+      <w:p>
+        <w:pPr>
+          <w:spacing w:before="40" w:after="240"/>
+        </w:pPr>
+        <w:r>
+          <w:rPr>
+            <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+            <w:i/>
+            <w:color w:val="64748B"/>
+            <w:sz w:val="19"/>
+          </w:rPr>
+          <w:t xml:space="preserve">Dihasilkan secara otomatis oleh Pesat AI Agent • Format Terstruktur Siap Baca</w:t>
+        </w:r>
+      </w:p>
+    `;
+
+    // 3. Iterasi baris demi baris markdown
+    let inTable = false;
+    let tableLines = [];
+
+    function flushTable() {
+      if (!tableLines.length) return;
+      const rows = [];
+      for (const line of tableLines) {
+        if (line.includes("---") || line.includes("===")) continue;
+        const cells = line.split("|").slice(1, -1).map(c => c.trim());
+        if (cells.length) rows.push(cells);
+      }
+      if (rows.length) {
+        bodyXml += `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:top w:val="single" w:sz="8" w:color="CBD5E1"/><w:bottom w:val="single" w:sz="12" w:color="94A3B8"/><w:insideH w:val="single" w:sz="4" w:color="E2E8F0"/><w:insideV w:val="none"/><w:left w:val="none"/><w:right w:val="none"/></w:tblBorders><w:tblCellMar><w:top w:w="140" w:type="dxa"/><w:bottom w:w="140" w:type="dxa"/><w:left w:w="160" w:type="dxa"/><w:right w:w="160" w:type="dxa"/></w:tblCellMar></w:tblPr>`;
+        rows.forEach((row, rIdx) => {
+          const isHeader = rIdx === 0;
+          bodyXml += `<w:tr>`;
+          row.forEach(cell => {
+            bodyXml += `<w:tc><w:tcPr>${isHeader ? `<w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/>` : ""}</w:tcPr><w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>${isHeader ? `<w:b/><w:color w:val="1E3A8A"/>` : `<w:color w:val="334155"/>`}<w:sz w:val="21"/></w:rPr><w:t>${escapeXml(cell)}</w:t></w:r></w:p></w:tc>`;
+          });
+          bodyXml += `</w:tr>`;
+        });
+        bodyXml += `</w:tbl><w:p><w:pPr><w:spacing w:after="160"/></w:pPr></w:p>`;
+      }
+      tableLines = [];
+      inTable = false;
+    }
+
+    for (let i = 0; i < rawLines.length; i++) {
+      if (i === firstHeadingIdx) continue; // Heading utama sudah dibuat di header
+
+      const line = rawLines[i];
+      const trimmed = line.trim();
+
+      // Penanganan tabel
+      if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+        inTable = true;
+        tableLines.push(trimmed);
+        continue;
+      } else if (inTable) {
+        flushTable();
+      }
+
+      if (!trimmed) {
+        bodyXml += `<w:p><w:pPr><w:spacing w:after="100"/></w:pPr></w:p>`;
+        continue;
+      }
+
+      // Divider garis horizontal
+      if (trimmed === "---" || trimmed === "***" || trimmed === "___") {
+        bodyXml += `<w:p><w:pPr><w:spacing w:before="180" w:after="180"/><w:pBdr><w:bottom w:val="single" w:sz="10" w:space="8" w:color="E2E8F0"/></w:pBdr></w:pPr></w:p>`;
+        continue;
+      }
+
+      // Headings
+      if (trimmed.startsWith("# ")) {
+        bodyXml += `
+          <w:p>
+            <w:pPr>
+              <w:spacing w:before="360" w:after="140"/>
+            </w:pPr>
+            <w:r>
+              <w:rPr>
+                <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+                <w:b/>
+                <w:color w:val="1E3A8A"/>
+                <w:sz w:val="34"/>
+              </w:rPr>
+              <w:t>${escapeXml(trimmed.slice(2))}</w:t>
+            </w:r>
+          </w:p>
+        `;
+      } else if (trimmed.startsWith("## ")) {
+        bodyXml += `
+          <w:p>
+            <w:pPr>
+              <w:spacing w:before="300" w:after="100"/>
+            </w:pPr>
+            <w:r>
+              <w:rPr>
+                <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+                <w:b/>
+                <w:color w:val="1E40AF"/>
+                <w:sz w:val="28"/>
+              </w:rPr>
+              <w:t>${escapeXml(trimmed.slice(3))}</w:t>
+            </w:r>
+          </w:p>
+        `;
+      } else if (trimmed.startsWith("### ")) {
+        bodyXml += `
+          <w:p>
+            <w:pPr>
+              <w:spacing w:before="220" w:after="80"/>
+            </w:pPr>
+            <w:r>
+              <w:rPr>
+                <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+                <w:b/>
+                <w:color w:val="334155"/>
+                <w:sz w:val="24"/>
+              </w:rPr>
+              <w:t>${escapeXml(trimmed.slice(4))}</w:t>
+            </w:r>
+          </w:p>
+        `;
+      } else if (trimmed.startsWith("> ") || trimmed.startsWith("&gt; ")) {
+        // Callout box / Quote highlight elegan
+        const quoteText = trimmed.replace(/^(?:>|&gt;)\s*/, "");
+        bodyXml += `
+          <w:p>
+            <w:pPr>
+              <w:pBdr>
+                <w:left w:val="single" w:sz="24" w:space="14" w:color="2563EB"/>
+              </w:pBdr>
+              <w:shd w:val="clear" w:color="auto" w:fill="F8FAFC"/>
+              <w:ind w:left="280" w:right="200"/>
+              <w:spacing w:before="120" w:after="160" w:line="280" w:lineRule="auto"/>
+            </w:pPr>
+            ${parseInlineDocxFormatting(quoteText, { italic: true, color: "334155" })}
+          </w:p>
+        `;
+      } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+        const itemText = trimmed.replace(/^[-*]\s+/, "");
+        bodyXml += `
+          <w:p>
+            <w:pPr>
+              <w:ind w:left="440" w:hanging="220"/>
+              <w:spacing w:before="30" w:after="80" w:line="270" w:lineRule="auto"/>
+            </w:pPr>
+            <w:r>
+              <w:rPr>
+                <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+                <w:b/>
+                <w:color w:val="2563EB"/>
+                <w:sz w:val="22"/>
+              </w:rPr>
+              <w:t xml:space="preserve">• </w:t>
+            </w:r>
+            ${parseInlineDocxFormatting(itemText)}
+          </w:p>
+        `;
+      } else if (/^\d+\.\s+/.test(trimmed)) {
+        const numMatch = trimmed.match(/^(\d+\.)\s*(.*)$/);
+        const numPrefix = numMatch ? numMatch[1] : "";
+        const itemText = numMatch ? numMatch[2] : trimmed;
+        bodyXml += `
+          <w:p>
+            <w:pPr>
+              <w:ind w:left="440" w:hanging="220"/>
+              <w:spacing w:before="30" w:after="80" w:line="270" w:lineRule="auto"/>
+            </w:pPr>
+            <w:r>
+              <w:rPr>
+                <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+                <w:b/>
+                <w:color w:val="2563EB"/>
+                <w:sz w:val="22"/>
+              </w:rPr>
+              <w:t xml:space="preserve">${numPrefix} </w:t>
+            </w:r>
+            ${parseInlineDocxFormatting(itemText)}
+          </w:p>
+        `;
+      } else {
+        // Paragraf biasa dengan line height dan margin nyaman
+        bodyXml += `
+          <w:p>
+            <w:pPr>
+              <w:spacing w:before="0" w:after="160" w:line="280" w:lineRule="auto"/>
+              <w:jc w:val="left"/>
+            </w:pPr>
+            ${parseInlineDocxFormatting(trimmed)}
+          </w:p>
+        `;
+      }
+    }
+
+    if (inTable) flushTable();
+
+    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    ${bodyXml}
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:right="1584" w:bottom="1440" w:left="1584" w:header="720" w:footer="720" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`;
+
+    const files = [
+      {
+        name: "[Content_Types].xml",
+        data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`
+      },
+      {
+        name: "_rels/.rels",
+        data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`
+      },
+      {
+        name: "word/document.xml",
+        data: documentXml
+      }
+    ];
+
+    return createZipBuffer(files);
+  }
+
   function generateWordDocHtml(markdownContent, title = "Dokumen Pesat AI") {
     const htmlBody = parseMarkdown(markdownContent);
     return `<!DOCTYPE html>
@@ -775,11 +1195,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  async function downloadArtifactFile(filename, content, mimeType = "application/msword;charset=utf-8") {
-    let cleanFilename = String(filename || "Dokumen-Pesat-AI.doc").trim().replace(/[/\\?%*:|"<>]/g, "_");
-    if (!cleanFilename.includes(".")) cleanFilename += ".doc";
+  async function downloadArtifactFile(filename, content, mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    let cleanFilename = String(filename || "Dokumen-Pesat-AI.docx").trim().replace(/[/\\?%*:|"<>]/g, "_");
+    if (!cleanFilename.includes(".")) cleanFilename += ".docx";
 
-    const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+    let blob;
+    if (content instanceof Blob) {
+      blob = content;
+    } else if (content instanceof Uint8Array || ArrayBuffer.isView(content)) {
+      blob = new Blob([content], { type: mimeType });
+    } else {
+      blob = new Blob([content], { type: mimeType });
+    }
+
     let blobUrl = "";
     try {
       blobUrl = URL.createObjectURL(blob);
@@ -796,7 +1224,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             conflictAction: "uniquify"
           }, (id) => {
             if (chrome.runtime.lastError || !id) {
-              // Jika ditolak dengan saveAs: false (misal Safe Browsing meminta prompt), coba dengan saveAs: true
               chrome.downloads.download({
                 url: blobUrl,
                 filename: cleanFilename,
@@ -849,7 +1276,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const res = await sendToBackground({
         action: "DOWNLOAD_FILE",
         filename: cleanFilename,
-        content,
+        content: typeof content === "string" ? content : "",
         mimeType
       });
       if (res && res.success) {
@@ -1073,7 +1500,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           </div>
         `;
       } else {
-        const docTitle = (a.name || "Draf_Dokumen").replace(/\.md$/, ".doc");
+        const docTitle = (a.name || "Draf_Dokumen").replace(/\.md$/, "").replace(/\.doc$/, ".docx");
         contentHtml = `
           <div class="doc-card-container">
             <div class="doc-card-header">
@@ -1081,12 +1508,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 <span class="doc-badge-icon">📄</span>
                 <div class="doc-card-meta">
                   <div class="doc-card-title">${escapeHtml(docTitle)}</div>
-                  <div class="doc-card-subtitle">Format Dokumen Word / Docs • ${wordCount} kata</div>
+                  <div class="doc-card-subtitle">Format Dokumen Word (.docx) & Docs • ${wordCount} kata</div>
                 </div>
               </div>
               <div class="doc-card-actions">
                 <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi artikel">📋 Salin Teks</button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Unduh file siap buka di Word atau Google Docs">⬇️ Unduh .doc</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Unduh file dokumen resmi Microsoft Word .docx">⬇️ Unduh Word (.docx)</button>
                 <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke lembar kerja dokumen aktif">⤴️ Tempel ke Docs</button>
               </div>
             </div>
@@ -1179,12 +1606,12 @@ document.addEventListener("DOMContentLoaded", async () => {
               btn.textContent = "✓ Terunduh (.csv)!";
               setTimeout(() => { btn.textContent = origText; }, 1800);
             } else if (act === "download_doc" || act === "download") {
-              const docName = (a.name || "Dokumen-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "") + ".doc";
-              const docHtml = generateWordDocHtml(contentStr, docName);
               const origText = btn.textContent;
               btn.textContent = "⏳ Mengunduh...";
-              const ok = await downloadArtifactFile(docName, docHtml, "application/msword");
-              btn.textContent = ok ? "✓ Terunduh (.doc)!" : "✓ Terunduh!";
+              const docxName = (a.name || "Dokumen-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "").replace(/\.docx$/, "") + ".docx";
+              const docxBytes = generateWordDocx(contentStr, docxName.replace(/\.docx$/, ""));
+              const ok = await downloadArtifactFile(docxName, docxBytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+              btn.textContent = ok ? "✓ Terunduh (.docx)!" : "✓ Terunduh!";
               setTimeout(() => { btn.textContent = origText; }, 2000);
             } else if (act === "paste") {
               const isSocialArt = a.artifactType === "social" || (a.name && (a.name.startsWith("Thread") || a.name.includes("Sosmed") || a.name.includes("Tweet")));
@@ -3985,7 +4412,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         ? `Tabel-${(userPrompt || "Data").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.xls`
         : (isSocialThread
             ? `Thread-${(userPrompt || "Sosmed").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.txt`
-            : `Draf-${(userPrompt || "Dokumen").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`);
+            : `Draf-${(userPrompt || "Dokumen").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.docx`);
 
       const artifact = (!isSummarize && (isExplicitExcelOrCsv || isSpreadsheetTask || isGeneralTableTask || isProductResearch || isSocialThread || isArticle || isDocsOutput)) ? {
         artifactType: artType,
@@ -4972,7 +5399,7 @@ ${sub.description}
           const artType = isTable ? "table" : "text";
           const artTitle = isTable
             ? `Tabel-${(activeTask.goal || "Data").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
-            : `Draf-${(activeTask.goal || "Copywriting").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`;
+            : `Draf-${(activeTask.goal || "Copywriting").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.docx`;
 
           appendLog(`✍️ Model berhasil menghasilkan ${isTable ? "tabel data riset/komparasi" : "draf tulisan"} (${reply.length} karakter).`);
           const artifact = {

@@ -597,13 +597,13 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
             <div class="doc-card-title-group">
               <span class="doc-badge-icon">📄</span>
               <div class="doc-card-meta">
-                <div class="doc-card-title">Draf-Bedah_dokumen_ini.doc</div>
-                <div class="doc-card-subtitle">Format Dokumen Word / Docs • 514 kata</div>
+                <div class="doc-card-title">Draf-Bedah_dokumen_ini.docx</div>
+                <div class="doc-card-subtitle">Format Dokumen Word (.docx) & Docs • 514 kata</div>
               </div>
             </div>
             <div class="doc-card-actions">
               <button class="doc-action-btn" data-artifact-act="copy">📋 Salin Teks</button>
-              <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc">⬇️ Unduh .doc</button>
+              <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc">⬇️ Unduh Word (.docx)</button>
               <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste">⤴️ Tempel ke Docs</button>
             </div>
           </div>

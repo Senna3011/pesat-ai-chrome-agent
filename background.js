@@ -567,12 +567,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "DOWNLOAD_FILE") {
     try {
       const params = request.params || request;
-      let filename = String(params.filename || `pesat-export-${Date.now()}.doc`).trim();
+      let filename = String(params.filename || `pesat-export-${Date.now()}.docx`).trim();
       filename = filename.replace(/[/\\?%*:|"<>]/g, "_");
-      if (!filename.includes(".")) filename += ".doc";
+      if (!filename.includes(".")) filename += ".docx";
 
       const content = params.content || "";
-      const mimeType = params.mimeType || "application/msword";
+      const mimeType = params.mimeType || (filename.endsWith(".docx") ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/octet-stream");
 
       let dataUrl = params.url || params.dataUrl;
       if (!dataUrl) {
