@@ -1586,7 +1586,14 @@ document.addEventListener("DOMContentLoaded", async () => {
           const contentStr = a.content || "";
           try {
             if (act === "copy") {
-              await navigator.clipboard.writeText(contentStr);
+              let copyPayload = contentStr;
+              if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.endsWith(".xls") || a.name?.includes("Tabel") || a.name?.includes("Spreadsheet")) {
+                const tableRows = typeof parseMarkdownTable === "function" ? parseMarkdownTable(contentStr) : null;
+                if (tableRows && tableRows.length > 0) {
+                  copyPayload = tableRows.map(r => r.join("\t")).join("\r\n");
+                }
+              }
+              await navigator.clipboard.writeText(copyPayload);
               appendLog(`📋 Data/Dokumen "${a.name}" disalin ke clipboard.`);
               const origText = btn.textContent;
               btn.textContent = "✓ Tersalin!";
@@ -1627,14 +1634,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (tabs && tabs[0]) currentTab = tabs[0];
                   } catch (e) {}
 
-	                  const isAlreadySocial = currentTab && /x\.com|twitter\.com|threads\.net|threads\.com|linkedin\.com/i.test(currentTab.url || "");
-	                  if (!isAlreadySocial) {
-	                    const isThreads = /threads/i.test(a.name || "") || /threads/i.test(contentStr);
-	                    const destUrl = isThreads ? "https://www.threads.net" : "https://x.com/compose/post";
-	                    await sendToBackground({ action: "NAVIGATE_TAB", url: destUrl });
-	                    await new Promise(r => setTimeout(r, 4000));
-	                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
-	                  }
+		                  const isAlreadySocial = currentTab && /x\.com|twitter\.com|threads\.net|threads\.com|linkedin\.com/i.test(currentTab.url || "");
+		                  if (!isAlreadySocial) {
+		                    const isThreads = /threads/i.test(a.name || "") || /threads/i.test(contentStr);
+		                    const destUrl = isThreads ? "https://www.threads.net" : "https://x.com/compose/post";
+		                    await sendToBackground({ action: "NAVIGATE_TAB", url: destUrl, newTab: true });
+		                    await new Promise(r => setTimeout(r, 4000));
+		                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
+		                  }
 
 	                  const r = await sendToContentScript({
 	                    type: "EXECUTE_ACTION",
@@ -1663,13 +1670,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 			                    if (tabs && tabs[0]) currentTab = tabs[0];
 			                  } catch (e) {}
 
-			                  const isAlreadySheets = currentTab && (/docs\.google\.com\/spreadsheets/i.test(currentTab.url || "") || /excel\.office\.com/i.test(currentTab.url || ""));
-			                  if (!isAlreadySheets) {
-			                    appendLog("Membuka Google Sheets baru (sheets.new)...");
-			                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new" });
-			                    await new Promise(r => setTimeout(r, 4500));
-			                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
-			                  }
+				                  const isAlreadySheets = currentTab && (/docs\.google\.com\/spreadsheets/i.test(currentTab.url || "") || /excel\.office\.com/i.test(currentTab.url || ""));
+				                  if (!isAlreadySheets) {
+				                    appendLog("Membuka Google Sheets baru di tab baru (sheets.new)...");
+				                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new", newTab: true });
+				                    await new Promise(r => setTimeout(r, 4500));
+				                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
+				                  }
 
 					                  let apiPasted = false;
 					                  const sMatch = (currentTab?.url || "").match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
@@ -1707,11 +1714,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 		                    if (tabs && tabs[0]) currentTab = tabs[0];
 		                  } catch (e) {}
 
-		                  const isAlreadyDocs = currentTab && (/docs\.google\.com\/document/i.test(currentTab.url || "") || /word\.office\.com/i.test(currentTab.url || ""));
-		                  if (!isAlreadyDocs) {
-		                    appendLog("Membuka lembar kerja Google Docs baru (docs.new)...");
-		                    showStatusIndicator("Membuka Google Docs...");
-		                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://docs.new" });
+			                  const isAlreadyDocs = currentTab && (/docs\.google\.com\/document/i.test(currentTab.url || "") || /word\.office\.com/i.test(currentTab.url || ""));
+			                  if (!isAlreadyDocs) {
+			                    appendLog("Membuka lembar kerja Google Docs baru di tab baru (docs.new)...");
+			                    showStatusIndicator("Membuka Google Docs...");
+			                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://docs.new", newTab: true });
 
 		                    let docsReady = false;
 		                    for (let i = 0; i < 20; i++) {
@@ -3040,12 +3047,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   async function ensureActionApproval(resObj) {
     if (resObj?._approvalGranted || !isRiskyAction(resObj)) return { approved: true };
-    const risk = actionRiskLevel(resObj);
-    if (risk !== "high" && activeTask?.confirmAllGranted) return { approved: true };
+    if (activeTask?.confirmAllGranted) return { approved: true };
     const verdict = await requestConfirmation(resObj);
     if (!verdict || verdict.cancelled) return { approved: false, cancelled: true };
     if (!verdict.approved) return { approved: false, cancelled: false };
-    if (verdict.allowAll && risk !== "high" && activeTask) activeTask.confirmAllGranted = true;
+    if (verdict.allowAll && activeTask) activeTask.confirmAllGranted = true;
     resObj._approvalGranted = true;
     if (activeTask?.status === "WAITING_USER") activeTask.status = "EXECUTING";
     return { approved: true };
@@ -5414,18 +5420,21 @@ ${sub.description}
             artifact
           });
 
-          // Cek jika halaman saat ini adalah Google Docs / editor, langsung tempelkan
+          // Hanya tempelkan otomatis jika pengguna secara eksplisit meminta penulisan/penempelan ke dokumen/sheet
+          const isExplicitWriteIntent = /(?:isi|tulis|tempel|masukkan|paste|salin ke|ketik|masukan)\s+(?:ke|di|pada)?\s*(?:docs|dokumen|sheet|spreadsheet|tabel|excel)/i.test(activeTask.goal || "");
           const isDocs = pageData.url?.includes("docs.google.com") && !pageData.url?.includes("/spreadsheets");
           const isSheets = pageData.url?.includes("/spreadsheets") || pageData.url?.includes("excel.office.com");
 
-          if (isSheets && !activeTask._sheetWritten) {
-            activeTask._sheetWritten = true;
-            showStatusIndicator("Mengisikan data tabel ke Google Sheets...");
-            await executeAgentAction({ action: "fill_spreadsheet_grid", value: reply });
-          } else if (isDocs && !activeTask._articleWritten) {
-            activeTask._articleWritten = true;
-            showStatusIndicator("Menempelkan teks ke editor dokumen...");
-            await executeAgentAction({ action: "paste_text", value: reply });
+          if (isExplicitWriteIntent) {
+            if (isSheets && !activeTask._sheetWritten) {
+              activeTask._sheetWritten = true;
+              showStatusIndicator("Mengisikan data tabel ke Google Sheets...");
+              await executeAgentAction({ action: "fill_spreadsheet_grid", value: reply });
+            } else if (isDocs && !activeTask._articleWritten) {
+              activeTask._articleWritten = true;
+              showStatusIndicator("Menempelkan teks ke editor dokumen...");
+              await executeAgentAction({ action: "paste_text", value: reply });
+            }
           }
 
           // Tandai seluruh plan sebagai done dan akhiri task — JANGAN continue (mencegah loop)
@@ -5588,6 +5597,12 @@ ${sub.description}
 
       // 9. Kegagalan → retry / replan
       if (!exec.success) {
+        if (exec.errorType === "PERMISSION_DENIED") {
+          appendLog(`⛔ Tugas dihentikan: ${exec.error || "Tindakan dibatalkan pengguna."}`);
+          await finalizeTask("failed", exec.error || "Tindakan dibatalkan pengguna.");
+          return;
+        }
+
         const retryKey = `${sub.id}`;
         activeTask.retries[retryKey] = (activeTask.retries[retryKey] || 0) + 1;
 

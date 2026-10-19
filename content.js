@@ -1932,40 +1932,27 @@
       buttons: 1
     };
 
-    targetEl.dispatchEvent(new PointerEvent("pointerdown", eventInit));
-    targetEl.dispatchEvent(new MouseEvent("mousedown", eventInit));
+    // Tentukan elemen interaktif paling tepat (apakah elemen anak tombol/link, elemen induk, atau target itu sendiri)
+    const childClickable = targetEl.querySelector?.('button, a[href], [role="button"], [role="menuitem"]');
+    const clickableParent = targetEl.closest?.('button, a[href], [role="button"], [role="menuitem"], [role="tab"], [tabindex], [onclick], [data-to], [data-href]');
+    const effectiveTarget = (childClickable && childClickable !== targetEl)
+      ? childClickable
+      : (clickableParent && clickableParent !== targetEl && !targetEl.matches?.('input, textarea, select, button, a'))
+        ? clickableParent
+        : targetEl;
+
+    effectiveTarget.dispatchEvent(new PointerEvent("pointerdown", eventInit));
+    effectiveTarget.dispatchEvent(new MouseEvent("mousedown", eventInit));
     eventInit.buttons = 0;
-    targetEl.dispatchEvent(new PointerEvent("pointerup", eventInit));
-    targetEl.dispatchEvent(new MouseEvent("mouseup", eventInit));
-    targetEl.dispatchEvent(new MouseEvent("click", eventInit));
-    try { targetEl.click?.(); } catch (_) {}
-
-    // Handling parent clickable jika target klik adalah elemen anak (span teks, ikon SVG di dalam menu sidebar)
-    const clickableParent = targetEl.closest?.('a, button, [role="button"], [role="menuitem"], [role="treeitem"], [role="tab"], [gh="cm"], li, [class*="nav" i], [class*="menu" i], [class*="sidebar" i], [class*="item" i], [tabindex], [onclick], [data-to], [data-href]');
-    if (clickableParent && clickableParent !== targetEl) {
-      clickableParent.dispatchEvent(new PointerEvent("pointerdown", eventInit));
-      clickableParent.dispatchEvent(new MouseEvent("mousedown", eventInit));
-      clickableParent.dispatchEvent(new PointerEvent("pointerup", eventInit));
-      clickableParent.dispatchEvent(new MouseEvent("mouseup", eventInit));
-      clickableParent.dispatchEvent(new MouseEvent("click", eventInit));
-      try { clickableParent.click?.(); } catch (_) {}
-    }
-
-    // Handling child link/button jika target adalah container (li/div menu sidebar)
-    const childClickable = targetEl.querySelector?.('a, button, [role="button"], [role="menuitem"]');
-    if (childClickable && childClickable !== targetEl) {
-      childClickable.dispatchEvent(new PointerEvent("pointerdown", eventInit));
-      childClickable.dispatchEvent(new MouseEvent("mousedown", eventInit));
-      childClickable.dispatchEvent(new PointerEvent("pointerup", eventInit));
-      childClickable.dispatchEvent(new MouseEvent("mouseup", eventInit));
-      childClickable.dispatchEvent(new MouseEvent("click", eventInit));
-      try { childClickable.click?.(); } catch (_) {}
-    }
+    effectiveTarget.dispatchEvent(new PointerEvent("pointerup", eventInit));
+    effectiveTarget.dispatchEvent(new MouseEvent("mouseup", eventInit));
+    effectiveTarget.dispatchEvent(new MouseEvent("click", eventInit));
+    try { effectiveTarget.click?.(); } catch (_) {}
 
     // Navigasi fallback jika elemen memiliki tautan href / data-href / data-to
-    const hrefVal = targetEl.getAttribute?.("href") || clickableParent?.getAttribute?.("href") || childClickable?.getAttribute?.("href") ||
-                    targetEl.getAttribute?.("data-to") || clickableParent?.getAttribute?.("data-to") ||
-                    targetEl.getAttribute?.("data-href") || clickableParent?.getAttribute?.("data-href");
+    const hrefVal = effectiveTarget.getAttribute?.("href") || targetEl.getAttribute?.("href") ||
+                    effectiveTarget.getAttribute?.("data-to") || targetEl.getAttribute?.("data-to") ||
+                    effectiveTarget.getAttribute?.("data-href") || targetEl.getAttribute?.("data-href");
     if (hrefVal && typeof hrefVal === "string" && !hrefVal.startsWith("#") && !hrefVal.startsWith("javascript:")) {
       const initialUrl = window.location.href;
       setTimeout(() => {
@@ -1974,20 +1961,20 @@
             if (hrefVal.startsWith("http://") || hrefVal.startsWith("https://")) {
               window.location.href = hrefVal;
             } else if (hrefVal.startsWith("/")) {
-              window.location.pathname = hrefVal;
+              window.location.href = new URL(hrefVal, window.location.origin).href;
             }
           }
         } catch (_) {}
       }, 300);
     }
 
-    // Form submit fallback untuk form login / autentikasi web
-    const formEl = targetEl.closest?.("form") || document.querySelector("form");
-    const isSubmitLike = targetEl.type === "submit" || /submit|login|sign\s*in|masuk|kirim/i.test(targetEl.innerText || targetEl.value || targetEl.getAttribute("aria-label") || "");
+    // Form submit fallback HANYA jika tombol benar-benar bagian dari elemen <form>
+    const formEl = effectiveTarget.closest?.("form") || targetEl.closest?.("form") || (effectiveTarget instanceof HTMLButtonElement ? effectiveTarget.form : null);
+    const isSubmitLike = effectiveTarget.type === "submit" || /submit|login|sign\s*in|masuk|kirim/i.test(effectiveTarget.innerText || effectiveTarget.value || effectiveTarget.getAttribute?.("aria-label") || "");
     if (formEl && isSubmitLike) {
       try {
         if (typeof formEl.requestSubmit === "function") {
-          formEl.requestSubmit(targetEl instanceof HTMLButtonElement || targetEl instanceof HTMLInputElement ? targetEl : undefined);
+          formEl.requestSubmit(effectiveTarget instanceof HTMLButtonElement || effectiveTarget instanceof HTMLInputElement ? effectiveTarget : undefined);
         } else {
           formEl.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
         }
@@ -3333,8 +3320,14 @@
 
         const isPassword = targetEl instanceof HTMLInputElement && targetEl.type === "password";
         const displayVal = isPassword ? "••••••••" : textToFill;
+        const readBack = isPassword ? textToFill : (targetEl.value ?? targetEl.innerText ?? textToFill);
         restoreOutline();
-        return { success: true, message: `Mengisi "${displayVal}" pada [@e${cleanId}] berhasil${fuzzyNote}.`, stateChanged: true };
+        return {
+          success: true,
+          message: `Mengisi "${displayVal}" pada [@e${cleanId}] berhasil${fuzzyNote}.`,
+          valueReadBack: readBack,
+          stateChanged: true
+        };
       }
 
       if (action === "select" || action === "select_option") {
@@ -3363,8 +3356,52 @@
             errorType: optionFound ? null : "ELEMENT_NOT_FOUND",
             stateChanged: optionFound
           };
+        } else if (
+          targetEl.getAttribute?.("role") === "combobox" ||
+          targetEl.getAttribute?.("aria-haspopup") === "listbox" ||
+          targetEl.closest?.('[role="combobox"], [class*="-container"], [class*="select" i]') ||
+          targetEl.querySelector?.('[role="combobox"], input')
+        ) {
+          // Dukungan dropdown modern (React-Select, Radix, ARIA Combobox)
+          const combobox = targetEl.getAttribute?.("role") === "combobox" ? targetEl : (targetEl.closest?.('[role="combobox"]') || targetEl);
+          combobox.focus();
+          triggerFullClickSequence(combobox);
+          await new Promise(r => setTimeout(r, 400));
+          const targetVal = String(value || "").toLowerCase().trim();
+          const options = Array.from(document.querySelectorAll('[role="option"], [id*="option"], .select__option, [class*="option" i]'));
+          let matchedOpt = null;
+          for (const opt of options) {
+            const txt = (opt.textContent || "").toLowerCase().trim();
+            if (txt === targetVal || txt.includes(targetVal)) {
+              matchedOpt = opt;
+              break;
+            }
+          }
+          if (matchedOpt) {
+            triggerFullClickSequence(matchedOpt);
+            return {
+              success: true,
+              message: `Select custom dropdown [@e${cleanId}] ke "${matchedOpt.textContent?.trim()}".`,
+              stateChanged: true
+            };
+          }
+          const innerInput = combobox.querySelector?.("input") || (combobox instanceof HTMLInputElement ? combobox : null);
+          if (innerInput) {
+            setNativeInputValue(innerInput, value);
+            dispatchKeyCombo(innerInput, { key: "Enter", keyCode: 13, which: 13 });
+            return {
+              success: true,
+              message: `Set custom combobox [@e${cleanId}] ke "${value}".`,
+              stateChanged: true
+            };
+          }
+          return {
+            success: false,
+            error: `Pilihan "${value}" tidak ditemukan pada custom combobox [@e${cleanId}].`,
+            errorType: "ELEMENT_NOT_FOUND"
+          };
         }
-        return { success: false, error: `Target [@e${cleanId}] bukan elemen <select>.`, errorType: "TOOL_INVALID_ARGUMENT" };
+        return { success: false, error: `Target [@e${cleanId}] bukan elemen <select> atau combobox.`, errorType: "TOOL_INVALID_ARGUMENT" };
       }
 
       if (action === "press_key" || action === "press_keyboard" || action === "key_press") {
@@ -3811,7 +3848,9 @@
     } catch (_) {}
 
     try {
+      composeBox.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: postText }));
       document.execCommand("insertText", false, postText);
+      composeBox.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: postText }));
     } catch (_) {}
 
     const currentBoxText = (composeBox.innerText || composeBox.textContent || "").trim();
@@ -3857,6 +3896,12 @@
         postBtn.click();
         await new Promise(r => setTimeout(r, 800));
         return { success: true, message: "Postingan media sosial berhasil dipublikasikan!", stateChanged: true };
+      } else {
+        return {
+          success: false,
+          error: "Tombol publikasi media sosial belum aktif atau terkunci. Pastikan draf tidak melebihi kuota karakter platform.",
+          errorType: "ACTION_PRECONDITION_FAILED"
+        };
       }
     }
 

@@ -859,13 +859,9 @@ Gunakan format poin (- **Label:** Penjelasan) yang rapi tanpa basa-basi pembuka 
     return true;
   }
 
-  // Navigasi URL tab aktif secara langsung via Chrome Tabs API (aman untuk chrome://newtab, about:blank dll)
-  if (request.action === "NAVIGATE_TAB" || request.action === "navigate_to") {
+  // Navigasi URL tab aktif atau buka tab baru via Chrome Tabs API (aman untuk chrome://newtab, about:blank dll)
+  if (request.action === "NAVIGATE_TAB" || request.action === "navigate_to" || request.action === "CREATE_TAB" || request.action === "OPEN_TAB") {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-      if (!tabs || tabs.length === 0 || !tabs[0].id) {
-        sendResponse({ success: false, error: "Tidak ada tab aktif yang ditemukan." });
-        return;
-      }
       try {
         let rawUrl = (request.url || request.value || "").trim();
         if (!rawUrl || rawUrl === "undefined" || rawUrl === "null") {
@@ -880,6 +876,18 @@ Gunakan format poin (- **Label:** Penjelasan) yang rapi tanpa basa-basi pembuka 
           } else {
             url = "https://www.google.com/search?q=" + encodeURIComponent(url);
           }
+        }
+
+        if (request.action === "CREATE_TAB" || request.action === "OPEN_TAB" || request.newTab) {
+          const newTab = await chrome.tabs.create({ url, active: true });
+          sendResponse({ success: true, message: `Membuka tab baru: ${url}`, url, tabId: newTab?.id });
+          return;
+        }
+
+        if (!tabs || tabs.length === 0 || !tabs[0].id) {
+          const newTab = await chrome.tabs.create({ url, active: true });
+          sendResponse({ success: true, message: `Membuka tab baru: ${url}`, url, tabId: newTab?.id });
+          return;
         }
 
         actionHistoryPerTab.delete(tabs[0].id);

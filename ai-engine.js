@@ -251,6 +251,7 @@ Gunakan hanya tool yang tersedia. Maksimal 10 langkah. Langkah act wajib memilik
         if (useTools && isAgenticAct) {
           requestBody.tools = combinedTools;
           requestBody.tool_choice = "auto";
+          requestBody.parallel_tool_calls = false;
         }
 
         // SSE Streaming Handler (Milestone 1)
@@ -300,6 +301,18 @@ Gunakan hanya tool yang tersedia. Maksimal 10 langkah. Langkah act wajib memilik
           signal: signal
         });
 
+        if (res && typeof res.ok === "boolean" && !res.ok) {
+          let errText = "";
+          try {
+            const errJson = await res.json();
+            errText = errJson?.error?.message || errJson?.message || JSON.stringify(errJson);
+          } catch (_) {
+            errText = await res.text().catch(() => "");
+          }
+          const cleanMsg = errText ? `${res.status} (${errText.slice(0, 160)})` : `${res.status} ${res.statusText}`;
+          throw new Error(`HTTP ${cleanMsg}`);
+        }
+
         const data = (typeof res === "object" && res !== null && !(res instanceof Response)) ? res : await res.json();
         const choice = data?.choices?.[0] || {};
         const replyText = (choice.message?.content !== undefined && choice.message?.content !== null && choice.message?.content !== "")
@@ -342,6 +355,18 @@ Gunakan hanya tool yang tersedia. Maksimal 10 langkah. Langkah act wajib memilik
           }),
           signal: signal
         });
+
+        if (res && typeof res.ok === "boolean" && !res.ok) {
+          let errText = "";
+          try {
+            const errJson = await res.json();
+            errText = errJson?.error?.message || errJson?.message || JSON.stringify(errJson);
+          } catch (_) {
+            errText = await res.text().catch(() => "");
+          }
+          const cleanMsg = errText ? `${res.status} (${errText.slice(0, 160)})` : `${res.status} ${res.statusText}`;
+          throw new Error(`HTTP ${cleanMsg}`);
+        }
 
         const data = (typeof res === "object" && res !== null && !(res instanceof Response)) ? res : await res.json();
         const choice = data?.choices?.[0] || {};
