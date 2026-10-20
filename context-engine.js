@@ -61,14 +61,17 @@
       };
     },
 
-    createContextSource({ id, sourceId, type, title, url, content, dataUrl, citationId, chunkId, charStart, charEnd, documentVersion, contentHash, metadata = {} }) {
+    createContextSource({ id, sourceId, type, title, name, url, content, dataUrl, citationId, chunkId, charStart, charEnd, documentVersion, contentHash, metadata = {} }) {
       const localId = id || `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const resolvedTitle = (typeof title === "string" && title) ? title : ((typeof name === "string" && name) ? name : (metadata?.fileName || metadata?.title || "Konteks"));
+      const resolvedName = (typeof name === "string" && name) ? name : resolvedTitle;
       return {
         id: localId,
         sourceId: sourceId || metadata?.sourceId || localId,
         citationId: citationId || metadata?.citationId || null,
         type: type || "custom",
-        title: title || "Konteks",
+        title: resolvedTitle,
+        name: resolvedName,
         url: url || "",
         content: content || "",
         dataUrl: dataUrl || metadata?.dataUrl || null,

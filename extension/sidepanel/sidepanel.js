@@ -1336,7 +1336,11 @@ document.addEventListener("DOMContentLoaded", async () => {
           <div class="user-attachments-container">
             ${attachmentsList.map(att => {
               const icon = att.type === "Image" ? "🖼️" : ((att.type === "BrowserTab" || att.type === "tab") ? "📑" : "📄");
-              const name = att.name || att.title || "File Lampiran";
+              const name = (typeof att.name === "string" && att.name && att.name !== "[object Object]")
+                ? att.name
+                : ((typeof att.title === "string" && att.title && att.title !== "[object Object]")
+                  ? att.title
+                  : (att.metadata?.fileName || "File Lampiran"));
               const size = att.metadata?.sizeFormatted || "";
               return `
                 <div class="user-attachment-chip" title="${escapeHtml(name)}">
@@ -4005,7 +4009,7 @@ Respon HANYA dalam format JSON valid:
 
       const userExplicitDocs = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke|tempel\s+ke|salin\s+ke|ekspor\s+ke|pindahkan\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen|(?:tulis\s+ke|simpan\s+ke|masukkan\s+ke|tempel\s+ke|ekspor\s+ke)\s+(?:dokumen|docs))/i.test(userPrompt);
       const userExplicitSheets = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|buatkan spreadsheet)/i.test(userPrompt);
-      const isDocsTarget = !isExplicitExcelOrCsv && (userExplicitDocs || isDocsSite);
+      const isDocsTarget = !isExplicitExcelOrCsv && (userExplicitDocs || (attachedFiles.length === 0 && isDocsSite));
 
       const hasTableCreationIntent = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan|tabel\b|\d+\s*kolom)/i.test(userPrompt);
 
@@ -4202,7 +4206,7 @@ ${userPrompt}
 
 [REFERENSI SUMBER DARI WEB / TAB TERLAMPIR]:
 Judul: ${pageTitle} | URL: ${pageUrl}
-${cleanText.substring(0, 5000) || "(Gunakan instruksi pengguna sebagai referensi)"}
+${cleanText.substring(0, 20000) || "(Gunakan instruksi pengguna sebagai referensi)"}
 
 PEDOMAN KETAT PENULISAN DOKUMEN GOOGLE DOCS:
 1. TULISKAN KONTEN SESUAI PERMINTAAN SECARA MENDALAM, MENARIK, DAN FAKTUAL (Jelaskan makna, fakta, atau analisis secara lengkap dan komprehensif!).
@@ -4289,22 +4293,25 @@ INSTRUKSI PERANGKUMAN SPREADSHEET:
    - ### 💡 Kesimpulan & Rekomendasi
 3. DILARANG membuat artefak file spreadsheet atau format formula buatan jika dokumen kosong. Format dalam teks Markdown rapi.`;
         } else {
-          promptPayload = `Tolong buat ringkasan komprehensif, rapi, dan mudah dipahami dari konten halaman web berikut:
+          promptPayload = `Tolong buat ringkasan komprehensif, rapi, dan mudah dipahami dari konten/dokumen berikut:
 
 Judul: ${pageTitle}
 URL: ${pageUrl}
 
-[ISI KONTEN HALAMAN]:
-${cleanText.substring(0, 7000)}
+[ISI KONTEN / DOKUMEN]:
+${cleanText.substring(0, 20000)}
+
+[INSTRUKSI KHUSUS PENGGUNA]:
+${userPrompt}
 
 Format ringkasan dalam Markdown yang elegan:
 ### 📄 Ringkasan Eksekutif
-(Satu paragraf ringkasan esensi utama)
+(Satu sampai dua paragraf ringkasan esensi utama dokumen)
 
-### 📌 Poin-Poin Kunci
-- (Gunakan bullet points berbobot dengan teks tebal pada topik penting)
+### 📌 Poin-Poin Kunci & Tujuan
+- (Gunakan bullet points berbobot dengan teks tebal pada topik/tujuan penting)
 
-### 💡 Kesimpulan & Tindak Lanjut
+### 💡 Kesimpulan & Rekomendasi
 (Penjelasan akhir yang aplikatif)`;
         }
       } else if (isBusinessOrPageAnalysis) {
