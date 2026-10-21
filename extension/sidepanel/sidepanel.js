@@ -48,6 +48,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const apiKeyInput = document.getElementById("apiKeyInput");
   const modelNameInput = document.getElementById("modelNameInput");
   const settingsSessionOnly = document.getElementById("settingsSessionOnly");
+  const settingsAutoPasteDocs = document.getElementById("settingsAutoPasteDocs");
   const btnSettingsTest = document.getElementById("btnSettingsTest");
   const settingsTestResult = document.getElementById("settingsTestResult");
   const btnToggleSettingsKey = document.getElementById("btnToggleSettingsKey");
@@ -86,6 +87,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const mentionPicker = document.getElementById("mentionPicker");
   const mentionPickerList = document.getElementById("mentionPickerList");
   const btnAttachFile = document.getElementById("btnAttachFile");
+  const btnToggleActiveTabContext = document.getElementById("btnToggleActiveTabContext");
+  const contextIndicatorDot = document.getElementById("contextIndicatorDot");
+  const activeTabContextStatus = document.getElementById("activeTabContextStatus");
   const btnTriggerMention = document.getElementById("btnTriggerMention");
   const fileInput = document.getElementById("fileInput");
   const dropOverlay = document.getElementById("dropOverlay");
@@ -140,13 +144,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   let activeAbortController = null;
   let visionEnabled = true;
   let googleConnected = false;
+  let isActiveTabContextEnabled = true;
+  try {
+    const savedToggle = localStorage.getItem("pesat_active_tab_context");
+    if (savedToggle !== null) {
+      isActiveTabContextEnabled = savedToggle === "true";
+    }
+  } catch (_) {}
   let storedSettings = {
     apiBaseUrl: CFG.DEFAULT_API_BASE_URL,
     apiFormat: CFG.DEFAULT_API_FORMAT,
     apiKey: "",
     modelName: CFG.DEFAULT_MODEL,
     sessionOnly: false,
-    googleClientId: ""
+    googleClientId: "",
+    autoPasteDocs: false
   };
 
   // Context & File Ingestion State (§ 6, 10, 11 PRD)
@@ -1495,7 +1507,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh data">📋 Salin Data</button>
                 <button class="doc-action-btn btn-doc-download" data-artifact-act="download_excel" title="Unduh spreadsheet Excel dengan format tabel visual rapi">⬇️ Unduh Excel (.xls)</button>
                 <button class="doc-action-btn" data-artifact-act="download_csv" title="Unduh file tabel dalam format data murni .CSV">⬇️ .CSV</button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel ke dokumen atau lembar kerja aktif">⤴️ Tempel ke Sheet</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Sheets baru di tab terpisah dan tempelkan rapi">⤴️ Tempel ke Sheet (Tab Baru)</button>
+                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Isikan langsung ke lembar kerja spreadsheet aktif saat ini">⤴️ Di Sheet Ini</button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -1518,7 +1531,8 @@ document.addEventListener("DOMContentLoaded", async () => {
               <div class="doc-card-actions">
                 <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi artikel">📋 Salin Teks</button>
                 <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Unduh file dokumen resmi Microsoft Word .docx">⬇️ Unduh Word (.docx)</button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke lembar kerja dokumen aktif">⤴️ Tempel ke Docs</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Docs baru di tab terpisah dan tempelkan rapi">⤴️ Tempel ke Docs (Tab Baru)</button>
+                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Tempelkan langsung di posisi kursor dokumen aktif saat ini">⤴️ Di Kursor Ini</button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -1624,7 +1638,7 @@ document.addEventListener("DOMContentLoaded", async () => {
               const ok = await downloadArtifactFile(docxName, docxBytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
               btn.textContent = ok ? "✓ Terunduh (.docx)!" : "✓ Terunduh!";
               setTimeout(() => { btn.textContent = origText; }, 2000);
-            } else if (act === "paste") {
+            } else if (act === "paste" || act === "paste_current") {
               const isSocialArt = a.artifactType === "social" || (a.name && (a.name.startsWith("Thread") || a.name.includes("Sosmed") || a.name.includes("Tweet")));
               setAgentRunning(true);
               try {
@@ -1674,13 +1688,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 			                    if (tabs && tabs[0]) currentTab = tabs[0];
 			                  } catch (e) {}
 
-				                  const isAlreadySheets = currentTab && (/docs\.google\.com\/spreadsheets/i.test(currentTab.url || "") || /excel\.office\.com/i.test(currentTab.url || ""));
-				                  if (!isAlreadySheets) {
-				                    appendLog("Membuka Google Sheets baru di tab baru (sheets.new)...");
-				                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new", newTab: true });
-				                    await new Promise(r => setTimeout(r, 4500));
-				                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
-				                  }
+					                  const isAlreadySheets = currentTab && (/docs\.google\.com\/spreadsheets/i.test(currentTab.url || "") || /excel\.office\.com/i.test(currentTab.url || ""));
+					                  if (act === "paste" || !isAlreadySheets) {
+					                    appendLog("Membuka Google Sheets baru di tab baru (sheets.new)...");
+					                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new", newTab: true });
+					                    await new Promise(r => setTimeout(r, 4500));
+					                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
+					                  }
 
 					                  let apiPasted = false;
 					                  const sMatch = (currentTab?.url || "").match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
@@ -1718,9 +1732,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 		                    if (tabs && tabs[0]) currentTab = tabs[0];
 		                  } catch (e) {}
 
-			                  const isAlreadyDocs = currentTab && (/docs\.google\.com\/document/i.test(currentTab.url || "") || /word\.office\.com/i.test(currentTab.url || ""));
-			                  if (!isAlreadyDocs) {
-			                    appendLog("Membuka lembar kerja Google Docs baru di tab baru (docs.new)...");
+				                  const isAlreadyDocs = currentTab && (/docs\.google\.com\/document/i.test(currentTab.url || "") || /word\.office\.com/i.test(currentTab.url || ""));
+				                  if (act === "paste" || !isAlreadyDocs) {
+				                    appendLog("Membuka lembar kerja Google Docs baru di tab baru (docs.new)...");
 			                    showStatusIndicator("Membuka Google Docs...");
 			                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://docs.new", newTab: true });
 
@@ -2036,7 +2050,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       apiKey: sessionKey || local.apiKey || "",
       modelName: activeModelId,
       sessionOnly: !!(sessionKey || local.sessionOnly),
-      googleClientId: local.googleClientId || ""
+      googleClientId: local.googleClientId || "",
+      autoPasteDocs: !!local.autoPasteDocs
     };
 
     // Sinkronisasi ke form Settings
@@ -2044,6 +2059,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (apiFormatSelect) apiFormatSelect.value = storedSettings.apiFormat;
     if (apiKeyInput) apiKeyInput.value = storedSettings.apiKey;
     if (settingsSessionOnly) settingsSessionOnly.checked = storedSettings.sessionOnly;
+    if (settingsAutoPasteDocs) settingsAutoPasteDocs.checked = storedSettings.autoPasteDocs;
     if (googleClientIdInput) googleClientIdInput.value = storedSettings.googleClientId;
 
     // Sinkronisasi ke form Wizard
@@ -2363,6 +2379,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   btnSaveSettings.addEventListener("click", async () => {
     const rawKey = (apiKeyInput?.value || "").trim();
     const sessionOnly = !!settingsSessionOnly?.checked;
+    const autoPasteDocs = !!settingsAutoPasteDocs?.checked;
     const base = (apiUrlInput?.value || "").trim() || CFG.DEFAULT_API_BASE_URL;
     const fmt = apiFormatSelect?.value || CFG.DEFAULT_API_FORMAT;
     const googleId = (googleClientIdInput?.value || "").trim();
@@ -2373,7 +2390,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       apiKey: rawKey,
       modelName: activeModelId,
       sessionOnly,
-      googleClientId: googleId
+      googleClientId: googleId,
+      autoPasteDocs
     };
 
     if (sessionOnly) {
@@ -2384,7 +2402,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         modelName: activeModelId,
         pesat_models: modelsList,
         sessionOnly: true,
-        googleClientId: googleId
+        googleClientId: googleId,
+        autoPasteDocs
       });
       await chrome.storage.local.remove(["apiKey"]);
     } else {
@@ -2395,7 +2414,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         modelName: activeModelId,
         pesat_models: modelsList,
         sessionOnly: false,
-        googleClientId: googleId
+        googleClientId: googleId,
+        autoPasteDocs
       });
       try { await chrome.storage.session.remove(["apiKey"]); } catch (e) {}
     }
@@ -3738,6 +3758,37 @@ Respon HANYA dalam format JSON valid:
     attachedContextSources = [];
     renderComposerChips();
 
+    // Auto-bind konteks tab aktif secara persisten jika toggle tab aktif menyala (Feedback Mas Alfu)
+    if (isActiveTabContextEnabled && typeof chrome !== "undefined" && chrome.tabs) {
+      try {
+        const activeTabs = await new Promise(res => chrome.tabs.query({ active: true, currentWindow: true }, res));
+        if (activeTabs && activeTabs[0] && activeTabs[0].id) {
+          const at = activeTabs[0];
+          const atUrl = at.url || "";
+          const isInternal = /^(chrome|edge|about|chrome-extension):\/\//i.test(atUrl);
+          if (!isInternal && !contextSourcesToSend.some(s => s.metadata?.tabId === at.id || s.id === `tab-${at.id}`)) {
+            contextSourcesToSend.unshift({
+              id: `tab-${at.id}`,
+              tabId: at.id,
+              name: at.title || "Tab Aktif",
+              title: at.title || "Tab Aktif",
+              url: at.url || "",
+              type: "BrowserTab",
+              metadata: {
+                tabId: at.id,
+                title: at.title,
+                url: at.url,
+                active: true,
+                domain: atUrl ? new URL(atUrl).hostname : ""
+              }
+            });
+          }
+        }
+      } catch (tabErr) {
+        console.warn("[Sidepanel] Auto-bind active tab context error:", tabErr);
+      }
+    }
+
     // Auto-detect dan resolve mention tab inline (misal @"Judul Halaman", "@tab1", "@tab2")
     const quotedMentions = userPrompt.match(/@"([^"]+)"/g) || [];
     const tabMentions = userPrompt.match(/@tab(\d+)/gi) || [];
@@ -3972,8 +4023,8 @@ Respon HANYA dalam format JSON valid:
         cleanText = cleanText.trim();
       }
 
-      // Jika belum ada cleanText dari referensi tab dan tidak ada file, ambil dari tab aktif saat ini
-      if (!cleanText && (!fileContextBlock || (!pageUrl.startsWith("chrome://") && !pageUrl.startsWith("about:")))) {
+      // Jika belum ada cleanText dari referensi tab dan tidak ada file, ambil dari tab aktif saat ini (jika konteks tab aktif ON)
+      if (isActiveTabContextEnabled && !cleanText && (!fileContextBlock || (!pageUrl.startsWith("chrome://") && !pageUrl.startsWith("about:")))) {
         const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
         const webText = textRes?.text || "";
         if (webText && webText.length > 20) {
@@ -4444,11 +4495,14 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
                            /x\.com|twitter\.com|linkedin\.com|facebook\.com|threads\.net|threads\.com/i.test(pageUrl);
       const userSocialFillIntent = /(?:isi|tempel|masukkan|tulis|posting|post)\s+(?:ke|di|pada)?\s*(?:threads|x|twitter|linkedin|medsos|postingan|komposer)/i.test(userPrompt);
 
-      if (isDocsOutput && (isDocsSite || isExplicitNavigateDocs)) {
+      const shouldAutoPasteDocs = !!storedSettings.autoPasteDocs && (isExplicitNavigateDocs || /(?:tulis|ketik|isi|tempel|salin)\s+ke\s+(?:docs|dokumen)/i.test(userPrompt));
+      const shouldAutoPasteSheets = !!storedSettings.autoPasteDocs && (isExplicitNavigateSheets || /(?:tulis|isi|tempel)\s+(?:ke\s+)?spreadsheet/i.test(userPrompt));
+
+      if (isDocsOutput && shouldAutoPasteDocs && (isDocsSite || isExplicitNavigateDocs)) {
         if (!isDocsSite && isExplicitNavigateDocs) {
-          appendLog("Membuka lembar kerja Google Docs baru (docs.new)...");
+          appendLog("Membuka lembar kerja Google Docs baru di tab baru (docs.new)...");
           showStatusIndicator("Membuka lembar kerja Google Docs...");
-          await sendToBackground({ action: "NAVIGATE_TAB", url: "https://docs.new" });
+          await sendToBackground({ action: "NAVIGATE_TAB", url: "https://docs.new", newTab: true });
 
           let docsReady = false;
           for (let i = 0; i < 20; i++) {
@@ -4481,11 +4535,11 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
           skipClean: true,
           artifact
         });
-      } else if (isSpreadsheetTask && !isSummarize && (isSheetsSite || isExplicitNavigateSheets)) {
+      } else if (isSpreadsheetTask && shouldAutoPasteSheets && !isSummarize && (isSheetsSite || isExplicitNavigateSheets)) {
         if (!isSheetsSite && isExplicitNavigateSheets) {
-          appendLog("Membuka lembar kerja Google Sheets baru (sheets.new)...");
+          appendLog("Membuka lembar kerja Google Sheets baru di tab baru (sheets.new)...");
           showStatusIndicator("Membuka lembar kerja Google Sheets...");
-          await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new" });
+          await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new", newTab: true });
 
           // Polling hingga tab aktif ter-redirect ke docs.google.com/spreadsheets (maksimal 20 detik)
           let sheetsReady = false;
@@ -4558,7 +4612,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
           skipClean: true,
           artifact
         });
-      } else if (isDocsSite && !isSocialThread && !isProductResearch && !isSpreadsheetTask && (
+      } else if (shouldAutoPasteDocs && isDocsSite && !isSocialThread && !isProductResearch && !isSpreadsheetTask && (
         isDocsTarget ||
         isDocsTableTask ||
         isDocsArticleTask ||
@@ -4692,7 +4746,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
       const targetEditorSource = (contextSources || []).find(s => s.type === "BrowserTab" && isEditorTab(s.metadata));
       const targetOtherSource = (contextSources || []).find(s => s.type === "BrowserTab" && s.metadata?.tabId);
 
-      if (isCopywritingTask && isEditorTab(activeTabInfo)) {
+      if (storedSettings.autoPasteDocs && isCopywritingTask && isEditorTab(activeTabInfo)) {
         appendLog(`📝 Tab editor dokumen (${activeTabInfo.title}) aktif. Menyusun draf dan menulis langsung ke dokumen...`);
         showStatusIndicator("Menyusun teks & menulis ke Google Docs...");
         const aiText = await callLLM("chat", `Tolong tuliskan konten/teks berikut secara lengkap, mendalam, dan rapi sesuai instruksi:\n\n[PERINTAH]\n${goal}\n\n[KONTEKS DOKUMEN]\nJudul: ${activeTabInfo.title || ""}\nURL: ${activeTabInfo.url || ""}`);
@@ -5116,7 +5170,7 @@ ATURAN KETAT:
 
       // Fast path untuk Google Docs saat subtask meminta membuat / menyisipkan tabel
       const isDocsPage = pageData?.url?.includes("docs.google.com") && !pageData?.url?.includes("/spreadsheets");
-      if (isDocsPage && /(?:tabel|table|sisipkan.*tabel|buat.*tabel|isi.*tabel)/i.test(sub.description || activeTask.goal)) {
+      if (storedSettings.autoPasteDocs && isDocsPage && /(?:tabel|table|sisipkan.*tabel|buat.*tabel|isi.*tabel)/i.test(sub.description || activeTask.goal)) {
         appendLog(`📄 Menyusun tabel terstruktur dan menuliskan langsung ke Google Docs...`);
         showStatusIndicator("Menuliskan tabel ke Google Docs...");
         const tablePrompt = `Tolong buatkan dokumen dengan tabel yang rapi, lengkap, dan berbobot sesuai permintaan berikut:\n\n[PERINTAH]\n${activeTask.goal}\n\nSubtask: ${sub.description}\n\nFormat tabel dalam Markdown table standar dengan header jelas dan baris data lengkap.`;
@@ -5432,7 +5486,7 @@ ${sub.description}
           const isDocs = pageData.url?.includes("docs.google.com") && !pageData.url?.includes("/spreadsheets");
           const isSheets = pageData.url?.includes("/spreadsheets") || pageData.url?.includes("excel.office.com");
 
-          if (isExplicitWriteIntent) {
+          if (storedSettings.autoPasteDocs && isExplicitWriteIntent) {
             if (isSheets && !activeTask._sheetWritten) {
               activeTask._sheetWritten = true;
               showStatusIndicator("Mengisikan data tabel ke Google Sheets...");
@@ -6228,6 +6282,59 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     }
     hideStatusIndicator();
     renderComposerChips();
+  }
+
+  // ── Active Tab Context Persistent Switch (§ Mas Alfu Feedback) ──
+  function updateActiveTabContextUI(tabTitle = "") {
+    if (!btnToggleActiveTabContext) return;
+    if (isActiveTabContextEnabled) {
+      btnToggleActiveTabContext.classList.add("active");
+      contextIndicatorDot?.classList.add("active");
+      if (activeTabContextStatus) activeTabContextStatus.textContent = "Tab Aktif: ON";
+      btnToggleActiveTabContext.title = tabTitle ? `Konteks Tab Aktif: ON (${tabTitle}). Klik untuk Nonaktifkan.` : "Konteks Tab Aktif: ON. Klik untuk Nonaktifkan.";
+    } else {
+      btnToggleActiveTabContext.classList.remove("active");
+      contextIndicatorDot?.classList.remove("active");
+      if (activeTabContextStatus) activeTabContextStatus.textContent = "Tab Aktif: OFF";
+      btnToggleActiveTabContext.title = "Konteks Tab Aktif: OFF. Klik untuk Aktifkan.";
+    }
+  }
+
+  if (btnToggleActiveTabContext) {
+    btnToggleActiveTabContext.addEventListener("click", () => {
+      isActiveTabContextEnabled = !isActiveTabContextEnabled;
+      try {
+        localStorage.setItem("pesat_active_tab_context", String(isActiveTabContextEnabled));
+      } catch (_) {}
+      if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          updateActiveTabContextUI(tabs && tabs[0] ? tabs[0].title : "");
+        });
+      } else {
+        updateActiveTabContextUI();
+      }
+      appendLog(isActiveTabContextEnabled ? "🌐 Konteks tab aktif dinyalakan (otomatis)." : "⚪ Konteks tab aktif dimatikan.");
+    });
+  }
+
+  // Update visual state on init & when tab switches in Chrome
+  if (typeof chrome !== "undefined" && chrome.tabs) {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs && tabs[0]) updateActiveTabContextUI(tabs[0].title);
+    });
+    chrome.tabs.onActivated?.addListener(async (activeInfo) => {
+      try {
+        const tab = await chrome.tabs.get(activeInfo.tabId);
+        if (tab) updateActiveTabContextUI(tab.title);
+      } catch (_) {}
+    });
+    chrome.tabs.onUpdated?.addListener((tabId, changeInfo, tab) => {
+      if (tab.active && changeInfo.title) {
+        updateActiveTabContextUI(changeInfo.title);
+      }
+    });
+  } else {
+    updateActiveTabContextUI();
   }
 
   // ── Event Listeners Mention & Files ──

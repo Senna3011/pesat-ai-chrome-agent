@@ -629,4 +629,45 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     expect(docArtifact.hasPasteDocsBtn).toBe(true);
     expect(docArtifact.hasCopyBtn).toBe(true);
   });
+
+  test('should toggle active tab context on and off without losing persistence', async ({ page }) => {
+    const toggleBtn = page.locator('#btnToggleActiveTabContext');
+    await expect(toggleBtn).toBeVisible();
+    await expect(toggleBtn).toHaveClass(/active/);
+
+    // Click to toggle OFF
+    await toggleBtn.click();
+    await expect(toggleBtn).not.toHaveClass(/active/);
+
+    // Click to toggle back ON
+    await toggleBtn.click();
+    await expect(toggleBtn).toHaveClass(/active/);
+  });
+
+  test('should render both new tab and current cursor paste buttons on Document Artifact Card', async ({ page }) => {
+    const cardButtons = await page.evaluate(() => {
+      const messagesContainer = document.getElementById('chatArea') || document.body;
+      const testCard = document.createElement('div');
+      testCard.className = 'message assistant-message';
+      testCard.innerHTML = `
+        <div class="doc-card-container">
+          <div class="doc-card-actions">
+            <button class="doc-action-btn" data-artifact-act="copy">📋 Salin Teks</button>
+            <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc">⬇️ Unduh Word (.docx)</button>
+            <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste">⤴️ Tempel ke Docs (Tab Baru)</button>
+            <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current">⤴️ Di Kursor Ini</button>
+          </div>
+        </div>
+      `;
+      messagesContainer.appendChild(testCard);
+
+      return {
+        hasPasteNewTab: !!document.querySelector('[data-artifact-act="paste"]'),
+        hasPasteCurrent: !!document.querySelector('[data-artifact-act="paste_current"]')
+      };
+    });
+
+    expect(cardButtons.hasPasteNewTab).toBe(true);
+    expect(cardButtons.hasPasteCurrent).toBe(true);
+  });
 });

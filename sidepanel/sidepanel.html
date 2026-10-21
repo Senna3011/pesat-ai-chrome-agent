@@ -290,6 +290,22 @@
           <div class="test-result-alert hidden" id="settingsTestResult"></div>
         </div>
 
+        <div class="config-field-group" style="margin-top:14px; margin-bottom:12px; padding:12px 14px; background:rgba(255,255,255,0.03); border-radius:10px; border:1px solid rgba(255,255,255,0.07); display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-weight:600; color:var(--text-primary); font-size:14px;">Auto-Paste ke Google Docs / Editor</div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">Langsung tempel ke kursor dokumen saat hasil selesai</div>
+            </div>
+            <label class="toggle-switch" title="Nyalakan / Matikan Auto-Paste ke Google Docs">
+              <input type="checkbox" id="settingsAutoPasteDocs" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div style="font-size:11.5px; color:var(--text-muted); line-height:1.4; border-top:1px solid rgba(255,255,255,0.05); padding-top:6px;">
+            💡 <em>Rekomendasi (OFF):</em> Hasil analisis disajikan di panel chat terlebih dahulu dengan opsi <strong>Tempel ke Docs (Tab Baru)</strong> agar susunan kursor Anda tidak rusak.
+          </div>
+        </div>
+
         <div class="usage-stats-card" id="usageStatsCard">
           <div class="usage-stats-title">📊 Penggunaan Hari Ini (Lokal)</div>
           <div class="usage-stats-row">
@@ -485,9 +501,12 @@
               </svg>
               <span>Lampirkan</span>
             </button>
-            <button type="button" class="composer-btn" id="btnTriggerMention" title="Sebut Tab / Konteks (@)">
+            <button type="button" class="composer-btn context-toggle-btn active" id="btnToggleActiveTabContext" title="Konteks Tab Aktif (Klik untuk Aktif/Nonaktif)">
+              <span class="context-indicator-dot active" id="contextIndicatorDot"></span>
+              <span id="activeTabContextStatus">Tab Aktif</span>
+            </button>
+            <button type="button" class="composer-btn" id="btnTriggerMention" title="Sebut Tab Lain / File (@)">
               <span style="font-size:14px; font-weight: 700; line-height: 1;">@</span>
-              <span>Konteks</span>
             </button>
             <input type="file" id="fileInput" style="display:none;" multiple accept=".csv,.xlsx,.xls,.json,.txt,.md,.pdf,.docx,.doc,.pptx,.ppt,.png,.jpg,.jpeg,.webp,.gif,.html,.xml" />
           </div>

@@ -15,6 +15,23 @@
       try {
         if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
           const allTabs = await chrome.tabs.query({ currentWindow: true });
+          const currentActiveTab = allTabs.find(t => t.active);
+          if (currentActiveTab) {
+            const activeConn = connectorsResult.find(c => c.id === "active-tab");
+            if (activeConn) {
+              activeConn.tabId = currentActiveTab.id;
+              activeConn.title = `Tab Aktif: ${currentActiveTab.title || "Halaman Ini"}`;
+              activeConn.url = currentActiveTab.url;
+              activeConn.metadata = {
+                tabId: currentActiveTab.id,
+                title: currentActiveTab.title,
+                url: currentActiveTab.url,
+                icon: "🌐",
+                active: true
+              };
+            }
+          }
+
           allTabs.forEach((tab, idx) => {
             if (!tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://")) return;
             const title = tab.title || "Tab";

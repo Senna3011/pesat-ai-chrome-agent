@@ -2128,10 +2128,39 @@ textarea::placeholder {
 		  transition: all 0.2s;
 		}
 
-		.composer-btn:hover {
-		  background: rgba(255, 255, 255, 0.12);
-		  color: var(--text-primary);
-		}
+			.composer-btn:hover {
+			  background: rgba(255, 255, 255, 0.12);
+			  color: var(--text-primary);
+			}
+
+			.context-toggle-btn {
+			  display: inline-flex;
+			  align-items: center;
+			  gap: 6px;
+			  background: rgba(255, 255, 255, 0.05);
+			  border: 1px solid rgba(255, 255, 255, 0.1);
+			  color: var(--text-secondary);
+			  transition: all 0.2s ease;
+			}
+
+			.context-toggle-btn.active {
+			  background: rgba(16, 185, 129, 0.12);
+			  border-color: rgba(16, 185, 129, 0.35);
+			  color: #34d399;
+			}
+
+			.context-indicator-dot {
+			  width: 7px;
+			  height: 7px;
+			  border-radius: 50%;
+			  background-color: var(--text-secondary);
+			  transition: all 0.2s ease;
+			}
+
+			.context-indicator-dot.active {
+			  background-color: #10b981;
+			  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+			}
 
 			.composer-model-pill {
 			  display: inline-flex;
