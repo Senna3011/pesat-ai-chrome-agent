@@ -779,6 +779,41 @@ html, body {
   color: var(--text-primary);
 }
 
+/* Assistant Message Action Toolbar (Copy & Paste to Tab) */
+.assistant-msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-left: 2px;
+}
+
+.assistant-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.assistant-action-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.assistant-action-btn:active {
+  transform: translateY(0);
+}
+
 /* ==========================================================================
    MARKDOWN & RESPONSIVE TABLE (Compact & Clean)
    ========================================================================== */
@@ -1391,11 +1426,71 @@ textarea::placeholder {
 	  animation: fadeIn 0.2s ease;
 	}
 
-	.modal-overlay.hidden {
-	  display: none !important;
-	}
+		.modal-overlay.hidden {
+		  display: none !important;
+		}
 
-	.provider-config-card {
+		.confirm-modal-box {
+		  width: 100%;
+		  max-width: 320px;
+		  background: #1e293b;
+		  border: 1px solid rgba(255, 255, 255, 0.12);
+		  border-radius: 14px;
+		  padding: 18px 20px;
+		  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+		  animation: modalScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+		  box-sizing: border-box;
+		}
+
+		.confirm-modal-header {
+		  display: flex;
+		  align-items: center;
+		  gap: 10px;
+		  margin-bottom: 8px;
+		}
+
+		.confirm-modal-icon {
+		  font-size: 20px;
+		}
+
+		.confirm-modal-title {
+		  margin: 0;
+		  font-size: 15px;
+		  font-weight: 700;
+		  color: var(--text-primary);
+		}
+
+		.confirm-modal-desc {
+		  font-size: 13px;
+		  color: var(--text-secondary);
+		  line-height: 1.5;
+		  margin-bottom: 16px;
+		}
+
+		.confirm-modal-actions {
+		  display: flex;
+		  justify-content: flex-end;
+		  gap: 8px;
+		}
+
+		.btn-danger-pill {
+		  background: #ef4444;
+		  color: #fff;
+		  border: none;
+		  padding: 6px 14px;
+		  border-radius: 9999px;
+		  font-size: 14px;
+		  font-weight: 600;
+		  cursor: pointer;
+		  transition: all 0.15s ease;
+		}
+
+		.btn-danger-pill:hover {
+		  background: #dc2626;
+		  transform: translateY(-1px);
+		}
+
+		.provider-config-card {
 	  width: 100%;
 	  max-width: 440px;
 	  background: #111122;

@@ -75,10 +75,36 @@ async function persistSWState() {
 
 hydrateSWState();
 
-// Buka side panel otomatis ketika ikon ekstensi di-klik di toolbar
+// Buka side panel otomatis ketika ikon ekstensi di-klik di toolbar atau via shortcut _execute_action
 chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
   .catch((error) => console.error("[Pesat SW] Error setting panel behavior:", error));
+
+if (chrome.action && chrome.action.onClicked) {
+  chrome.action.onClicked.addListener(async (tab) => {
+    try {
+      if (tab?.windowId && chrome.sidePanel?.open) {
+        await chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
+      }
+    } catch (_) {}
+  });
+}
+
+// Dukungan pintasan keyboard (Custom Hotkey) untuk buka/tutup sidepanel
+if (chrome.commands && chrome.commands.onCommand) {
+  chrome.commands.onCommand.addListener(async (command) => {
+    if (command === "_execute_action" || command === "_execute_side_panel" || command === "toggle_side_panel") {
+      try {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (activeTab?.windowId && chrome.sidePanel?.open) {
+          await chrome.sidePanel.open({ windowId: activeTab.windowId }).catch(() => {});
+        }
+      } catch (err) {
+        console.warn("[Pesat SW] Error opening side panel via command:", err);
+      }
+    }
+  });
+}
 
 function setupContextMenus() {
   if (!chrome.contextMenus) return;

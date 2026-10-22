@@ -20,6 +20,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   const agentStatusIndicator = document.getElementById("agentStatusIndicator");
   const statusIndicatorText = document.getElementById("statusIndicatorText");
 
+  const btnClearCurrentChat = document.getElementById("btnClearCurrentChat");
+  const clearChatModal = document.getElementById("clearChatModal");
+  const btnCancelClearChat = document.getElementById("btnCancelClearChat");
+  const btnConfirmClearChat = document.getElementById("btnConfirmClearChat");
   const btnNewChat = document.getElementById("btnNewChat");
   const btnHistory = document.getElementById("btnHistory");
   const btnMemory = document.getElementById("btnMemory");
@@ -426,6 +430,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     shouldStopAgent = true;
     cancelActiveTask("Pengguna memulai obrolan baru.");
 
+    // Tuntas bersihkan chip konteks lampiran & task state
+    attachedContextSources = [];
+    renderComposerChips();
+    activeTask = null;
+    clearPersistedTask();
+
     currentSessionId = "sess_" + Date.now();
     const newSession = {
       id: currentSessionId,
@@ -453,6 +463,40 @@ document.addEventListener("DOMContentLoaded", async () => {
     } catch (_) {}
 
     if (!silent) appendLog("Konteks obrolan baru dimulai.");
+  }
+
+  function clearCurrentSessionChat() {
+    const s = getCurrentSession();
+    if (!s) return;
+    if (activeAbortController) {
+      try { activeAbortController.abort(); } catch (e) {}
+      activeAbortController = null;
+    }
+    setAgentRunning(false);
+    hideStatusIndicator();
+    shouldStopAgent = true;
+    cancelActiveTask("Pengguna membersihkan obrolan sesi ini.");
+
+    s.messages = [];
+    saveSessions();
+    renderCurrentSession();
+
+    attachedContextSources = [];
+    renderComposerChips();
+    activeTask = null;
+    clearPersistedTask();
+
+    if (promptInput) {
+      promptInput.value = "";
+      promptInput.style.height = "auto";
+    }
+
+    try {
+      chrome.runtime.sendMessage({ action: "RESET_LOOP_TRACKER" });
+      updateTokenTrackerUI({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
+    } catch (_) {}
+
+    appendLog("🧹 Percakapan sesi ini berhasil dibersihkan.");
   }
 
   function getCurrentSession() {
@@ -1504,9 +1548,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
               </div>
               <div class="doc-card-actions">
-                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh data">📋 Salin Data</button>
+                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh penjelasan dan teks jawaban biasa">📋 Salin Teks</button>
+                <button class="doc-action-btn" data-artifact-act="copy_tsv" title="Salin data tabel dalam format baris & kolom untuk Spreadsheet / Excel">📊 Salin Data Sheet</button>
                 <button class="doc-action-btn btn-doc-download" data-artifact-act="download_excel" title="Unduh spreadsheet Excel dengan format tabel visual rapi">⬇️ Unduh Excel (.xls)</button>
-                <button class="doc-action-btn" data-artifact-act="download_csv" title="Unduh file tabel dalam format data murni .CSV">⬇️ .CSV</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_csv" title="Unduh file tabel dalam format data murni .CSV">⬇️ .CSV</button>
                 <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Sheets baru di tab terpisah dan tempelkan rapi">⤴️ Tempel ke Sheet (Tab Baru)</button>
                 <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Isikan langsung ke lembar kerja spreadsheet aktif saat ini">⤴️ Di Sheet Ini</button>
               </div>
@@ -1556,8 +1601,60 @@ document.addEventListener("DOMContentLoaded", async () => {
         <div class="message-actions">
           <button class="action-icon-btn btn-edit-prompt" title="Edit prompt & jalankan ulang">✏️ Edit</button>
         </div>
-      ` : ''}
+      ` : (!msg.artifact && !msg.askUser && !msg.confirmation && msgText.trim() ? `
+        <div class="assistant-msg-actions">
+          <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
+            <span>📋</span>
+            <span class="btn-copy-text">Salin</span>
+          </button>
+          <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
+            <span>⤴️</span>
+            <span class="btn-paste-text">Tempel ke Tab</span>
+          </button>
+        </div>
+      ` : '')}
     `;
+
+    // Event listener untuk tombol Salin & Tempel respons AI
+    const btnCopy = msgDiv.querySelector(".btn-copy-response");
+    if (btnCopy) {
+      btnCopy.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(msgText);
+          const textEl = btnCopy.querySelector(".btn-copy-text") || btnCopy;
+          const orig = textEl.textContent;
+          textEl.textContent = "✓ Tersalin!";
+          setTimeout(() => { textEl.textContent = orig; }, 1800);
+        } catch (e) {
+          appendLog(`Gagal menyalin teks: ${e.message}`, "WARN");
+        }
+      });
+    }
+
+    const btnPaste = msgDiv.querySelector(".btn-paste-response");
+    if (btnPaste) {
+      btnPaste.addEventListener("click", async () => {
+        try {
+          const textEl = btnPaste.querySelector(".btn-paste-text") || btnPaste;
+          textEl.textContent = "⏳ Menempelkan...";
+          const res = await sendToContentScript({
+            type: "EXECUTE_ACTION",
+            actionData: { action: "paste_text", value: msgText }
+          }, 15000);
+          if (res && res.success === false) {
+            throw new Error(res.error || "Gagal menempelkan teks ke tab aktif");
+          }
+          textEl.textContent = "✓ Tertempel!";
+          appendLog("⤴️ Teks jawaban AI berhasil ditempelkan ke tab aktif.");
+          setTimeout(() => { textEl.textContent = "Tempel ke Tab"; }, 1800);
+        } catch (err) {
+          appendLog(`Gagal menempelkan teks: ${err.message}`, "WARN");
+          const textEl = btnPaste.querySelector(".btn-paste-text") || btnPaste;
+          textEl.textContent = "⚠️ Gagal";
+          setTimeout(() => { textEl.textContent = "Tempel ke Tab"; }, 1800);
+        }
+      });
+    }
 
     if (isUser) {
       const btnEdit = msgDiv.querySelector(".btn-edit-prompt");
@@ -1604,17 +1701,21 @@ document.addEventListener("DOMContentLoaded", async () => {
           const contentStr = a.content || "";
           try {
             if (act === "copy") {
+              await navigator.clipboard.writeText(contentStr);
+              appendLog(`📋 Teks "${a.name}" disalin ke clipboard.`);
+              const origText = btn.textContent;
+              btn.textContent = "✓ Teks Tersalin!";
+              setTimeout(() => { btn.textContent = origText; }, 1800);
+            } else if (act === "copy_tsv") {
               let copyPayload = contentStr;
-              if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.endsWith(".xls") || a.name?.includes("Tabel") || a.name?.includes("Spreadsheet")) {
-                const tableRows = typeof parseMarkdownTable === "function" ? parseMarkdownTable(contentStr) : null;
-                if (tableRows && tableRows.length > 0) {
-                  copyPayload = tableRows.map(r => r.join("\t")).join("\r\n");
-                }
+              const tableRows = typeof parseMarkdownTable === "function" ? parseMarkdownTable(contentStr) : null;
+              if (tableRows && tableRows.length > 0) {
+                copyPayload = tableRows.map(r => r.join("\t")).join("\r\n");
               }
               await navigator.clipboard.writeText(copyPayload);
-              appendLog(`📋 Data/Dokumen "${a.name}" disalin ke clipboard.`);
+              appendLog(`📊 Data sheet "${a.name}" disalin ke clipboard (format TSV/Excel).`);
               const origText = btn.textContent;
-              btn.textContent = "✓ Tersalin!";
+              btn.textContent = "✓ Data Sheet Tersalin!";
               setTimeout(() => { btn.textContent = origText; }, 1800);
             } else if (act === "download_excel") {
               const xlsName = (a.name || "Tabel-Riset-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "").replace(/\.csv$/, "") + ".xls";
@@ -2424,6 +2525,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     settingsPanel.classList.add("hidden");
     appendLog("✅ Pengaturan API pesatrouter disimpan.");
   });
+
+  const btnOpenShortcuts = document.getElementById("btnOpenShortcuts");
+  if (btnOpenShortcuts) {
+    btnOpenShortcuts.addEventListener("click", () => {
+      if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.create) {
+        chrome.tabs.create({ url: "chrome://extensions/shortcuts" });
+      }
+    });
+  }
 
   // ── BYOK Gate Helper (pesan panduan jika mencoba chat tanpa key) ──
   function showByokGateMessage() {
@@ -6594,6 +6704,30 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   // ═══════════════════════════════════════════════════
   // HEADER & DRAWERS & EXPORT
   // ═══════════════════════════════════════════════════
+  if (btnClearCurrentChat) {
+    btnClearCurrentChat.addEventListener("click", () => {
+      const s = getCurrentSession();
+      if (!s || s.messages.length === 0) {
+        appendLog("Sesi obrolan saat ini sudah bersih.");
+        return;
+      }
+      if (clearChatModal) clearChatModal.classList.remove("hidden");
+    });
+  }
+
+  if (btnCancelClearChat) {
+    btnCancelClearChat.addEventListener("click", () => {
+      if (clearChatModal) clearChatModal.classList.add("hidden");
+    });
+  }
+
+  if (btnConfirmClearChat) {
+    btnConfirmClearChat.addEventListener("click", () => {
+      if (clearChatModal) clearChatModal.classList.add("hidden");
+      clearCurrentSessionChat();
+    });
+  }
+
   btnNewChat.addEventListener("click", () => {
     historyDrawer?.classList.add("hidden");
     memoryDrawer?.classList.add("hidden");
@@ -6869,6 +7003,9 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   // Global UX Keyboard Handler: Tutup dialog dengan tombol Escape
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      if (clearChatModal && !clearChatModal.classList.contains("hidden")) {
+        clearChatModal.classList.add("hidden");
+      }
       if (settingsPanel && !settingsPanel.classList.contains("hidden")) {
         settingsPanel.classList.add("hidden");
       }

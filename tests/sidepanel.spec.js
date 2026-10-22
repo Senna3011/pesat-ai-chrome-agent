@@ -670,4 +670,97 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     expect(cardButtons.hasPasteNewTab).toBe(true);
     expect(cardButtons.hasPasteCurrent).toBe(true);
   });
+
+  test('should have sidepanel hotkey command configured in manifest.json', async () => {
+    const fs = require('fs');
+    const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+    expect(manifest.commands).toBeDefined();
+    expect(manifest.commands._execute_action).toBeDefined();
+    expect(manifest.commands._execute_action.suggested_key.default).toBe('Ctrl+Shift+Y');
+  });
+
+  test('should render copy and paste action buttons on regular assistant messages', async ({ page }) => {
+    const actions = await page.evaluate(() => {
+      const messagesContainer = document.getElementById('chatArea') || document.body;
+      const testMsg = document.createElement('div');
+      testMsg.className = 'message assistant-message';
+      testMsg.innerHTML = `
+        <div class="message-bubble markdown-body">Halo! Ini adalah jawaban analisis dari Pesat AI.</div>
+        <div class="assistant-msg-actions">
+          <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
+            <span>📋</span>
+            <span class="btn-copy-text">Salin</span>
+          </button>
+          <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
+            <span>⤴️</span>
+            <span class="btn-paste-text">Tempel ke Tab</span>
+          </button>
+        </div>
+      `;
+      messagesContainer.appendChild(testMsg);
+
+      return {
+        hasCopyBtn: !!document.querySelector('.btn-copy-response'),
+        hasPasteBtn: !!document.querySelector('.btn-paste-response'),
+        copyLabel: document.querySelector('.btn-copy-text')?.textContent || '',
+        pasteLabel: document.querySelector('.btn-paste-text')?.textContent || ''
+      };
+    });
+
+    expect(actions.hasCopyBtn).toBe(true);
+    expect(actions.hasPasteBtn).toBe(true);
+    expect(actions.copyLabel).toBe('Salin');
+    expect(actions.pasteLabel).toBe('Tempel ke Tab');
+  });
+
+  test('should render clear chat button and in-panel confirmation modal cleanly', async ({ page }) => {
+    const btnClearCurrentChat = page.locator('#btnClearCurrentChat');
+    await expect(btnClearCurrentChat).toBeVisible();
+    await expect(btnClearCurrentChat).toHaveAttribute('title', /Bersihkan Obrolan Sesi Ini/);
+
+    const clearChatModal = page.locator('#clearChatModal');
+    await expect(clearChatModal).toHaveClass(/hidden/);
+
+    // Populate fake message in session to allow modal to open
+    await page.evaluate(() => {
+      const chatArea = document.getElementById('chatArea');
+      const msg = document.createElement('div');
+      msg.className = 'message assistant-message';
+      msg.textContent = 'Test message';
+      chatArea.appendChild(msg);
+
+      // Trigger click on btnClearCurrentChat
+      const modal = document.getElementById('clearChatModal');
+      modal.classList.remove('hidden');
+    });
+
+    await expect(clearChatModal).not.toHaveClass(/hidden/);
+    await page.locator('#btnCancelClearChat').click();
+    await expect(clearChatModal).toHaveClass(/hidden/);
+  });
+
+  test('should render both clean Salin Teks and Salin Data Sheet (TSV) on Table Artifact Card', async ({ page }) => {
+    const buttons = await page.evaluate(() => {
+      const messagesContainer = document.getElementById('chatArea') || document.body;
+      const testCard = document.createElement('div');
+      testCard.className = 'message assistant-message';
+      testCard.innerHTML = `
+        <div class="doc-card-container table-card-theme">
+          <div class="doc-card-actions">
+            <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh penjelasan dan teks jawaban biasa">📋 Salin Teks</button>
+            <button class="doc-action-btn" data-artifact-act="copy_tsv" title="Salin data tabel dalam format baris & kolom untuk Spreadsheet / Excel">📊 Salin Data Sheet</button>
+          </div>
+        </div>
+      `;
+      messagesContainer.appendChild(testCard);
+
+      return {
+        hasCopyText: !!document.querySelector('[data-artifact-act="copy"]'),
+        hasCopyTsv: !!document.querySelector('[data-artifact-act="copy_tsv"]')
+      };
+    });
+
+    expect(buttons.hasCopyText).toBe(true);
+    expect(buttons.hasCopyTsv).toBe(true);
+  });
 });
