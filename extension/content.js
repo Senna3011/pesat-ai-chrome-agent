@@ -364,6 +364,10 @@
       .pesat-tb-ask:hover {
         background: #0369a1 !important;
       }
+      .pesat-tb-close:hover {
+        background: #ef4444 !important;
+        color: #ffffff !important;
+      }
       #pesat-selection-popover {
         position: absolute !important;
         display: none;
@@ -4165,6 +4169,24 @@
     rect: null,
     targetElement: null
   };
+  let enableInPageToolbar = true;
+  try {
+    if (typeof chrome !== "undefined" && chrome.storage?.local) {
+      chrome.storage.local.get(["enableInPageToolbar"], (res) => {
+        if (typeof res?.enableInPageToolbar === "boolean") {
+          enableInPageToolbar = res.enableInPageToolbar;
+        }
+      });
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === "local" && changes.enableInPageToolbar) {
+          enableInPageToolbar = changes.enableInPageToolbar.newValue !== false;
+          if (!enableInPageToolbar && pesatSelectionToolbar) {
+            pesatSelectionToolbar.style.display = "none";
+          }
+        }
+      });
+    }
+  } catch (_) {}
 
   function captureActivePageSelection() {
     let text = "";
@@ -4175,7 +4197,7 @@
     // 1. Cek window selection dokumen utama
     try {
       const selection = window.getSelection();
-      if (selection && selection.toString().trim()) {
+      if (selection && !selection.isCollapsed && selection.toString().trim()) {
         text = selection.toString().trim();
         if (selection.rangeCount > 0) {
           range = selection.getRangeAt(0);
@@ -4204,31 +4226,32 @@
         for (const ifr of iframes) {
           try {
             const ifrSel = ifr.contentWindow?.getSelection();
-            const ifrText = ifrSel ? ifrSel.toString().trim() : "";
-            if (ifrText && ifrSel.rangeCount > 0) {
-              text = ifrText;
-              range = ifrSel.getRangeAt(0);
-              const r = range.getBoundingClientRect();
-              const ifrRect = ifr.getBoundingClientRect();
-              rect = {
-                top: r.top + ifrRect.top,
-                bottom: r.bottom + ifrRect.top,
-                left: r.left + ifrRect.left,
-                right: r.right + ifrRect.left,
-                width: r.width,
-                height: r.height
-              };
-              targetElement = ifr;
-              break;
+            if (ifrSel && !ifrSel.isCollapsed && ifrSel.toString().trim()) {
+              const ifrText = ifrSel.toString().trim();
+              if (ifrText && ifrSel.rangeCount > 0) {
+                text = ifrText;
+                range = ifrSel.getRangeAt(0);
+                const r = range.getBoundingClientRect();
+                const ifrRect = ifr.getBoundingClientRect();
+                rect = {
+                  top: r.top + ifrRect.top,
+                  bottom: r.bottom + ifrRect.top,
+                  left: r.left + ifrRect.left,
+                  right: r.right + ifrRect.left,
+                  width: r.width,
+                  height: r.height
+                };
+                targetElement = ifr;
+                break;
+              }
             }
           } catch (_) {}
         }
       } catch (_) {}
     }
 
-    if (text && text.length >= 2) {
-      latestActiveSelection = { text, range, rect, targetElement };
-    }
+    // KUNCI: Selalu perbarui latestActiveSelection dengan kondisi terkini (kosong jika unhighlight)
+    latestActiveSelection = { text, range, rect, targetElement };
     return latestActiveSelection;
   }
 
@@ -4256,6 +4279,24 @@
     if (pesatSelectionToolbar) pesatSelectionToolbar.style.display = "none";
   }
 
+  function handleSelectionChange() {
+    try {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+        if (pesatSelectionToolbar && !pesatSelectionPopover?.matches(":hover")) {
+          pesatSelectionToolbar.style.display = "none";
+        }
+      }
+    } catch (_) {}
+  }
+
+  function handleKeyDownGlobal(e) {
+    if (e.key === "Escape") {
+      if (pesatSelectionToolbar) pesatSelectionToolbar.style.display = "none";
+      if (pesatSelectionPopover) pesatSelectionPopover.style.display = "none";
+    }
+  }
+
   function destroyPesatUI() {
     try {
       if (contextCheckInterval) {
@@ -4264,6 +4305,8 @@
       }
       document.removeEventListener("mouseup", handleTextSelection);
       document.removeEventListener("mousedown", handleDocumentMouseDown);
+      document.removeEventListener("selectionchange", handleSelectionChange);
+      window.removeEventListener("keydown", handleKeyDownGlobal);
       const hosts = Array.from(document.querySelectorAll("pesat-ai-agent-host, #pesat-ai-agent-host-root"));
       hosts.forEach(h => {
         try { h.remove(); } catch (_) {}
@@ -4378,6 +4421,8 @@
     try {
       document.addEventListener("mouseup", handleTextSelection);
       document.addEventListener("mousedown", handleDocumentMouseDown);
+      document.addEventListener("selectionchange", handleSelectionChange);
+      window.addEventListener("keydown", handleKeyDownGlobal);
 
       if (!contextCheckInterval) {
         contextCheckInterval = setInterval(() => {
@@ -4392,6 +4437,10 @@
   function handleTextSelection() {
     if (!isContextValid()) {
       destroyPesatUI();
+      return;
+    }
+    if (!enableInPageToolbar) {
+      if (pesatSelectionToolbar) pesatSelectionToolbar.style.display = "none";
       return;
     }
     setTimeout(() => {
@@ -4417,6 +4466,7 @@
           <button class="pesat-tb-btn" data-action="explain" title="Jelaskan konsep">💡 Jelaskan</button>
           <button class="pesat-tb-btn" data-action="polish" title="Perbaiki tata bahasa">✏️ Perbaiki</button>
           <button class="pesat-tb-btn pesat-tb-ask" data-action="ask" title="Tanyakan di Sidepanel">⚡ Tanya AI</button>
+          <button class="pesat-tb-btn pesat-tb-close" data-action="close" title="Tutup Toolbar (Esc)" style="color:#94a3b8!important; padding:5px 8px!important;">✕</button>
         `;
 
         // PENTING: Mencegah seleksi teks di halaman kolaps saat tombol toolbar ditekan
@@ -4429,6 +4479,11 @@
           const btn = ev.target.closest(".pesat-tb-btn");
           if (!btn) return;
           const action = btn.getAttribute("data-action");
+
+          if (action === "close") {
+            pesatSelectionToolbar.style.display = "none";
+            return;
+          }
 
           // Selalu gunakan seleksi teks yang paling baru, bukan closure variabel basi
           const fresh = captureActivePageSelection();

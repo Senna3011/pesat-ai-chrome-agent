@@ -53,6 +53,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const modelNameInput = document.getElementById("modelNameInput");
   const settingsSessionOnly = document.getElementById("settingsSessionOnly");
   const settingsAutoPasteDocs = document.getElementById("settingsAutoPasteDocs");
+  const settingsEnableInPageToolbar = document.getElementById("settingsEnableInPageToolbar");
   const btnSettingsTest = document.getElementById("btnSettingsTest");
   const settingsTestResult = document.getElementById("settingsTestResult");
   const btnToggleSettingsKey = document.getElementById("btnToggleSettingsKey");
@@ -2152,7 +2153,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       modelName: activeModelId,
       sessionOnly: !!(sessionKey || local.sessionOnly),
       googleClientId: local.googleClientId || "",
-      autoPasteDocs: !!local.autoPasteDocs
+      autoPasteDocs: !!local.autoPasteDocs,
+      enableInPageToolbar: local.enableInPageToolbar !== false
     };
 
     // Sinkronisasi ke form Settings
@@ -2161,6 +2163,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (apiKeyInput) apiKeyInput.value = storedSettings.apiKey;
     if (settingsSessionOnly) settingsSessionOnly.checked = storedSettings.sessionOnly;
     if (settingsAutoPasteDocs) settingsAutoPasteDocs.checked = storedSettings.autoPasteDocs;
+    if (settingsEnableInPageToolbar) settingsEnableInPageToolbar.checked = storedSettings.enableInPageToolbar;
     if (googleClientIdInput) googleClientIdInput.value = storedSettings.googleClientId;
 
     // Sinkronisasi ke form Wizard
@@ -2481,6 +2484,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const rawKey = (apiKeyInput?.value || "").trim();
     const sessionOnly = !!settingsSessionOnly?.checked;
     const autoPasteDocs = !!settingsAutoPasteDocs?.checked;
+    const enableInPageToolbar = settingsEnableInPageToolbar ? !!settingsEnableInPageToolbar.checked : true;
     const base = (apiUrlInput?.value || "").trim() || CFG.DEFAULT_API_BASE_URL;
     const fmt = apiFormatSelect?.value || CFG.DEFAULT_API_FORMAT;
     const googleId = (googleClientIdInput?.value || "").trim();
@@ -2492,7 +2496,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       modelName: activeModelId,
       sessionOnly,
       googleClientId: googleId,
-      autoPasteDocs
+      autoPasteDocs,
+      enableInPageToolbar
     };
 
     if (sessionOnly) {
@@ -2504,7 +2509,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         pesat_models: modelsList,
         sessionOnly: true,
         googleClientId: googleId,
-        autoPasteDocs
+        autoPasteDocs,
+        enableInPageToolbar
       });
       await chrome.storage.local.remove(["apiKey"]);
     } else {
@@ -2516,7 +2522,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         pesat_models: modelsList,
         sessionOnly: false,
         googleClientId: googleId,
-        autoPasteDocs
+        autoPasteDocs,
+        enableInPageToolbar
       });
       try { await chrome.storage.session.remove(["apiKey"]); } catch (e) {}
     }

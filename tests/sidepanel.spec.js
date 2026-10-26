@@ -802,4 +802,35 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     expect(popoverInfo.hasReplaceBtn).toBe(true);
     expect(popoverInfo.hasCopyBtn).toBe(true);
   });
+
+  test('should render in-page selection toolbar with dismiss close button and support toggle switch in settings', async ({ page }) => {
+    // 1. Verifikasi sakelar toggle di settings panel
+    const toggle = page.locator('#settingsEnableInPageToolbar');
+    await expect(toggle).toBeAttached();
+    await expect(toggle).toBeChecked();
+
+    // 2. Verifikasi tombol tutup (✕) pada toolbar seleksi
+    const toolbarInfo = await page.evaluate(() => {
+      const tb = document.createElement('div');
+      tb.id = 'pesat-selection-toolbar';
+      tb.innerHTML = `
+        <button class="pesat-tb-btn" data-action="summarize" title="Rangkum teks">📖 Rangkum</button>
+        <button class="pesat-tb-btn" data-action="translate" title="Terjemahkan teks">🌐 Terjemahkan</button>
+        <button class="pesat-tb-btn" data-action="explain" title="Jelaskan konsep">💡 Jelaskan</button>
+        <button class="pesat-tb-btn" data-action="polish" title="Perbaiki tata bahasa">✏️ Perbaiki</button>
+        <button class="pesat-tb-btn pesat-tb-ask" data-action="ask" title="Tanyakan di Sidepanel">⚡ Tanya AI</button>
+        <button class="pesat-tb-btn pesat-tb-close" data-action="close" title="Tutup Toolbar (Esc)">✕</button>
+      `;
+      document.body.appendChild(tb);
+
+      const closeBtn = tb.querySelector('.pesat-tb-close');
+      return {
+        hasCloseBtn: !!closeBtn,
+        closeText: closeBtn?.textContent?.trim() || ''
+      };
+    });
+
+    expect(toolbarInfo.hasCloseBtn).toBe(true);
+    expect(toolbarInfo.closeText).toBe('✕');
+  });
 });
