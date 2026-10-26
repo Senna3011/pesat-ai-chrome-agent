@@ -4193,7 +4193,7 @@ Respon HANYA dalam format JSON valid:
       // 4. isDocsArticleTask: jika tujuannya Google Docs dan meminta pembuatan dokumen/tulisan/pembahasan/analisis/makna/rangkuman
       const isDocsArticleTask = !isExplicitExcelOrCsv && !isSpreadsheetTask && !isDocsTableTask && isDocsTarget && (
         isSocialCopywritingForDocs ||
-        /(?:artikel|tulis|buatkan|buat|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat|jelaskan|makna|simpan|isi|masukkan|rangkum|ringkas|ulas|bahas|analisis|catat|paparkan|video|ganti|ubah|edit|perbarui|modifikasi|perusahaan)/i.test(userPrompt) ||
+        /(?:artikel|tulis|buatkan|buat|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat|jelaskan|makna|simpan|isi|masukkan|rangkum|ringkas|ulas|bahas|analisis|catat|paparkan|video|ganti|ubah|edit|perbarui|modifikasi|perbaiki|koreksi|rapikan|perusahaan)/i.test(userPrompt) ||
         userExplicitDocs
       );
 
@@ -4202,7 +4202,7 @@ Respon HANYA dalam format JSON valid:
       const isSeo = !isSummarize && !isDocsTarget && /(?:seo|meta|kata kunci|keyword)/i.test(userPrompt);
       const isSecurity = !isSummarize && !isDocsTarget && /(?:keamanan|security|audit keamanan|ssl|https)/i.test(userPrompt);
       const isProductResearch = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isGeneralTableTask && !isSocialThread && /(?:riset produk|laptop|harga|rekomendasi produk|komparasi|spesifikasi|cari produk|tokopedia|shopee|produk)/i.test(userPrompt);
-      const isArticle = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isDocsArticleTask && !isGeneralTableTask && !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat)/i.test(userPrompt);
+      const isArticle = !isSummarize && !isSpreadsheetTask && !isDocsTableTask && !isDocsArticleTask && !isGeneralTableTask && !isSocialThread && !isProductResearch && /(?:artikel|tulis|buatkan|paragraf|berita|top\s*\d+|blog post|esai|tulisan|draf|dokumen|konten|surat|perbaiki|koreksi|rapikan)/i.test(userPrompt);
       const isBusinessOrPageAnalysis = !isSummarize && !isSeo && !isSecurity && !isDocsTarget && !isSpreadsheetTask && /(?:analisa|analisis|analyze|analysis|audit|review|tinjau|bedah|evaluasi|periksa|cek|riset|business profile|google business|profil bisnis|toko|kompetitor)\b/i.test(userPrompt);
 
       let promptPayload = "";

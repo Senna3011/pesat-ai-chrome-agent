@@ -395,7 +395,7 @@
         display: flex !important;
         gap: 6px !important;
       }
-      .pesat-popover-copy, .pesat-popover-close {
+      .pesat-popover-copy, .pesat-popover-replace, .pesat-popover-close {
         background: #334155 !important;
         border: none !important;
         color: #f8fafc !important;
@@ -403,6 +403,14 @@
         border-radius: 4px !important;
         font-size: 12px !important;
         cursor: pointer !important;
+      }
+      .pesat-popover-replace {
+        background: rgba(16, 185, 129, 0.2) !important;
+        border: 1px solid rgba(16, 185, 129, 0.4) !important;
+        color: #34d399 !important;
+      }
+      .pesat-popover-replace:hover {
+        background: rgba(16, 185, 129, 0.35) !important;
       }
       .pesat-popover-close:hover {
         background: #ef4444 !important;
@@ -4151,6 +4159,78 @@
   // ─────────────────────────────────────────────────────
   let pesatSelectionToolbar = null;
   let pesatSelectionPopover = null;
+  let latestActiveSelection = {
+    text: "",
+    range: null,
+    rect: null,
+    targetElement: null
+  };
+
+  function captureActivePageSelection() {
+    let text = "";
+    let range = null;
+    let rect = null;
+    let targetElement = null;
+
+    // 1. Cek window selection dokumen utama
+    try {
+      const selection = window.getSelection();
+      if (selection && selection.toString().trim()) {
+        text = selection.toString().trim();
+        if (selection.rangeCount > 0) {
+          range = selection.getRangeAt(0);
+          rect = range.getBoundingClientRect();
+          targetElement = range.commonAncestorContainer?.nodeType === 1
+            ? range.commonAncestorContainer
+            : range.commonAncestorContainer?.parentElement;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Cek input / textarea jika sedang aktif
+    if (!text && document.activeElement && (document.activeElement.tagName === "TEXTAREA" || document.activeElement.tagName === "INPUT")) {
+      const el = document.activeElement;
+      if (typeof el.selectionStart === "number" && typeof el.selectionEnd === "number" && el.selectionStart !== el.selectionEnd) {
+        text = el.value.substring(el.selectionStart, el.selectionEnd).trim();
+        rect = el.getBoundingClientRect();
+        targetElement = el;
+      }
+    }
+
+    // 3. Cek same-origin iframes (seperti Elementor preview / WordPress iframe / Google Docs)
+    if (!text) {
+      try {
+        const iframes = Array.from(document.querySelectorAll("iframe"));
+        for (const ifr of iframes) {
+          try {
+            const ifrSel = ifr.contentWindow?.getSelection();
+            const ifrText = ifrSel ? ifrSel.toString().trim() : "";
+            if (ifrText && ifrSel.rangeCount > 0) {
+              text = ifrText;
+              range = ifrSel.getRangeAt(0);
+              const r = range.getBoundingClientRect();
+              const ifrRect = ifr.getBoundingClientRect();
+              rect = {
+                top: r.top + ifrRect.top,
+                bottom: r.bottom + ifrRect.top,
+                left: r.left + ifrRect.left,
+                right: r.right + ifrRect.left,
+                width: r.width,
+                height: r.height
+              };
+              targetElement = ifr;
+              break;
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
+
+    if (text && text.length >= 2) {
+      latestActiveSelection = { text, range, rect, targetElement };
+    }
+    return latestActiveSelection;
+  }
 
   function escapeHtmlText(str) {
     if (!str) return "";
@@ -4315,8 +4395,8 @@
       return;
     }
     setTimeout(() => {
-      const selection = window.getSelection();
-      const text = selection ? selection.toString().trim() : "";
+      const active = captureActivePageSelection();
+      const text = active.text;
       if (!text || text.length < 3) {
         if (pesatSelectionToolbar && !pesatSelectionPopover?.matches(":hover")) {
           pesatSelectionToolbar.style.display = "none";
@@ -4324,8 +4404,7 @@
         return;
       }
 
-      const range = selection.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
+      const rect = active.rect;
       if (!rect || rect.width === 0 || rect.height === 0) return;
 
       const root = getOrCreatePesatShadowRoot();
@@ -4340,11 +4419,21 @@
           <button class="pesat-tb-btn pesat-tb-ask" data-action="ask" title="Tanyakan di Sidepanel">⚡ Tanya AI</button>
         `;
 
+        // PENTING: Mencegah seleksi teks di halaman kolaps saat tombol toolbar ditekan
+        pesatSelectionToolbar.addEventListener("mousedown", (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+        });
+
         pesatSelectionToolbar.addEventListener("click", (ev) => {
           const btn = ev.target.closest(".pesat-tb-btn");
           if (!btn) return;
           const action = btn.getAttribute("data-action");
-          const currentText = window.getSelection()?.toString().trim() || text;
+
+          // Selalu gunakan seleksi teks yang paling baru, bukan closure variabel basi
+          const fresh = captureActivePageSelection();
+          const currentText = fresh.text || latestActiveSelection.text;
+          if (!currentText || currentText.length < 2) return;
 
           if (action === "ask") {
             safeSendMessage({ action: "TOGGLE_SIDEPANEL" });
@@ -4355,7 +4444,7 @@
             return;
           }
 
-          showSelectionPopover(currentText, action, rect);
+          showSelectionPopover(currentText, action, fresh.rect || latestActiveSelection.rect || rect);
         });
 
         root.appendChild(pesatSelectionToolbar);
@@ -4384,10 +4473,16 @@
       polish: "✏️ Teks Hasil Koreksi"
     };
 
+    const snippet = selectedText.length > 50 ? selectedText.substring(0, 47) + "..." : selectedText;
+
     pesatSelectionPopover.innerHTML = `
       <div class="pesat-popover-header">
-        <span class="pesat-popover-title">${actionLabels[taskType] || "⚡ Pesat AI"}</span>
+        <div style="display:flex; flex-direction:column; gap:2px; max-width:230px; overflow:hidden;">
+          <span class="pesat-popover-title">${actionLabels[taskType] || "⚡ Pesat AI"}</span>
+          <span class="pesat-popover-snippet" title="${escapeHtmlText(selectedText)}" style="font-size:11px; color:#94a3b8; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">Teks: "${escapeHtmlText(snippet)}"</span>
+        </div>
         <div class="pesat-popover-actions">
+          <button class="pesat-popover-replace" title="Ganti langsung teks di halaman" style="display:none;">⤴️ Ganti Teks</button>
           <button class="pesat-popover-copy" title="Salin Jawaban">📋 Salin</button>
           <button class="pesat-popover-close" title="Tutup">✕</button>
         </div>
@@ -4397,22 +4492,31 @@
       </div>
     `;
 
-    const popoverTop = anchorRect.bottom + window.scrollY + 8;
-    const popoverLeft = Math.min(window.innerWidth - 370, Math.max(10, anchorRect.left + window.scrollX));
+    const popoverTop = (anchorRect?.bottom || 0) + window.scrollY + 8;
+    const popoverLeft = Math.min(window.innerWidth - 370, Math.max(10, (anchorRect?.left || 10) + window.scrollX));
     pesatSelectionPopover.style.top = `${popoverTop}px`;
     pesatSelectionPopover.style.left = `${popoverLeft}px`;
     pesatSelectionPopover.style.display = "block";
 
     const bodyEl = pesatSelectionPopover.querySelector(".pesat-popover-body");
     const copyBtn = pesatSelectionPopover.querySelector(".pesat-popover-copy");
+    const replaceBtn = pesatSelectionPopover.querySelector(".pesat-popover-replace");
     const closeBtn = pesatSelectionPopover.querySelector(".pesat-popover-close");
 
     closeBtn.onclick = () => { pesatSelectionPopover.style.display = "none"; };
 
+    // Simpan referensi target untuk penggantian teks in-place
+    const targetEl = latestActiveSelection.targetElement;
+    const targetRange = latestActiveSelection.range;
+    const isEditable = targetEl && (targetEl.isContentEditable || targetEl.tagName === "TEXTAREA" || targetEl.tagName === "INPUT");
+
     safeSendMessage({
       action: "IN_PAGE_AI_QUERY",
       taskType,
-      selectedText
+      selectedText,
+      pageTitle: document.title || "",
+      pageUrl: window.location.href,
+      domain: window.location.hostname
     }, (res) => {
       if (res && res.success) {
         bodyEl.innerHTML = `<div class="pesat-popover-content">${renderInPageMarkdown(res.reply)}</div>`;
@@ -4422,6 +4526,28 @@
             setTimeout(() => { copyBtn.textContent = "📋 Salin"; }, 2000);
           });
         };
+
+        if (replaceBtn && isEditable && (taskType === "polish" || taskType === "translate")) {
+          replaceBtn.style.display = "inline-block";
+          replaceBtn.onclick = () => {
+            try {
+              if (targetEl.tagName === "TEXTAREA" || targetEl.tagName === "INPUT") {
+                const start = targetEl.selectionStart;
+                const end = targetEl.selectionEnd;
+                const val = targetEl.value;
+                targetEl.value = val.substring(0, start) + res.reply + val.substring(end);
+                targetEl.dispatchEvent(new Event("input", { bubbles: true }));
+              } else if (targetRange) {
+                targetRange.deleteContents();
+                targetRange.insertNode(document.createTextNode(res.reply));
+              }
+              replaceBtn.textContent = "✓ Terganti";
+              setTimeout(() => { replaceBtn.textContent = "⤴️ Ganti Teks"; }, 2000);
+            } catch (err) {
+              console.warn("[Pesat In-Page] Ganti teks gagal:", err);
+            }
+          };
+        }
       } else {
         bodyEl.innerHTML = `<div class="pesat-popover-error">⚠️ ${res?.error || "Gagal memproses permintaan."}</div>`;
       }

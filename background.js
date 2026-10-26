@@ -822,7 +822,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "IN_PAGE_AI_QUERY") {
     (async () => {
       try {
-        const { taskType, selectedText, customPrompt } = request;
+        const { taskType, selectedText, customPrompt, pageTitle, domain } = request;
+        const domainCtx = domain ? ` pada situs ${domain}` : "";
+        const titleCtx = pageTitle ? ` (Halaman: "${pageTitle}")` : "";
+
         let instruction = "";
         if (taskType === "search_copilot") {
           instruction = `Pengguna mencari di search engine: "${selectedText}".
@@ -831,13 +834,23 @@ Sajikan ringkasan wawasan langsung yang padat, akurat, dan sangat enak dibaca:
 2. Jika berupa konsep/pertanyaan/topik: sajikan jawaban inti langsung dalam 2-3 poin kunci.
 Gunakan format poin (- **Label:** Penjelasan) yang rapi tanpa basa-basi pembuka atau penutup.`;
         } else if (taskType === "summarize") {
-          instruction = `Rangkum teks berikut secara padat dan jelas dalam 2-3 poin penting:\n\n"${selectedText}"`;
+          instruction = `Berikut adalah teks yang diambil dari peramban${domainCtx}${titleCtx}:\n"""\n${selectedText}\n"""\n\nTUGAS: Rangkum teks di atas secara padat dan jelas dalam 2-3 poin penting tanpa kalimat pembuka/penutup basa-basi.`;
         } else if (taskType === "translate") {
-          instruction = `Terjemahkan teks berikut ke Bahasa Indonesia (atau ke Bahasa Inggris jika teks aslinya Bahasa Indonesia):\n\n"${selectedText}"`;
+          instruction = `Berikut adalah teks yang diambil dari peramban${domainCtx}${titleCtx}:\n"""\n${selectedText}\n"""\n\nTUGAS: Terjemahkan teks di atas ke Bahasa Indonesia (atau ke Bahasa Inggris jika teks aslinya Bahasa Indonesia) secara natural, akurat, dan langsung ke hasil terjemahan.`;
         } else if (taskType === "explain") {
-          instruction = `Jelaskan istilah penting atau substansi teks berikut secara ringkas dan informatif:\n\n"${selectedText}"`;
+          instruction = `Berikut adalah teks yang diambil dari peramban${domainCtx}${titleCtx}:\n"""\n${selectedText}\n"""\n\nTUGAS: Jelaskan substansi atau konsep penting dari teks di atas secara ringkas dan informatif langsung ke poin utama.`;
         } else if (taskType === "polish") {
-          instruction = `Perbaiki tata bahasa, ejaan, dan struktur teks berikut agar lebih profesional tanpa mengubah makna aslinya:\n\n"${selectedText}"`;
+          instruction = `Berikut adalah teks yang diambil dari peramban${domainCtx}${titleCtx}:
+"""
+${selectedText}
+"""
+
+TUGAS: Perbaiki tata bahasa, ejaan, tanda baca, dan susunan kalimat teks di atas agar mengalir natural, rapi, dan profesional sesuai konteks halaman tersebut.
+ATURAN KETAT:
+1. Pertahankan BAHASA ASLI teks (jika teks bahasa Inggris, perbaiki dalam bahasa Inggris; jika bahasa Indonesia, perbaiki dalam bahasa Indonesia). Jangan pernah menerjemahkan ke bahasa lain kecuali diminta eksplisit.
+2. Pertahankan keakuratan istilah teknis, nama variabel, dan konteks industri.
+3. JANGAN menambahkan kalimat pembuka atau penutup (seperti "Berikut versi perbaikannya:", "Versi Bahasa Inggris:", atau keterangan perubahan).
+4. Berikan HANYA teks hasil perbaikannya secara langsung.`;
         } else {
           instruction = customPrompt || selectedText;
         }
@@ -850,6 +863,8 @@ Gunakan format poin (- **Label:** Penjelasan) yang rapi tanpa basa-basi pembuka 
         const endpoint = apiUrl.endsWith("/chat/completions") ? apiUrl : `${apiUrl.replace(/\/+$/, "")}/chat/completions`;
         const systemPrompt = taskType === "search_copilot"
           ? "Kamu adalah Pesat AI Web Copilot. Berikan intisari informasi yang sangat rapi, akurat, dan langsung menjawab pencarian pengguna tanpa kalimat pembuka atau penutup klise."
+          : taskType === "polish"
+          ? "Kamu adalah asisten penyunting teks profesional dari Pesat AI. Tugasmu adalah memperbaiki tata bahasa, ejaan, dan struktur kalimat teks pengguna dengan mempertahankan bahasa asli teks tersebut secara 100%. Keluarkan HANYA teks yang telah diperbaiki tanpa pengantar, tanpa label versi bahasa, dan tanpa penutup."
           : "Kamu adalah asisten in-page cepat dari Pesat AI. Berikan jawaban yang padat, presisi, dan langsung ke inti jawaban tanpa basa-basi pembuka/penutup.";
 
         const res = await fetch(endpoint, {

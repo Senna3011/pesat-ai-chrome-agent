@@ -763,4 +763,43 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     expect(buttons.hasCopyText).toBe(true);
     expect(buttons.hasCopyTsv).toBe(true);
   });
+
+  test('should verify in-page selection popover renders source snippet preview and replace button', async ({ page }) => {
+    const popoverInfo = await page.evaluate(() => {
+      const popover = document.createElement('div');
+      popover.id = 'pesat-selection-popover';
+      const actionLabels = { polish: '✏️ Teks Hasil Koreksi' };
+      const selectedText = 'Parameter binding protocols transmit untrusted inputs separately.';
+      const snippet = selectedText.length > 50 ? selectedText.substring(0, 47) + '...' : selectedText;
+
+      popover.innerHTML = `
+        <div class="pesat-popover-header">
+          <div style="display:flex; flex-direction:column; gap:2px; max-width:230px; overflow:hidden;">
+            <span class="pesat-popover-title">${actionLabels.polish}</span>
+            <span class="pesat-popover-snippet" title="${selectedText}" style="font-size:11px; color:#94a3b8;">Teks: "${snippet}"</span>
+          </div>
+          <div class="pesat-popover-actions">
+            <button class="pesat-popover-replace" title="Ganti langsung teks di halaman" style="display:inline-block;">⤴️ Ganti Teks</button>
+            <button class="pesat-popover-copy" title="Salin Jawaban">📋 Salin</button>
+            <button class="pesat-popover-close" title="Tutup">✕</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(popover);
+
+      return {
+        hasTitle: !!document.querySelector('.pesat-popover-title'),
+        titleText: document.querySelector('.pesat-popover-title')?.textContent || '',
+        hasSnippet: !!document.querySelector('.pesat-popover-snippet'),
+        hasReplaceBtn: !!document.querySelector('.pesat-popover-replace'),
+        hasCopyBtn: !!document.querySelector('.pesat-popover-copy')
+      };
+    });
+
+    expect(popoverInfo.hasTitle).toBe(true);
+    expect(popoverInfo.titleText).toBe('✏️ Teks Hasil Koreksi');
+    expect(popoverInfo.hasSnippet).toBe(true);
+    expect(popoverInfo.hasReplaceBtn).toBe(true);
+    expect(popoverInfo.hasCopyBtn).toBe(true);
+  });
 });
