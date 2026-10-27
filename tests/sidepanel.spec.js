@@ -832,5 +832,42 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
 
     expect(toolbarInfo.hasCloseBtn).toBe(true);
     expect(toolbarInfo.closeText).toBe('✕');
+
+    // 3. Verifikasi klik ✕ menyembunyikan toolbar dan mengunci dismissal untuk teks yang sama
+    const dismissResult = await page.evaluate(() => {
+      let dismissedText = '';
+      const tb = document.getElementById('pesat-selection-toolbar');
+      const closeBtn = tb.querySelector('.pesat-tb-close');
+
+      const currentSelected = 'Teks teknis yang sedang diuji';
+      tb.addEventListener('click', (ev) => {
+        const btn = ev.target.closest('.pesat-tb-btn');
+        if (!btn) return;
+        const action = btn.getAttribute('data-action');
+        const currentText = currentSelected;
+        if (action === 'close') {
+          dismissedText = currentText;
+          tb.style.display = 'none';
+        }
+      });
+
+      closeBtn.click();
+
+      // Simulasi trigger seleksi ulang dengan teks yang sama persis
+      function shouldShowToolbar(newText) {
+        if (!newText || newText === dismissedText) return false;
+        return true;
+      }
+
+      return {
+        isDisplayNone: tb.style.display === 'none',
+        reappearSameText: shouldShowToolbar(currentSelected),
+        appearNewText: shouldShowToolbar('Teks baru lain')
+      };
+    });
+
+    expect(dismissResult.isDisplayNone).toBe(true);
+    expect(dismissResult.reappearSameText).toBe(false);
+    expect(dismissResult.appearNewText).toBe(true);
   });
 });

@@ -4169,6 +4169,7 @@
     rect: null,
     targetElement: null
   };
+  let dismissedSelectionText = "";
   let enableInPageToolbar = true;
   try {
     if (typeof chrome !== "undefined" && chrome.storage?.local) {
@@ -4282,7 +4283,11 @@
   function handleSelectionChange() {
     try {
       const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+      const selText = sel ? sel.toString().trim() : "";
+      if (dismissedSelectionText && selText !== dismissedSelectionText) {
+        dismissedSelectionText = "";
+      }
+      if (!sel || sel.isCollapsed || !selText) {
         if (pesatSelectionToolbar && !pesatSelectionPopover?.matches(":hover")) {
           pesatSelectionToolbar.style.display = "none";
         }
@@ -4292,6 +4297,7 @@
 
   function handleKeyDownGlobal(e) {
     if (e.key === "Escape") {
+      dismissedSelectionText = latestActiveSelection.text || "";
       if (pesatSelectionToolbar) pesatSelectionToolbar.style.display = "none";
       if (pesatSelectionPopover) pesatSelectionPopover.style.display = "none";
     }
@@ -4446,7 +4452,7 @@
     setTimeout(() => {
       const active = captureActivePageSelection();
       const text = active.text;
-      if (!text || text.length < 3) {
+      if (!text || text.length < 3 || (dismissedSelectionText && text === dismissedSelectionText)) {
         if (pesatSelectionToolbar && !pesatSelectionPopover?.matches(":hover")) {
           pesatSelectionToolbar.style.display = "none";
         }
@@ -4475,19 +4481,27 @@
           ev.stopPropagation();
         });
 
+        // PENTING: Cegah mouseup di dalam toolbar merembes ke document dan memicu handleTextSelection kembali
+        pesatSelectionToolbar.addEventListener("mouseup", (ev) => {
+          ev.stopPropagation();
+        });
+
         pesatSelectionToolbar.addEventListener("click", (ev) => {
+          ev.stopPropagation();
           const btn = ev.target.closest(".pesat-tb-btn");
           if (!btn) return;
           const action = btn.getAttribute("data-action");
 
+          // Selalu gunakan seleksi teks yang paling baru, bukan closure variabel basi
+          const fresh = captureActivePageSelection();
+          const currentText = fresh.text || latestActiveSelection.text || "";
+
           if (action === "close") {
+            dismissedSelectionText = currentText;
             pesatSelectionToolbar.style.display = "none";
             return;
           }
 
-          // Selalu gunakan seleksi teks yang paling baru, bukan closure variabel basi
-          const fresh = captureActivePageSelection();
-          const currentText = fresh.text || latestActiveSelection.text;
           if (!currentText || currentText.length < 2) return;
 
           if (action === "ask") {
