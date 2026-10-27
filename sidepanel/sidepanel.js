@@ -4120,41 +4120,53 @@ Respon HANYA dalam format JSON valid:
           const rTitle = refTab.metadata?.title || refTab.title || refTab.name || "Tab";
           appendLog(`📖 Membaca konten referensi dari [${rTitle}]...`);
           try {
-            const tabTextRes = await sendToBackground({
-              action: "GET_READABLE_TEXT",
-              tabId: tId
-            });
-            const tText = tabTextRes?.text || "";
-            if (tText && tText.trim().length > 20) {
-              cleanText += `\n\n[KONTEN DARI TAB: "${rTitle}" (${tabTextRes?.url || refTab.url || ""})]:\n${tText.trim()}`;
-              pageTitle = tabTextRes?.title || rTitle;
-              pageUrl = tabTextRes?.url || refTab.url || pageUrl;
-              appendLog(`✓ Berhasil membaca ${tText.trim().length} karakter dari tab "${rTitle}".`);
-            } else {
-              appendLog(`⚠️ Tab "${rTitle}" tidak memuat teks yang cukup.`, "WARN");
-            }
-          } catch (e) {
-            appendLog(`Gagal membaca tab "${rTitle}": ${e.message}`, "WARN");
-          }
-        }
-        cleanText = cleanText.trim();
-      }
+	            const tabTextRes = await sendToBackground({
+	              action: "GET_READABLE_TEXT",
+	              tabId: tId
+	            });
+	            const tText = tabTextRes?.text || "";
+	            if (tText && tText.trim().length > 20) {
+	              cleanText += `\n\n[KONTEN DARI TAB: "${rTitle}" (${tabTextRes?.url || refTab.url || ""})]:\n${tText.trim()}`;
+	              pageTitle = tabTextRes?.title || rTitle;
+	              pageUrl = tabTextRes?.url || refTab.url || pageUrl;
+	              const subtabMatch = tText.match(/Subtab Aktif Saat Ini:\s*"([^"]+)"/i);
+	              const subtabLabel = subtabMatch ? ` [Subtab: "${subtabMatch[1]}"]` : "";
+	              appendLog(`✓ Berhasil membaca ${tText.trim().length} karakter dari tab "${rTitle}"${subtabLabel}.`);
+	            } else {
+	              appendLog(`⚠️ Tab "${rTitle}" tidak memuat teks yang cukup.`, "WARN");
+	            }
+	          } catch (e) {
+	            appendLog(`Gagal membaca tab "${rTitle}": ${e.message}`, "WARN");
+	          }
+	        }
+	        cleanText = cleanText.trim();
+	      }
 
-      // Jika belum ada cleanText dari referensi tab dan tidak ada file, ambil dari tab aktif saat ini (jika konteks tab aktif ON)
-      if (isActiveTabContextEnabled && !cleanText && (!fileContextBlock || (!pageUrl.startsWith("chrome://") && !pageUrl.startsWith("about:")))) {
-        const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
-        const webText = textRes?.text || "";
-        if (webText && webText.length > 20) {
-          cleanText = webText;
-          pageTitle = activeTabInfo?.title || textRes?.title || pageTitle;
-          pageUrl = activeTabInfo?.url || textRes?.url || pageUrl;
-        } else if (!fileContextBlock) {
-          const scanFallback = await sendToContentScript({ type: "SCAN_DOM", showOverlay: false });
-          cleanText = scanFallback?.data?.pageContent || "";
-          pageTitle = activeTabInfo?.title || scanFallback?.data?.title || pageTitle;
-          pageUrl = activeTabInfo?.url || scanFallback?.data?.url || pageUrl;
-        }
-      }
+	      // Jika belum ada cleanText dari referensi tab dan tidak ada file, ambil dari tab aktif saat ini (jika konteks tab aktif ON)
+	      if (isActiveTabContextEnabled && !cleanText && (!fileContextBlock || (!pageUrl.startsWith("chrome://") && !pageUrl.startsWith("about:")))) {
+	        const textRes = await sendToContentScript({ type: "GET_READABLE_TEXT" });
+	        const webText = textRes?.text || "";
+	        if (webText && webText.length > 20) {
+	          cleanText = webText;
+	          pageTitle = activeTabInfo?.title || textRes?.title || pageTitle;
+	          pageUrl = activeTabInfo?.url || textRes?.url || pageUrl;
+	          const subtabMatch = webText.match(/Subtab Aktif Saat Ini:\s*"([^"]+)"/i);
+	          const subtabSource = webText.match(/Sumber Deteksi Tab:\s*(\S+)/i);
+	          if (subtabMatch) {
+	            const src = subtabSource ? ` via ${subtabSource[1]}` : "";
+	            appendLog(`📑 Dokumen Google Docs terdeteksi — Subtab aktif: "${subtabMatch[1]}"${src}.`);
+	            if (subtabMatch[1] === "Tidak terdeteksi") {
+	              appendLog("⚠️ ID tab aktif tidak ditemukan. Pastikan Anda sudah berpindah tab di Google Docs setelah halaman dimuat ulang, lalu coba lagi.", "WARN");
+	            }
+	          }
+	          appendLog(`✓ Berhasil membaca ${webText.trim().length} karakter dari tab aktif "${pageTitle}".`);
+	        } else if (!fileContextBlock) {
+	          const scanFallback = await sendToContentScript({ type: "SCAN_DOM", showOverlay: false });
+	          cleanText = scanFallback?.data?.pageContent || "";
+	          pageTitle = activeTabInfo?.title || scanFallback?.data?.title || pageTitle;
+	          pageUrl = activeTabInfo?.url || scanFallback?.data?.url || pageUrl;
+	        }
+	      }
 
       if (fileContextBlock) {
         cleanText = `${fileContextBlock}\n\n${cleanText ? `[KONTEKS HALAMAN WEB]:\n${cleanText}` : ""}`.trim();
@@ -4799,12 +4811,14 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
               action: "GET_READABLE_TEXT",
               tabId: targetTabId
             });
-            if (tabRes && tabRes.text && tabRes.text.length > 20) {
-              src.content = tabRes.text;
-              src.metadata = src.metadata || {};
-              src.metadata.extractedText = tabRes.text.slice(0, 6000);
-              appendLog(`📖 Referensi "${src.title || src.name}" berhasil diekstrak di latar belakang (${src.metadata.extractedText.length} karakter).`);
-            }
+	            if (tabRes && tabRes.text && tabRes.text.length > 20) {
+	              src.content = tabRes.text;
+	              src.metadata = src.metadata || {};
+	              src.metadata.extractedText = tabRes.text.slice(0, 6000);
+	              const subtabMatch = tabRes.text.match(/Subtab Aktif Saat Ini:\s*"([^"]+)"/i);
+	              const subtabLabel = subtabMatch ? ` [Subtab: "${subtabMatch[1]}"]` : "";
+	              appendLog(`📖 Referensi "${src.title || src.name}" berhasil diekstrak di latar belakang (${src.metadata.extractedText.length} karakter)${subtabLabel}.`);
+	            }
           } catch (e) {}
         }
       }

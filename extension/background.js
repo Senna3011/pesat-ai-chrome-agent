@@ -313,6 +313,37 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  // Ambil teks isi satu tab Google Docs (Document Tabs). Fetch dari service worker agar
+  // lolos CORS via host_permissions, dan ikut mengirim cookie sesi Docs pengguna.
+  if (request.action === "FETCH_GDOCS_TAB_TEXT") {
+    (async () => {
+      try {
+        const url = String(request.url || "");
+        if (!/^https:\/\/docs\.google\.com\/document\/d\/[A-Za-z0-9_-]+\/export\?/i.test(url)) {
+          sendResponse({ ok: false, text: "", error: "URL export Google Docs tidak valid." });
+          return;
+        }
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(url, { credentials: "include", redirect: "follow", signal: controller.signal });
+        clearTimeout(timer);
+        if (!res.ok) {
+          sendResponse({ ok: false, text: "", status: res.status, error: `HTTP ${res.status}` });
+          return;
+        }
+        const txt = await res.text();
+        if (!txt || txt.trim().length < 10 || /^\s*<(?:!doctype|html)/i.test(txt)) {
+          sendResponse({ ok: false, text: "", error: "Respons bukan teks dokumen (kemungkinan halaman login)." });
+          return;
+        }
+        sendResponse({ ok: true, text: txt.trim() });
+      } catch (err) {
+        sendResponse({ ok: false, text: "", error: err.message });
+      }
+    })();
+    return true;
+  }
+
   // Ambil teks murni artikel (Readable Text) secara langsung dari tab aktif atau tab spesifik (tabId)
   if (request.action === "GET_READABLE_TEXT" || request.type === "GET_READABLE_TEXT") {
     const targetTabId = request.tabId || request.payload?.tabId;

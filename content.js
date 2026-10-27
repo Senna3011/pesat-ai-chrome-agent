@@ -1277,13 +1277,227 @@
     return `[YOUTUBE VIDEO INFORMATION]\nJudul: ${title}\nChannel: ${channel}\n\n[DESKRIPSI VIDEO]:\n${description}\n\n${transcriptText ? `[TRANSKRIP VIDEO]:\n${transcriptText.slice(0, 8000)}` : "(Transkrip otomatis belum dibuka; deskripsi video di atas digunakan sebagai dasar analisis)"}`;
   }
 
+  // Helper: Deteksi dan Ekstraksi Google Docs Subtabs (Document Tabs)
+  function readDocsTabIdFromUrl() {
+    const m = window.location.href.match(/[?&#]tab=(t\.[A-Za-z0-9_-]+)/);
+    return m ? m[1] : "";
+  }
+
+  function tabIdOfElement(el) {
+    const raw = el.getAttribute("data-tab-id") || el.getAttribute("data-id") || "";
+    if (/^t\.[A-Za-z0-9_-]+$/.test(raw)) return raw;
+    const aria = el.getAttribute("aria-controls") || el.getAttribute("aria-owns") || "";
+    const am = aria.match(/(t\.[A-Za-z0-9_-]+)/);
+    if (am) return am[1];
+    const idm = (el.id || "").match(/(t\.[A-Za-z0-9_-]+)/);
+    return idm ? idm[1] : "";
+  }
+
+  function parseGoogleDocsSubtabs() {
+    const isDocs = window.location.hostname.includes("docs.google.com") && window.location.pathname.includes("/document/d/");
+    if (!isDocs) return null;
+
+    const docIdMatch = window.location.pathname.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+    const docId = docIdMatch ? docIdMatch[1] : null;
+
+    const rawTitle = document.querySelector(".docs-title-input, [data-tooltip='Rename']")?.value || document.title || "Dokumen Google Docs";
+    const docTitle = rawTitle.replace(/\s*-\s*Google (?:Docs|Dokumen)\s*$/i, "").trim();
+
+    // 1. Prioritas utama: ID subtab aktif dari URL (?tab=t.xxx). Google Docs selalu menulisnya saat berpindah tab.
+    let activeTabId = readDocsTabIdFromUrl();
+    let tabSource = activeTabId ? "url" : "none";
+    let activeTabTitle = "";
+
+    // 2. Document Tabs asli di sidebar. Sengaja TIDAK memakai .navigation-item / [role="treeitem"],
+    //    karena itu elemen outline heading, bukan tab dokumen — sumber salah-deteksi "Tab 1".
+    const allSubtabs = [];
+    const realTabEls = Array.from(document.querySelectorAll(
+      '[data-tab-id], .docs-tabs-tab-item, .docs-tabs-tab-item-selected, [role="tab"], [role="treeitem"][aria-selected]'
+    ))
+      .filter((el) => {
+        const tId = tabIdOfElement(el);
+        if (!tId) return false;
+        // Buang wrapper besar; tab asli punya label pendek.
+        const label = (el.querySelector(".docs-tabs-tab-label") || el).textContent || "";
+        return label.trim().length > 0 && label.trim().length <= 160;
+      });
+
+    for (const tabEl of realTabEls) {
+      const tId = tabIdOfElement(tabEl);
+      const isSelected = tabEl.getAttribute("aria-selected") === "true" ||
+                         tabEl.getAttribute("aria-current") === "true" ||
+                         tabEl.classList.contains("docs-tabs-tab-item-selected") ||
+                         tabEl.classList.contains("docs-tab-active");
+
+      const tTitle = (tabEl.querySelector(".docs-tabs-tab-label") || tabEl)
+        .textContent?.trim().replace(/\s+/g, " ") || "";
+
+      if (tTitle && tId && !allSubtabs.some((s) => s.id === tId)) {
+        allSubtabs.push({ id: tId, title: tTitle, isSelected });
+      }
+    }
+
+    if (!activeTabId) {
+      const selectedEl = allSubtabs.find((s) => s.isSelected);
+      if (selectedEl) {
+        activeTabId = selectedEl.id;
+        activeTabTitle = selectedEl.title;
+        tabSource = "dom";
+      }
+    }
+
+    if (!activeTabTitle && activeTabId) {
+      const found = allSubtabs.find((s) => s.id === activeTabId || s.id.replace(/^t\./, "") === activeTabId.replace(/^t\./, ""));
+      if (found) activeTabTitle = found.title;
+    }
+    if (!activeTabTitle) {
+      activeTabTitle = activeTabId ? `Subtab ${activeTabId}` : "Tidak terdeteksi";
+    }
+
+    return {
+      docId,
+      docTitle,
+      activeTabId,
+      activeTabTitle,
+      tabSource,
+      allSubtabs
+    };
+  }
+
+  function buildDocsSubtabsSummary(allSubtabs, activeTabId, activeTabTitle) {
+    if (allSubtabs.length === 0) return activeTabTitle;
+    return allSubtabs
+      .map((s) => `${s.title}${s.isSelected || s.id === activeTabId ? " (AKTIF)" : ""}`)
+      .join(", ");
+  }
+
+  // Bandingkan judul tab dengan isi teks export untuk memastikan isi yang terbaca memang dari tab tersebut.
+  function tabTextMatchesTitle(text, title) {
+    if (!text || !title || title === "Tidak terdeteksi") return true;
+    const key = title.replace(/^(?:Tab|Subtab)\s*\d+\s*[-–:.]?\s*/i, "").trim().toLowerCase();
+    if (key.length < 4) return true;
+    const probe = key.split(/\s+/).slice(0, 3).join(" ");
+    return text.toLowerCase().includes(probe);
+  }
+
+  async function fetchDocsTabText(docId, tabId) {
+    if (!docId) return { text: "", via: "none" };
+    const url = `https://docs.google.com/document/d/${docId}/export?format=txt${tabId ? `&tab=${encodeURIComponent(tabId)}` : ""}`;
+
+    // 1) Fetch same-origin dari content script (membawa cookie sesi Docs milik pengguna)
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(url, { credentials: "include", signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const txt = await res.text();
+        if (txt && txt.trim().length > 10 && !/^\s*<(?:!doctype|html)/i.test(txt)) {
+          return { text: txt.trim(), via: "content" };
+        }
+      }
+    } catch (_) {}
+
+    // 2) Fetch lewat service worker (host_permissions https://*/* menembus batasan CORS halaman)
+    try {
+      const bgRes = await new Promise((resolve) => {
+        try {
+          safeSendMessage({ action: "FETCH_GDOCS_TAB_TEXT", url }, (r) => resolve(r || null));
+        } catch (_) {
+          resolve(null);
+        }
+      });
+      if (bgRes && bgRes.ok && typeof bgRes.text === "string" && bgRes.text.trim().length > 10) {
+        return { text: bgRes.text.trim(), via: "background" };
+      }
+    } catch (_) {}
+
+    return { text: "", via: "none" };
+  }
+
+  function extractGoogleDocsContentSync() {
+    const meta = parseGoogleDocsSubtabs();
+    if (!meta) return null;
+
+    const { docTitle, activeTabId, activeTabTitle, tabSource, allSubtabs } = meta;
+    const subtabsSummary = buildDocsSubtabsSummary(allSubtabs, activeTabId, activeTabTitle);
+
+    const outlineItems = Array.from(document.querySelectorAll(".outline-item, .navigation-item"))
+      .map((el) => el.textContent?.trim().replace(/\s+/g, " "))
+      .filter(Boolean);
+
+    const domContent = outlineItems.length > 0
+      ? `[OUTLINE HEADING DOKUMEN (BUKAN ISI TAB)]\n- ${outlineItems.slice(0, 30).join("\n- ")}`
+      : "(Isi dokumen tidak dapat dibaca dari DOM)";
+
+    return `[DOKUMEN GOOGLE DOCS: "${docTitle}"]
+Subtab Aktif Saat Ini: "${activeTabTitle}"${activeTabId ? ` (ID: ${activeTabId})` : ""}
+Sumber Deteksi Tab: ${tabSource}
+Daftar Subtab di Dokumen: [${subtabsSummary}]
+
+[PERINGATAN: ISI TEKS TAB TIDAK BERHASIL DIBACA]
+Sistem tidak dapat mengambil teks isi dokumen. Yang tersedia di bawah hanya outline heading,
+BUKAN isi paragraf/tabel. JANGAN menyimpulkan isi tab dari outline. Sampaikan kepada pengguna
+bahwa isi dokumen gagal dibaca dan minta mereka membuka tab tersebut lalu mencoba lagi.
+
+${domContent}`;
+  }
+
+  async function extractGoogleDocsContent() {
+    const meta = parseGoogleDocsSubtabs();
+    if (!meta) return null;
+
+    const { docId, docTitle, activeTabId, activeTabTitle, tabSource, allSubtabs } = meta;
+    const subtabsSummary = buildDocsSubtabsSummary(allSubtabs, activeTabId, activeTabTitle);
+
+    if (!activeTabId) {
+      // Tidak ada ID tab di URL. Jika dokumen hanya punya satu tab (tanpa fitur Document Tabs),
+      // export tanpa parameter tab memang mengembalikan seluruh isi — aman.
+      // Jika dokumen punya beberapa tab, export tanpa parameter selalu mengembalikan TAB PERTAMA,
+      // yaitu persis bug yang membuat AI menjawab isi Tab 1. Jadi jangan dipakai.
+      if (allSubtabs.length > 1) {
+        const single = extractGoogleDocsContentSync();
+        return single.replace(
+          "[PERINGATAN: ISI TEKS TAB TIDAK BERHASIL DIBACA]",
+          "[PERINGATAN: TAB AKTIF TIDAK TERDETEKSI. Dokumen ini punya beberapa tab, tetapi ID tab aktif tidak ditemukan di URL. Isi tab tidak dibaca agar tidak salah mengambil Tab 1.]"
+        );
+      }
+    }
+
+    const { text: tabText, via } = await fetchDocsTabText(docId, activeTabId);
+    if (!tabText) {
+      return extractGoogleDocsContentSync();
+    }
+
+    const verified = tabTextMatchesTitle(tabText, activeTabTitle);
+    const verifyNote = verified
+      ? ""
+      : `\n[CATATAN VERIFIKASI: Judul tab terdeteksi "${activeTabTitle}" tetapi isi teks tidak memuat kata kunci tersebut. Periksa kembali sebelum menyimpulkan.]\n`;
+
+    return `[DOKUMEN GOOGLE DOCS: "${docTitle}"]
+Subtab Aktif Saat Ini: "${activeTabTitle}"${activeTabId ? ` (ID: ${activeTabId})` : ""}
+Sumber Deteksi Tab: ${tabSource} | Metode Baca: export-${via}
+Daftar Subtab di Dokumen: [${subtabsSummary}]
+${verifyNote}
+[KONTEN DARI SUBTAB AKTIF (${activeTabTitle})]:
+${tabText}`;
+  }
+
   function getReadableContent(showVisual = true) {
     try {
       if (showVisual) {
         // Keep content extraction silent without laser beam or HUD spam
       }
 
-      // Prioritas 0: Jika di halaman video YouTube, ekstrak transkrip/metadata
+      // Prioritas 0: Jika di Google Docs, gunakan parser subtabs presisi
+      if (window.location.hostname.includes("docs.google.com") && window.location.pathname.includes("/document/d/")) {
+        const docsSync = extractGoogleDocsContentSync();
+        if (docsSync && docsSync.length > 20) {
+          return docsSync;
+        }
+      }
+
+      // Prioritas 0.5: Jika di halaman video YouTube, ekstrak transkrip/metadata
       const ytData = extractYouTubeVideoContext();
       if (ytData) {
         return ytData;
@@ -4106,13 +4320,37 @@
     }
 
     if (request.type === "GET_READABLE_TEXT") {
-      const text = getReadableContent();
-      sendResponse({
-        success: true,
-        title: document.title || "",
-        url: window.location.href || "",
-        text: text
-      });
+      (async () => {
+        try {
+          if (window.location.hostname.includes("docs.google.com") && window.location.pathname.includes("/document/d/")) {
+            const docsData = await extractGoogleDocsContent();
+            if (docsData && docsData.length > 20) {
+              sendResponse({
+                success: true,
+                title: document.title || "",
+                url: window.location.href || "",
+                text: docsData
+              });
+              return;
+            }
+          }
+
+          const text = getReadableContent();
+          sendResponse({
+            success: true,
+            title: document.title || "",
+            url: window.location.href || "",
+            text: text
+          });
+        } catch (err) {
+          sendResponse({
+            success: true,
+            title: document.title || "",
+            url: window.location.href || "",
+            text: getReadableContent()
+          });
+        }
+      })();
       return true;
     }
 

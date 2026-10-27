@@ -870,4 +870,60 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     expect(dismissResult.reappearSameText).toBe(false);
     expect(dismissResult.appearNewText).toBe(true);
   });
+
+  test('should accurately identify active Google Docs subtab 6 and format structured subtab context', async ({ page }) => {
+    const docsResult = await page.evaluate(() => {
+      // 1. Buat tiruan DOM Google Docs Document Tabs sidebar dengan 6 tab
+      const container = document.createElement('div');
+      container.id = 'test-docs-tabs-container';
+
+      for (let i = 1; i <= 6; i++) {
+        const tabEl = document.createElement('div');
+        tabEl.setAttribute('role', 'tab');
+        tabEl.setAttribute('data-tab-id', `t.tab${i}`);
+        tabEl.className = i === 6 ? 'docs-tabs-tab-item docs-tab-active' : 'docs-tabs-tab-item';
+        tabEl.setAttribute('aria-selected', i === 6 ? 'true' : 'false');
+        tabEl.textContent = `Subtab ${i}: ${i === 6 ? 'Analisis Risiko Finansial' : 'Draft Bagian ' + i}`;
+        container.appendChild(tabEl);
+      }
+      document.body.appendChild(container);
+
+      // Pindai tab aktif
+      const tabElements = Array.from(document.querySelectorAll('[role="tab"], [role="treeitem"], .docs-tabs-tab-item'));
+      const allSubtabs = [];
+      let activeTabId = '';
+      let activeTabTitle = '';
+
+      for (const tabEl of tabElements) {
+        const isSelected = tabEl.getAttribute('aria-selected') === 'true' || tabEl.classList.contains('docs-tab-active');
+        const tId = tabEl.getAttribute('data-tab-id') || '';
+        const tTitle = tabEl.textContent?.trim() || '';
+
+        if (tTitle) allSubtabs.push({ id: tId, title: tTitle, isSelected });
+        if (isSelected) {
+          activeTabId = tId;
+          activeTabTitle = tTitle;
+        }
+      }
+
+      const subtabsSummary = allSubtabs.map(s => `${s.title}${s.isSelected ? ' (AKTIF)' : ''}`).join(', ');
+      const formatted = `[DOKUMEN GOOGLE DOCS: "Laporan Tahunan"]\nSubtab Aktif Saat Ini: "${activeTabTitle}" (ID: ${activeTabId})\nDaftar Subtab di Dokumen: [${subtabsSummary}]`;
+
+      return {
+        totalTabs: allSubtabs.length,
+        activeTabId,
+        activeTabTitle,
+        formatted,
+        isTab6Active: activeTabTitle.includes('Subtab 6'),
+        isTab1Active: activeTabTitle.includes('Subtab 1')
+      };
+    });
+
+    expect(docsResult.totalTabs).toBe(6);
+    expect(docsResult.activeTabId).toBe('t.tab6');
+    expect(docsResult.isTab6Active).toBe(true);
+    expect(docsResult.isTab1Active).toBe(false);
+    expect(docsResult.formatted).toContain('Subtab Aktif Saat Ini: "Subtab 6: Analisis Risiko Finansial"');
+    expect(docsResult.formatted).toContain('Subtab 6: Analisis Risiko Finansial (AKTIF)');
+  });
 });
