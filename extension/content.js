@@ -1277,6 +1277,63 @@
     return `[YOUTUBE VIDEO INFORMATION]\nJudul: ${title}\nChannel: ${channel}\n\n[DESKRIPSI VIDEO]:\n${description}\n\n${transcriptText ? `[TRANSKRIP VIDEO]:\n${transcriptText.slice(0, 8000)}` : "(Transkrip otomatis belum dibuka; deskripsi video di atas digunakan sebagai dasar analisis)"}`;
   }
 
+  // Helper: Ekstraksi Hasil Pencarian Organik Google SERP
+  function extractGoogleSERPListings() {
+    const isGoogleSearch = window.location.hostname.includes("google.") && window.location.pathname.includes("/search");
+    if (!isGoogleSearch) return null;
+
+    const items = [];
+    const seenUrls = new Set();
+
+    // Query semua h3 di dalam container hasil pencarian (#rso, div#search, .MjjYud, .g)
+    const headings = Array.from(document.querySelectorAll("#rso h3, div#search h3, .MjjYud h3, .g h3"));
+
+    for (const h3 of headings) {
+      // Abaikan jika berada di dalam container iklan (#taw, #bottomads, .uEierd, [data-text-ad])
+      if (h3.closest("#taw, #bottomads, .uEierd, [data-text-ad]")) continue;
+
+      // Temukan link induk atau tetangga terdekat
+      const linkEl = h3.closest("a") || h3.parentElement?.querySelector("a") || h3.querySelector("a");
+      if (!linkEl || !linkEl.href) continue;
+
+      const rawHref = linkEl.href;
+      if (!/^https?:\/\//i.test(rawHref)) continue;
+
+      try {
+        const u = new URL(rawHref);
+        const host = u.hostname.replace(/^www\./i, "").toLowerCase();
+        // Lewati domain internal google
+        if (host.includes("google.") || host.includes("googleusercontent.com")) continue;
+
+        if (seenUrls.has(rawHref)) continue;
+        seenUrls.add(rawHref);
+
+        // Ambil snippet / deskripsi hasil pencarian
+        const container = h3.closest(".MjjYud, .g, div[data-hveid]") || h3.parentElement?.parentElement;
+        let snippet = "";
+        if (container) {
+          const snippetEl = container.querySelector("[style*='-webkit-line-clamp'], .VwiC3b, .yXK7lf, [data-sncf], .lEBKkf");
+          if (snippetEl) {
+            snippet = snippetEl.textContent?.trim().replace(/\s+/g, " ") || "";
+          }
+        }
+
+        const title = h3.textContent?.trim().replace(/\s+/g, " ") || "";
+        if (title.length > 0) {
+          items.push({
+            rankOnPage: items.length + 1,
+            title,
+            url: rawHref,
+            domain: host,
+            snippet
+          });
+        }
+      } catch (_) {}
+    }
+
+    return items;
+  }
+
   // Helper: Deteksi dan Ekstraksi Google Docs Subtabs (Document Tabs)
   function readDocsTabIdFromUrl() {
     const m = window.location.href.match(/[?&#]tab=(t\.[A-Za-z0-9_-]+)/);
@@ -1494,6 +1551,15 @@ ${tabText}`;
         const docsSync = extractGoogleDocsContentSync();
         if (docsSync && docsSync.length > 20) {
           return docsSync;
+        }
+      }
+
+      // Prioritas 0.2: Jika di Google Search SERP, ekstrak hasil organik terstruktur
+      if (window.location.hostname.includes("google.") && window.location.pathname.includes("/search")) {
+        const serpItems = extractGoogleSERPListings();
+        if (serpItems && serpItems.length > 0) {
+          const listStr = serpItems.map(it => `${it.rankOnPage}. ${it.title} (${it.domain})\n   URL: ${it.url}\n   Snippet: ${it.snippet || "-"}`).join("\n\n");
+          return `[HASIL PENCARIAN GOOGLE SERP (${serpItems.length} Hasil Organik Terdeteksi)]:\n\n${listStr}`;
         }
       }
 
@@ -2917,8 +2983,20 @@ ${tabText}`;
       };
     }
 
+    if (action === "extract_serp_data") {
+      const items = extractGoogleSERPListings() || [];
+      return {
+        success: true,
+        items,
+        count: items.length,
+        url: window.location.href,
+        title: document.title,
+        message: `Berhasil mengekstrak ${items.length} hasil organik SERP.`
+      };
+    }
+
     if (action === "click_next_page") {
-      const nextBtn = document.querySelector("a[rel='next'], button[aria-label*='Next' i], button[aria-label*='Berikutnya' i], a[aria-label*='Next' i], a[aria-label*='Berikutnya' i], .pagination-next, .next-page, [data-testid*='next' i]");
+      const nextBtn = document.querySelector("#pnnext, a#pnnext, #botstuff a[href*='start='], a[rel='next'], button[aria-label*='Next' i], button[aria-label*='Berikutnya' i], a[aria-label*='Next' i], a[aria-label*='Berikutnya' i], .pagination-next, .next-page, [data-testid*='next' i]");
       if (nextBtn) {
         nextBtn.click();
         return { success: true, message: "Tombol halaman berikutnya berhasil diklik." };
@@ -4351,6 +4429,18 @@ ${tabText}`;
           });
         }
       })();
+      return true;
+    }
+
+    if (request.type === "EXTRACT_SERP_DATA" || request.action === "EXTRACT_SERP_DATA") {
+      const items = extractGoogleSERPListings() || [];
+      sendResponse({
+        success: true,
+        items,
+        count: items.length,
+        url: window.location.href,
+        title: document.title
+      });
       return true;
     }
 

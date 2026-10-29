@@ -278,6 +278,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     s = rawLines.join("\n");
 
+    // 3.8 Blockquotes
+    s = s.replace(/^\s*>\s*(.*$)/gim, "<blockquote>$1</blockquote>");
+    s = s.replace(/<\/blockquote>\s*<blockquote>/g, "<br>");
+
     // 4. Unordered & Ordered lists
     s = s.replace(/^\s*[\*\-]\s+(.*$)/gim, "<li>$1</li>");
     s = s.replace(/(<li>.*<\/li>)/gim, "<ul>$1</ul>");
@@ -290,6 +294,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     // 5. Bold & Italic
     s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+
+    // 5.5 Markdown Links [text](https://...)
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)"'\x27]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="chat-markdown-link">$1</a>');
 
     // 6. Markdown Tables
     if (s.includes("|")) {
@@ -306,7 +313,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           const tag = isFirstRow ? "th" : "td";
           res += "<tr>" + cells.map(c => {
             let clean = c.trim();
-            clean = clean.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
+            clean = clean.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)"'\x27]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="chat-markdown-link">$1</a>');
             clean = clean.replace(/\*\*\*(.*?)\*\*\*/g, "<strong><em>$1</em></strong>");
             clean = clean.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
             clean = clean.replace(/\*(.*?)\*/g, "<em>$1</em>");
@@ -3850,6 +3857,215 @@ Respon HANYA dalam format JSON valid:
     };
   }
 
+  // ─────────────────────────────────────────────────────
+  // AUTONOMOUS MULTI-PAGE SERP RANK CHECKER
+  // ─────────────────────────────────────────────────────
+  function parseSerpRankingParams(prompt = "") {
+    const text = String(prompt).trim();
+    const isSerpIntent = /(?:(?:cek|cari|temukan|lihat|lacak)\s+(?:posisi|ranking|peringkat|urutan|halaman|website|situs)|(?:posisi|ranking|peringkat|urutan|halaman)\s+berapa|(?:serp|ranking\s+google|posisi\s+google))/i.test(text) &&
+      /(?:keyword|kata\s+kunci|kw\b|di\s+google|serp)/i.test(text);
+
+    if (!isSerpIntent) return null;
+
+    // 1. Ekstrak Target Domain
+    let targetDomain = "";
+    const domainMatch = text.match(/(?:website|situs|web|url|domain)\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s?]*)?)/i) ||
+                        text.match(/\b([a-zA-Z0-9][a-zA-Z0-9.-]*\.(?:com|id|co\.id|net|org|xyz|io|biz|info|site|online|tech|edu|gov))\b/i) ||
+                        text.match(/https?:\/\/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+    if (domainMatch) {
+      targetDomain = domainMatch[1].replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/.*$/, "").trim().toLowerCase();
+    }
+
+    // 2. Ekstrak Keyword
+    let keyword = "";
+    const kwMatch = text.match(/(?:keyword|kata\s+kunci|kw)\s*[:=]?\s*["'“]([^"'“”\n]+)["'”]/i) ||
+                    text.match(/(?:keyword|kata\s+kunci|kw)\s*[:=]?\s*([a-zA-Z0-9\s-]+?)(?:\s+(?:ada\s+di|di|pada|ranking|posisi|peringkat|halaman|\?|\.|$))/i);
+    if (kwMatch) {
+      keyword = kwMatch[1].trim();
+    }
+
+    // 3. Ekstrak Max Pages jika ada spesifik (misal: "cek sampai halaman 10")
+    let maxPages = 5; // default 5 halaman = 50 hasil
+    const pageMatch = text.match(/(?:sampai|hingga|max|maksimal)\s+(?:halaman\s+)?(\d+)\s*(?:halaman|page)?/i);
+    if (pageMatch) {
+      maxPages = Math.min(10, Math.max(1, parseInt(pageMatch[1], 10)));
+    }
+
+    return {
+      isSerpIntent: true,
+      targetDomain,
+      keyword,
+      maxPages
+    };
+  }
+
+  async function runSerpRankingFlow(goal, params) {
+    setAgentRunning(true);
+    showStatusIndicator();
+
+    let targetDomain = params?.targetDomain || "";
+    let keyword = params?.keyword || "";
+    const maxPages = params?.maxPages || 5;
+
+    // Jika targetDomain atau keyword belum lengkap diekstrak oleh regex, gunakan fast LLM extraction
+    if (!targetDomain || !keyword) {
+      appendLog("🔍 Mengurai domain dan keyword target pencarian...");
+      try {
+        const parsePrompt = `Dari perintah pengguna berikut, ekstrak targetDomain dan keyword pencarian Google secara presisi dalam format JSON:\n"${goal}"\n\nJawab HANYA JSON: {"targetDomain": "domain.com", "keyword": "kata kunci"}`;
+        const jsonRes = await callLLM("chat", parsePrompt);
+        const parsed = JSON.parse(jsonRes.replace(/```json/g, "").replace(/```/g, "").trim());
+        if (parsed.targetDomain) targetDomain = parsed.targetDomain.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/.*$/, "").toLowerCase();
+        if (parsed.keyword) keyword = parsed.keyword.trim();
+      } catch (_) {}
+    }
+
+    if (!keyword) {
+      appendLog("⚠️ Keyword pencarian tidak terdeteksi dari perintah.", "ERROR");
+      addMessageToCurrentSession("assistant", "⚠️ Tidak dapat mendeteksi kata kunci (keyword) yang ingin dicari. Mohon sertakan format: *'Cek website domain.com dengan keyword kata kunci'*.");
+      setAgentRunning(false);
+      hideStatusIndicator();
+      return;
+    }
+
+    if (!targetDomain) {
+      appendLog("⚠️ Domain target tidak terdeteksi dari perintah.", "ERROR");
+      addMessageToCurrentSession("assistant", "⚠️ Tidak dapat mendeteksi nama website/domain target. Mohon sertakan nama website yang ingin dicek (contoh: *filterairgadingserpong.com*).");
+      setAgentRunning(false);
+      hideStatusIndicator();
+      return;
+    }
+
+    appendLog(`🚀 Memulai pengecekan SERP Google untuk keyword "${keyword}" (Mencari: ${targetDomain}, Max: ${maxPages} Halaman)...`);
+    showStatusIndicator(`Mengecek SERP: "${keyword}"...`);
+
+    let foundResult = null;
+    let page1TopResults = [];
+    let totalChecked = 0;
+
+    for (let page = 1; page <= maxPages; page++) {
+      if (shouldStopAgent) {
+        appendLog("🛑 Pengecekan SERP dihentikan oleh pengguna.", "WARN");
+        break;
+      }
+
+      const startOffset = (page - 1) * 10;
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(keyword)}${startOffset > 0 ? `&start=${startOffset}` : ""}`;
+
+      appendLog(`🔎 [Halaman ${page}/${maxPages}] Membuka Google Search (Hasil #${startOffset + 1} - #${startOffset + 10})...`);
+      showStatusIndicator(`Mengecek Google Halaman ${page}/${maxPages}...`);
+
+      try {
+        await sendToBackground({ action: "NAVIGATE_TAB", url: searchUrl });
+        await new Promise(r => setTimeout(r, 1800));
+        await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 3500, stableWindowMs: 500 });
+      } catch (navErr) {
+        appendLog(`Navigasi halaman ${page} terhambat: ${navErr.message}`, "WARN");
+      }
+
+      // Ambil data SERP dari halaman
+      let serpData = null;
+      try {
+        serpData = await sendToContentScript({ type: "EXTRACT_SERP_DATA" });
+      } catch (_) {}
+
+      const items = Array.isArray(serpData?.items) ? serpData.items : [];
+      totalChecked += items.length;
+
+      if (page === 1 && items.length > 0) {
+        page1TopResults = items.slice(0, 5);
+      }
+
+      appendLog(`📄 Halaman ${page}: Berhasil membaca ${items.length} hasil organik.`);
+
+      // Periksa apakah targetDomain ada di antara hasil pada halaman ini
+      for (const item of items) {
+        const itemDomain = (item.domain || "").toLowerCase();
+        const normTarget = targetDomain.toLowerCase();
+
+        const isMatch = itemDomain === normTarget ||
+                        itemDomain.endsWith("." + normTarget) ||
+                        normTarget.endsWith("." + itemDomain) ||
+                        itemDomain.includes(normTarget) ||
+                        normTarget.includes(itemDomain) ||
+                        (item.url || "").toLowerCase().includes(normTarget);
+
+        if (isMatch) {
+          const absoluteRank = startOffset + item.rankOnPage;
+          foundResult = {
+            item,
+            page,
+            positionOnPage: item.rankOnPage,
+            absoluteRank
+          };
+          break;
+        }
+      }
+
+      if (foundResult) {
+        appendLog(`🎉 TARGET DITEMUKAN! Website "${targetDomain}" berada di Halaman ${foundResult.page}, Peringkat #${foundResult.absoluteRank}!`);
+        break;
+      }
+
+      // Jika belum ditemukan dan masih ada halaman berikutnya, beri informasi log dan lanjut
+      if (page < maxPages) {
+        appendLog(`ℹ️ Halaman ${page} selesai diperiksa (${items.length} hasil). Website "${targetDomain}" belum ditemukan di sini. Otomatis melanjutkan ke Halaman ${page + 1}...`);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+
+    setAgentRunning(false);
+    hideStatusIndicator();
+
+    if (activeTask) {
+      activeTask.status = "COMPLETED";
+      clearPersistedTask();
+      activeTask = null;
+    }
+
+    // Bangun Respon Final & Kartu Hasil dengan Format Terstruktur Rapi
+    let topCompStr = "";
+    if (page1TopResults.length > 0) {
+      topCompStr = `\n\n### 🏆 Top 5 Website di Halaman 1 (Kompetitor Teratas)\n\n` +
+        `| No | Website / Judul | Domain | Tautan |\n` +
+        `| :---: | :--- | :--- | :---: |\n` +
+        page1TopResults.map((c, i) => `| #${i + 1} | ${c.title.replace(/\|/g, "-").slice(0, 48)} | \`${c.domain}\` | [Buka Situs ↗](${c.url}) |`).join("\n");
+    }
+
+    if (foundResult) {
+      const reply = `### 🎯 Laporan Posisi SERP Google
+
+> 🟢 **STATUS: DITEMUKAN DI GOOGLE SEARCH**  
+> • **Kata Kunci (Keyword):** **"${keyword}"**  
+> • **Domain Target:** \`${targetDomain}\`  
+> • **Peringkat Keseluruhan:** **Peringkat #${foundResult.absoluteRank}** (Halaman ${foundResult.page}, Urutan #${foundResult.positionOnPage})  
+> • **Judul Halaman:** **${foundResult.item.title}**  
+> • **Tautan Langsung:** [Kunjungi Halaman Target ↗](${foundResult.item.url})  
+> • **Cuplikan Snippet:** _"${foundResult.item.snippet || "Tidak ada deskripsi cuplikan"}"_
+${topCompStr}
+
+---
+> 💡 **Info Paginasi Otonom:**  
+> Pengecekan telah diselesaikan otomatis melintasi seluruh halaman paginasi 1 hingga ${foundResult.page} sampai website target ditemukan.`;
+
+      addMessageToCurrentSession("assistant", reply, { skipClean: true });
+    } else {
+      const reply = `### 🔍 Laporan Posisi SERP Google
+
+> 🟡 **STATUS: BELUM MASUK TOP ${maxPages * 10}** (${maxPages} Halaman Pertama)  
+> • **Kata Kunci (Keyword):** **"${keyword}"**  
+> • **Domain Target:** \`${targetDomain}\`  
+> • **Cakupan Pemindaian:** **${maxPages} Halaman** (~${totalChecked} hasil organik telah dipindai)  
+> • **Hasil:** Website \`${targetDomain}\` belum berada di peringkat 1 s.d. ${maxPages * 10} Google Search untuk kata kunci tersebut.
+${topCompStr}
+
+---
+> 💡 **Info Paginasi Otonom:**  
+> Sistem telah otomatis menelusuri setiap halaman paginasi 1 hingga ${maxPages}. Bila website Anda baru dipublikasikan atau berada di halaman lebih dalam, Anda dapat meminta: *"Cek sampai halaman 10"*.`;
+
+      addMessageToCurrentSession("assistant", reply, { skipClean: true });
+    }
+  }
+
   // ═══════════════════════════════════════════════════
   // MAIN: TASK EXECUTION LOOP (BYOK Gate Checked)
   // ═══════════════════════════════════════════════════
@@ -4004,6 +4220,13 @@ Respon HANYA dalam format JSON valid:
       await navigateToUrl(targetSite);
       await new Promise(r => setTimeout(r, 1200));
       addMessageToCurrentSession("assistant", `✅ Mengerti, saya telah mengarahkan kembali ke **${targetSite}**. Silakan beritahu apa yang ingin dicari atau dikerjakan di sini.`);
+      return;
+    }
+
+    // 0. Deteksi Tugas Pengecekan Peringkat SERP Google Multi-Halaman (Feedback Mas Alfu)
+    const serpParams = parseSerpRankingParams(userPrompt);
+    if (serpParams) {
+      await runSerpRankingFlow(userPrompt, serpParams);
       return;
     }
 
@@ -4815,15 +5038,22 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
 	              src.content = tabRes.text;
 	              src.metadata = src.metadata || {};
 	              src.metadata.extractedText = tabRes.text.slice(0, 6000);
-	              const subtabMatch = tabRes.text.match(/Subtab Aktif Saat Ini:\s*"([^"]+)"/i);
-	              const subtabLabel = subtabMatch ? ` [Subtab: "${subtabMatch[1]}"]` : "";
-	              appendLog(`📖 Referensi "${src.title || src.name}" berhasil diekstrak di latar belakang (${src.metadata.extractedText.length} karakter)${subtabLabel}.`);
-	            }
-          } catch (e) {}
-        }
-      }
+		              const subtabMatch = tabRes.text.match(/Subtab Aktif Saat Ini:\s*"([^"]+)"/i);
+		              const subtabLabel = subtabMatch ? ` [Subtab: "${subtabMatch[1]}"]` : "";
+		              appendLog(`📖 Referensi "${src.title || src.name}" berhasil diekstrak di latar belakang (${src.metadata.extractedText.length} karakter)${subtabLabel}.`);
+		            }
+	          } catch (e) {}
+	        }
+	      }
 
-      // 1.5. Cek apakah ini instruksi analisis, penjelasan, pembuatan draf, atau perangkuman (tanpa aksi manipulasi fisik)
+	      // 1.4. Cek apakah ini tugas pengecekan peringkat SERP Google multi-halaman
+	      const serpParams = parseSerpRankingParams(goal);
+	      if (serpParams) {
+	        await runSerpRankingFlow(goal, serpParams);
+	        return;
+	      }
+
+	      // 1.5. Cek apakah ini instruksi analisis, penjelasan, pembuatan draf, atau perangkuman (tanpa aksi manipulasi fisik)
       const isSocialActionInGoal = /(?:posting|post|tweet|unggah|publikasikan|komposer|tempelkan.*(?:twitter|x|threads|medsos)|buka\s+komposer|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(goal);
       const isFormFillingActionInGoal = /(?:isi\s+(?:seluruh\s+|semua\s+)?(?:form|formulir|field|kolom|data)|autofill)/i.test(goal);
       const isDraftingOrRewritingGoal = /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan)\b/i.test(goal) &&

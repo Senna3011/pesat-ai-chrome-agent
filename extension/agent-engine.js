@@ -23,8 +23,11 @@
     const isContentDrafting = /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan|ulasan|ringkasan|makalah|esai)/i.test(text) &&
       !/(?:posting\s+ke|post\s+ke|kirim\s+ke|upload|unggah\s+ke|buka\s+komposer|isi\s+form|autofill|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos)|tempel.*(?:threads|x|twitter))/i.test(text);
 
+    const isSerpCheck = /(?:(?:cek|cari|temukan|lihat|lacak)\s+(?:posisi|ranking|peringkat|urutan|halaman|website|situs)|(?:posisi|ranking|peringkat|urutan|halaman)\s+berapa|(?:serp|ranking\s+google|posisi\s+google))/i.test(text) &&
+      /(?:keyword|kata\s+kunci|kw\b|di\s+google|serp)/i.test(text);
+
     const mutating = !isContentDrafting && /(?:\b(?:kirim|send|publish|post|hapus|delete|checkout|bayar|transfer|beli|submit|ubah|update|append|login)\b|\btulis\s+ke\b|\bisi\s+form\b)/i.test(text);
-    const browserAction = !isContentDrafting && (/\b(buka|open|kunjungi|akses|klik|click|ketik|isi\s+form|pilih|scroll|navigate|unduh|download)\b/i.test(text) || mutating || /(?:isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(text));
+    const browserAction = !isContentDrafting && (/\b(buka|open|kunjungi|akses|klik|click|ketik|isi\s+form|pilih|scroll|navigate|unduh|download)\b/i.test(text) || mutating || isSerpCheck || /(?:isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(text));
     const research = /\b(riset|research|bandingkan|compare|sumber|referensi|knowledge|dokumen tersimpan|multi[- ]?site)\b/i.test(text);
     const analysis = isContentDrafting || /\b(rangkum|ringkas|analisis|audit|review|tinjau|bedah|evaluasi|periksa|cek|jelaskan|apa|mengapa|bagaimana|rekomendasi|tulis|buatkan|ganti|ubah|persingkat|susun)\b/i.test(text) || text.includes("?");
     const ambiguity = text.length < 3 || /\b(itu|ini|yang tadi)\b/i.test(text) && !contextRefs.length;
@@ -47,6 +50,7 @@
 
   function isSimpleDirectTask(goal = "") {
     const text = String(goal).trim();
+    if (/(?:serp|ranking|posisi.*berapa|cek.*keyword)/i.test(text)) return false;
     if (/^(?:tolong\s+|mohon\s+)?(?:buka|open|kunjungi|akses|go\s*to)\s+(?:website\s+|situs\s+|url\s+)?(?:https?:\/\/)?[^\s]+\.[a-z]{2,}(?:\/[^\s]*)?\s*$/i.test(text)) return true;
     if (/^(?:tolong\s+|mohon\s+)?(?:klik|click|tekan|pilih)\s+[^,;]+$/i.test(text)) return true;
     const classified = classifyTask(text);

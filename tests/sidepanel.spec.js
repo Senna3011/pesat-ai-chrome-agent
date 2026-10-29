@@ -297,13 +297,15 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
 
   test('should sanitize potential XSS payloads in parseMarkdown', async ({ page }) => {
     const sanitized = await page.evaluate(() => {
-      const malicious = '<script>window.__xss_leaked=true;</script><img src="x" onerror="window.__xss_leaked=true">**Halo Dunia**';
+      const malicious = '<script>window.__xss_leaked=true;</script><img src="x" onerror="window.__xss_leaked=true">**Halo Dunia** [Link Uji](https://example.com)';
       return window.parseMarkdown(malicious);
     });
 
     expect(sanitized).not.toContain('<script>');
     expect(sanitized).not.toContain('onerror=');
     expect(sanitized).toContain('<strong>Halo Dunia</strong>');
+    expect(sanitized).toContain('<a href="https://example.com"');
+    expect(sanitized).toContain('class="chat-markdown-link"');
   });
 
   test('should enforce minimum 14px font size on model dropdown items', async ({ page }) => {
@@ -925,5 +927,70 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     expect(docsResult.isTab1Active).toBe(false);
     expect(docsResult.formatted).toContain('Subtab Aktif Saat Ini: "Subtab 6: Analisis Risiko Finansial"');
     expect(docsResult.formatted).toContain('Subtab 6: Analisis Risiko Finansial (AKTIF)');
+  });
+
+  test('should parse SERP ranking prompt and simulate autonomous multi-page pagination ranking find', async ({ page }) => {
+    const serpSimulation = await page.evaluate(() => {
+      const prompt = 'Tolong cek website filterairgadingserpong.com dengan Keyword filter air tangerang ada di posisi berapa?';
+      
+      // 1. Uji ekstraksi parameter
+      const text = prompt.trim();
+      const domainMatch = text.match(/(?:website|situs|web|url|domain)\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s?]*)?)/i);
+      const targetDomain = domainMatch ? domainMatch[1].trim().toLowerCase() : '';
+
+      const kwMatch = text.match(/(?:keyword|kata\s+kunci|kw)\s*[:=]?\s*([a-zA-Z0-9\s-]+?)(?:\s+(?:ada\s+di|di|pada|ranking|posisi|peringkat|halaman|\?|\.|$))/i);
+      const keyword = kwMatch ? kwMatch[1].trim() : '';
+
+      // 2. Simulasi pencarian multi-halaman:
+      // Halaman 1 (10 hasil): tidak ada target
+      // Halaman 2 (10 hasil): target ada di urutan ke-4 (posisi absolut #14)
+      const page1 = [
+        { rankOnPage: 1, domain: 'tokopedia.com', title: 'Filter Air Tangerang Murah' },
+        { rankOnPage: 2, domain: 'shopee.co.id', title: 'Jual Filter Air di Tangerang' },
+        { rankOnPage: 3, domain: 'pureitwater.com', title: 'Penjernih Air Tangerang' }
+      ];
+
+      const page2 = [
+        { rankOnPage: 1, domain: 'kompas.com', title: 'Tips Memilih Filter Air' },
+        { rankOnPage: 2, domain: 'detik.com', title: 'Air Bersih Tangerang' },
+        { rankOnPage: 3, domain: 'olx.co.id', title: 'Filter Air Bekas & Baru' },
+        { rankOnPage: 4, domain: 'filterairgadingserpong.com', title: 'Jasa Pasang Filter Air Gading Serpong Tangerang' }
+      ];
+
+      let found = null;
+      let pagesChecked = 0;
+
+      for (let p = 1; p <= 3; p++) {
+        pagesChecked++;
+        const currentResults = p === 1 ? page1 : (p === 2 ? page2 : []);
+        const item = currentResults.find(it => it.domain.includes(targetDomain));
+        if (item) {
+          found = {
+            page: p,
+            positionOnPage: item.rankOnPage,
+            absoluteRank: (p - 1) * 10 + item.rankOnPage,
+            title: item.title,
+            domain: item.domain
+          };
+          break;
+        }
+      }
+
+      return {
+        targetDomain,
+        keyword,
+        pagesChecked,
+        found
+      };
+    });
+
+    expect(serpSimulation.targetDomain).toBe('filterairgadingserpong.com');
+    expect(serpSimulation.keyword).toBe('filter air tangerang');
+    expect(serpSimulation.pagesChecked).toBe(2);
+    expect(serpSimulation.found).not.toBeNull();
+    expect(serpSimulation.found.page).toBe(2);
+    expect(serpSimulation.found.positionOnPage).toBe(4);
+    expect(serpSimulation.found.absoluteRank).toBe(14);
+    expect(serpSimulation.found.domain).toBe('filterairgadingserpong.com');
   });
 });

@@ -915,6 +915,38 @@ html, body {
   font-weight: 700;
 }
 
+.markdown-body blockquote, blockquote {
+  border-left: 3px solid var(--accent-primary, #6366f1);
+  background: rgba(99, 102, 241, 0.08);
+  padding: 8px 12px;
+  margin: 8px 0;
+  border-radius: 0 8px 8px 0;
+  color: var(--text-primary);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.chat-markdown-link {
+  color: var(--brand-accent, #38bdf8) !important;
+  text-decoration: none;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  background: rgba(56, 189, 248, 0.1);
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  transition: all 0.15s ease;
+}
+
+.chat-markdown-link:hover {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #fff !important;
+  text-decoration: none;
+}
+
 /* ==========================================================================
    AGENT STATUS INDICATOR (Floating Live UX)
    ========================================================================== */

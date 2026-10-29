@@ -43,6 +43,31 @@
             }
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "check_serp_ranking",
+          description: "Periksa peringkat/posisi website pada hasil pencarian Google (SERP) melintasi beberapa halaman secara otonom.",
+          parameters: {
+            type: "object",
+            properties: {
+              keyword: {
+                type: "string",
+                description: "Kata kunci (keyword) pencarian di Google."
+              },
+              targetDomain: {
+                type: "string",
+                description: "Nama domain atau website target yang ingin dicek posisinya (contoh: filterairgadingserpong.com)."
+              },
+              maxPages: {
+                type: "number",
+                description: "Batas maksimal halaman yang dipindai (default: 5, max: 10)."
+              }
+            },
+            required: ["keyword", "targetDomain"]
+          }
+        }
       }
     ],
 
@@ -50,6 +75,7 @@
 [SKILL: DEEP TABLE & MULTI-PAGE SCRAPER]
 - Gunakan 'extract_table_data' saat pengguna meminta mengekstrak tabel, perbandingan harga, atau daftar item dari halaman aktif.
 - Gunakan 'scrape_multipage_table' saat pengguna meminta data komparasi multi-halaman atau katalog produk lintas halaman.
+- Gunakan 'check_serp_ranking' saat pengguna meminta mengecek posisi/ranking sebuah website di Google SERP untuk keyword tertentu.
 `,
 
     async execute(toolName, params, ctx = {}) {
@@ -127,6 +153,81 @@
           rows: aggregatedRows,
           pagesScraped,
           stateChanged: pagesScraped > 1
+        };
+      }
+
+      if (toolName === "check_serp_ranking") {
+        const keyword = String(params.keyword || "").trim();
+        const targetDomain = String(params.targetDomain || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/.*$/, "").trim().toLowerCase();
+        const maxPages = Math.min(Math.max(Number(params.maxPages) || 5, 1), 10);
+
+        if (!keyword || !targetDomain) {
+          return { success: false, error: "Keyword dan targetDomain wajib diisi." };
+        }
+
+        let foundResult = null;
+        let totalChecked = 0;
+
+        for (let page = 1; page <= maxPages; page++) {
+          ctx.showStatusIndicator?.(`Mengecek SERP Halaman ${page}/${maxPages}...`);
+          const startOffset = (page - 1) * 10;
+          const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(keyword)}${startOffset > 0 ? `&start=${startOffset}` : ""}`;
+
+          await ctx.sendToBackground?.({ action: "NAVIGATE_TAB", url: searchUrl });
+          await new Promise(r => setTimeout(r, 1800));
+          await ctx.sendToContentScript?.({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 3000, stableWindowMs: 500 });
+
+          const serpData = await ctx.sendToContentScript?.({ type: "EXTRACT_SERP_DATA" });
+          const items = Array.isArray(serpData?.items) ? serpData.items : [];
+          totalChecked += items.length;
+
+          for (const item of items) {
+            const itemDomain = (item.domain || "").toLowerCase();
+            const normTarget = targetDomain.toLowerCase();
+            const isMatch = itemDomain === normTarget ||
+                            itemDomain.endsWith("." + normTarget) ||
+                            normTarget.endsWith("." + itemDomain) ||
+                            itemDomain.includes(normTarget) ||
+                            normTarget.includes(itemDomain) ||
+                            (item.url || "").toLowerCase().includes(normTarget);
+
+            if (isMatch) {
+              foundResult = {
+                item,
+                page,
+                positionOnPage: item.rankOnPage,
+                absoluteRank: startOffset + item.rankOnPage
+              };
+              break;
+            }
+          }
+
+          if (foundResult) break;
+        }
+
+        if (foundResult) {
+          return {
+            success: true,
+            found: true,
+            targetDomain,
+            keyword,
+            rank: foundResult.absoluteRank,
+            page: foundResult.page,
+            positionOnPage: foundResult.positionOnPage,
+            title: foundResult.item.title,
+            url: foundResult.item.url,
+            message: `Website '${targetDomain}' ditemukan di Halaman ${foundResult.page}, Peringkat #${foundResult.absoluteRank} Google untuk keyword '${keyword}'.`
+          };
+        }
+
+        return {
+          success: true,
+          found: false,
+          targetDomain,
+          keyword,
+          pagesScanned: maxPages,
+          totalChecked,
+          message: `Website '${targetDomain}' tidak ditemukan di ${maxPages} halaman pertama Google untuk keyword '${keyword}'.`
         };
       }
 
