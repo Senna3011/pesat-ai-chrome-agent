@@ -80,6 +80,40 @@
     {
       type: "function",
       function: {
+        name: "open_new_tab",
+        description: "Membuka tab baru di browser dengan URL yang ditentukan dan mengembalikan tabId.",
+        parameters: {
+          type: "object",
+          properties: {
+            url: { type: "string", pattern: "^https?://", maxLength: 2048 },
+            active: { type: "boolean" }
+          },
+          required: ["url"],
+          additionalProperties: false
+        }
+      },
+      metadata: { sideEffect: "local", risk: "medium", timeout: 15000, redactFields: [] }
+    },
+    {
+      type: "function",
+      function: {
+        name: "switch_to_tab",
+        description: "Beralih fokus ke tab browser lain berdasarkan tabId, judul tab, atau URL.",
+        parameters: {
+          type: "object",
+          properties: {
+            tabId: { type: "number" },
+            matchTitle: { type: "string", maxLength: 300 },
+            matchUrl: { type: "string", maxLength: 2048 }
+          },
+          additionalProperties: false
+        }
+      },
+      metadata: { sideEffect: "local", risk: "low", timeout: 10000, redactFields: [] }
+    },
+    {
+      type: "function",
+      function: {
         name: "finish_task",
         description: "Menyelesaikan task hanya setelah verifikasi berhasil.",
         parameters: { type: "object", properties: { message: { type: "string", minLength: 1, maxLength: 4000 } }, required: ["message"], additionalProperties: false }

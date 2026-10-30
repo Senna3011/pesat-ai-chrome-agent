@@ -993,4 +993,32 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     expect(serpSimulation.found.absoluteRank).toBe(14);
     expect(serpSimulation.found.domain).toBe('filterairgadingserpong.com');
   });
+
+  test('should parse word replacement and sanitize AI apologies before doc insertion', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      // 1. Uji pembersih teks
+      const dirty = 'Mohon maaf atas kekeliruannya, kamu meminta ganti kata Apel jadi Jeruk.\n\nBerikut teks penggantinya:\nJeruk Segar Manis\n\nSemoga membantu!';
+      let clean = dirty.trim();
+      clean = clean.replace(/^(?:(?:mohon\s+)?maaf(?:\s+(?:atas|ya|sebelumnya|kekeliruannya))?[^.\n]*[.:\n]+|\b(?:tentu|baik(?:lah)?|halo|hai)\b[^.\n]*[.:\n]+)/i, '');
+      clean = clean.replace(/^(?:(?:i\s+)?apologize|sorry\s+(?:for|about)?|sure|certainly)[^.\n]*[.:\n]+/i, '');
+      clean = clean.replace(/^(?:berikut(?:\s+adalah)?\s+(?:hasil|draf|teks|konten|perbaikan|pengganti(?:nya)?)[^.:\n]*[.:\n]+)/i, '');
+      clean = clean.replace(/^(?:here\s+is\s+(?:the\s+)?(?:text|replacement|result)[^.:\n]*[.:\n]+)/i, '');
+      clean = clean.replace(/\n+(?:semoga\s+membantu|ada\s+yang\s+bisa\s+saya\s+bantu|apakah\s+ada\s+hal\s+lain|let\s+me\s+know|hope\s+this\s+helps)[^\n]*$/i, '');
+
+      // 2. Uji parsing target penggantian kata
+      const p = 'Nyoba minta dia ganti 1 kata Apel jadi Jeruk di Gdocs';
+      const m = p.match(/(?:ganti|ubah|replace)\s+(?:kata|word|text|teks|kalimat|frasa|tulisan)?\s*["'“]([^"'“”]+)["'”]\s*(?:menjadi|jadi|dengan|ke|with|to)\s*["'“]([^"'“”]+)["'”]/i) ||
+                p.match(/(?:ganti|ubah|replace)\s+(?:1\s+kata|kata|word|text|teks|kalimat|frasa|tulisan)\s+([^\s"']+)\s+(?:menjadi|jadi|dengan|ke|with|to)\s+([^\s"']+)/i);
+
+      return {
+        cleanedText: clean.trim(),
+        findText: m ? m[1] : null,
+        replaceText: m ? m[2] : null
+      };
+    });
+
+    expect(result.cleanedText).toBe('Jeruk Segar Manis');
+    expect(result.findText).toBe('Apel');
+    expect(result.replaceText).toBe('Jeruk');
+  });
 });

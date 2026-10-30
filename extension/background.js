@@ -587,12 +587,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (chrome.runtime.lastError) {
           sendResponse({ success: false, error: chrome.runtime.lastError.message });
         } else {
-          sendResponse({ success: true, tab });
+          sendResponse({ success: true, tab, tabId: tab?.id });
         }
       });
-    } else {
-      sendResponse({ success: false, error: "Target tabId tidak ditemukan." });
+      return true;
     }
+
+    chrome.tabs.query({ currentWindow: true }, (tabs) => {
+      const qTitle = String(request.matchTitle || "").toLowerCase();
+      const qUrl = String(request.matchUrl || "").toLowerCase();
+      const found = (tabs || []).find(t => {
+        if (qTitle && (t.title || "").toLowerCase().includes(qTitle)) return true;
+        if (qUrl && (t.url || "").toLowerCase().includes(qUrl)) return true;
+        return false;
+      });
+      if (found && found.id) {
+        chrome.tabs.update(found.id, { active: true }, (tab) => {
+          sendResponse({ success: true, tab, tabId: found.id });
+        });
+      } else {
+        sendResponse({ success: false, error: "Target tab tidak ditemukan berdasarkan filter judul atau URL." });
+      }
+    });
     return true;
   }
 

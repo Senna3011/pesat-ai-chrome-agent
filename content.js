@@ -2546,6 +2546,7 @@ ${tabText}`;
       }
 
       const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+      const isInlineOnly = !!actionData.inlineOnly || (!cleanText.includes("\n") && !cleanText.includes("#") && !cleanText.includes("|") && cleanText.length < 250);
 
       // 1. Klik dan aktifkan canvas/editor Google Docs
       const editorCanvas = document.querySelector(".kix-appview-editor") ||
@@ -2556,9 +2557,12 @@ ${tabText}`;
                            document.body;
       if (editorCanvas) {
         try {
-          editorCanvas.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
-          editorCanvas.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
-          editorCanvas.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+          // PENTING: Jangan dispatch click pada canvas jika inline replacement, karena akan mereset posisi seleksi teks pengguna!
+          if (!isInlineOnly) {
+            editorCanvas.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+            editorCanvas.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+            editorCanvas.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+          }
           editorCanvas.focus?.();
         } catch (_) {}
       }
@@ -2593,7 +2597,7 @@ ${tabText}`;
       const targetElement = innerTextarea || document.activeElement || iframe || editorCanvas;
 
       // Jika mode replace/ganti isi dokumen: pilih seluruh isi dokumen dan bersihkan sebelum menulis
-      if (actionData && actionData.replace) {
+      if (actionData && actionData.replace && !isInlineOnly) {
         try {
           const targets = [innerTextarea, innerDoc, iframe?.contentWindow, editorCanvas, document].filter(Boolean);
           targets.forEach(t => {
@@ -2619,11 +2623,17 @@ ${tabText}`;
         } catch (_) {}
       }
 
-      const { plain: cleanPlain, html: cleanHtml } = convertMarkdownToRichDoc(cleanText);
+      // 3. Tulis ke Clipboard sistem: Jika inline replacement, JANGAN bungkus ke HTML <p> block!
+      let cleanPlain = cleanText;
+      let cleanHtml = "";
+      if (!isInlineOnly) {
+        const converted = convertMarkdownToRichDoc(cleanText);
+        cleanPlain = converted.plain;
+        cleanHtml = converted.html;
+      }
 
-      // 3. Tulis ke Clipboard sistem dengan format HTML & Plain (Mendukung Tabel & Rich Format)
       try {
-        if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+        if (!isInlineOnly && cleanHtml && navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
           const blobHtml = new Blob([cleanHtml], { type: "text/html" });
           const blobText = new Blob([cleanPlain], { type: "text/plain" });
           await navigator.clipboard.write([
@@ -2656,19 +2666,21 @@ ${tabText}`;
       if (innerTextarea) innerTextarea.dispatchEvent(pasteEvent);
       if (innerDoc) innerDoc.dispatchEvent(pasteEvent);
       if (iframe) iframe.dispatchEvent(pasteEvent);
-      if (editorCanvas) editorCanvas.dispatchEvent(pasteEvent);
+      if (!isInlineOnly && editorCanvas) editorCanvas.dispatchEvent(pasteEvent);
       document.dispatchEvent(pasteEvent);
 
-      // 5. DataTransfer Clipboard Event (Paste Injection dengan Rich HTML & Plain)
+      // 5. DataTransfer Clipboard Event (Hanya sertakan HTML jika BUKAN inline text)
       const dt = new DataTransfer();
       dt.setData("text/plain", cleanPlain);
-      dt.setData("text/html", cleanHtml);
+      if (!isInlineOnly && cleanHtml) {
+        dt.setData("text/html", cleanHtml);
+      }
       const pasteClipboardEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
 
       if (innerTextarea) innerTextarea.dispatchEvent(pasteClipboardEv);
       if (innerDoc) innerDoc.dispatchEvent(pasteClipboardEv);
       if (iframe) iframe.dispatchEvent(pasteClipboardEv);
-      if (editorCanvas) editorCanvas.dispatchEvent(pasteClipboardEv);
+      if (!isInlineOnly && editorCanvas) editorCanvas.dispatchEvent(pasteClipboardEv);
       document.dispatchEvent(pasteClipboardEv);
 
       // 6. BeforeInput / InputEvent Fallback
@@ -2992,6 +3004,95 @@ ${tabText}`;
         url: window.location.href,
         title: document.title,
         message: `Berhasil mengekstrak ${items.length} hasil organik SERP.`
+      };
+    }
+
+    if (action === "replace_text_in_doc") {
+      const findText = String(actionData.findText || "").trim();
+      const replaceText = String(actionData.replaceText || "").trim();
+      const isGoogleDocs = window.location.hostname.includes("docs.google.com") && window.location.pathname.includes("/document/d/");
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+
+      if (!replaceText) {
+        return { success: false, error: "Teks pengganti tidak boleh kosong." };
+      }
+
+      if (isGoogleDocs) {
+        // 1. Bersihkan dan tutup modal dialog "Cari dan ganti" jika ada yang tertinggal di layar
+        try {
+          const oldDialog = document.querySelector(".docs-find-replace-dialog, [role='dialog'].docs-dialog, div[aria-label*='Cari dan ganti' i], div[aria-label*='Find and replace' i]");
+          if (oldDialog) {
+            const closeBtn = oldDialog.querySelector(".modal-dialog-title-close, div[aria-label*='Tutup' i], div[aria-label*='Close' i], button[name='cancel'], button[name='close']");
+            if (closeBtn) {
+              const evt = { bubbles: true, cancelable: true, view: window };
+              closeBtn.dispatchEvent(new MouseEvent("mousedown", evt));
+              closeBtn.dispatchEvent(new MouseEvent("mouseup", evt));
+              closeBtn.dispatchEvent(new MouseEvent("click", evt));
+              closeBtn.click?.();
+            }
+            [window, document, document.activeElement, oldDialog].forEach(t => {
+              t?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true }));
+              t?.dispatchEvent(new KeyboardEvent("keyup", { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true }));
+            });
+            oldDialog.style.display = "none";
+            const bg = document.querySelector(".modal-dialog-bg");
+            if (bg) bg.style.display = "none";
+          }
+        } catch (_) {}
+
+        // 2. Fokuskan editor canvas Google Docs
+        const editorCanvas = document.querySelector(".kix-appview-editor") || document.querySelector(".docs-editor") || document.body;
+        const iframe = document.querySelector(".docs-texteventtarget-iframe") || document.querySelector("iframe[class*='texteventtarget']");
+        let innerTextarea = null;
+        if (iframe && iframe.contentDocument) {
+          innerTextarea = iframe.contentDocument.querySelector("textarea") || iframe.contentDocument.body;
+        }
+        const targetEl = innerTextarea || editorCanvas;
+        targetEl?.focus?.();
+
+        // 3. LANGSUNG GANTI KATA SECARA IN-PLACE (Tanpa memunculkan modal Cari dan Ganti)
+        // Ketika pengguna menandai/memblok kata di dokumen (Gambar 2), injeksi pengetikan langsung menimpa kata tersebut
+        await handleGoogleDocsTyping(replaceText, { inlineOnly: true, isWordReplacement: true });
+
+        return {
+          success: true,
+          findText: findText === "(terseleksi)" ? "Kata yang ditandai" : findText,
+          replaceText,
+          directSelection: true,
+          message: `Kata berhasil langsung diganti menjadi "${replaceText}" tanpa dialog opsi.`
+        };
+      }
+
+      // Jika bukan Google Docs (web biasa / editor contenteditable)
+      const domSel = window.getSelection?.()?.toString() || "";
+      if (domSel.trim().length > 0 || actionData.isDirectSelection) {
+        try {
+          document.execCommand("insertText", false, replaceText);
+          return {
+            success: true,
+            findText: findText === "(terseleksi)" ? domSel : findText,
+            replaceText,
+            directSelection: true,
+            message: `Kata yang ditandai berhasil diganti menjadi "${replaceText}".`
+          };
+        } catch (_) {}
+      }
+
+      if (typeof window.find === "function" && window.find(findText, false, false, true)) {
+        try {
+          document.execCommand("insertText", false, replaceText);
+          return {
+            success: true,
+            findText,
+            replaceText,
+            message: `Kata "${findText}" berhasil diganti menjadi "${replaceText}".`
+          };
+        } catch (_) {}
+      }
+
+      return {
+        success: false,
+        error: `Kata "${findText}" tidak ditemukan pada halaman web aktif.`
       };
     }
 

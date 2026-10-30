@@ -3448,6 +3448,8 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
 
     // Normalisasi nama
     if (actionType === "navigate_to") actionType = "navigate";
+    if (actionType === "open_new_tab") actionType = "new_tab";
+    if (actionType === "switch_to_tab") actionType = "switch_tab";
     if (actionType === "search" || actionType === "google") {
       actionType = "navigate";
       resObj.url = `https://www.google.com/search?q=${encodeURIComponent(resObj.value || activeTask?.goal || "")}`;
@@ -4066,6 +4068,177 @@ ${topCompStr}
     }
   }
 
+  // ─────────────────────────────────────────────────────
+  // TARGETED WORD REPLACEMENT & ANTI-SLOP SANITIZATION
+  // ─────────────────────────────────────────────────────
+  function parseWordReplacementParams(prompt = "") {
+    const text = String(prompt).trim();
+    // 1. Format jika user sudah menandai/memblok kata secara langsung di dokumen (Gambar 2):
+    // "ganti (kata ini|teks ini|ini|yang ditandai|yang diblok) (menjadi|jadi|dengan|ke) 'X'"
+    const directSelMatch = text.match(/(?:ganti|ubah|replace)\s+(?:kata\s+ini|teks\s+ini|ini|(?:kata\s+|teks\s+)?yang\s+(?:saya\s+)?(?:ditandai|tandai|diblok|blok|dipilih|pilih|diseleksi|seleksi))\s*(?:menjadi|jadi|dengan|ke|with|to)\s*["'“]?([^"'“”\n]+)["'”]?/i);
+    if (directSelMatch) {
+      return {
+        findText: "(terseleksi)",
+        replaceText: directSelMatch[1].trim(),
+        isDirectSelection: true,
+        replaceAll: false
+      };
+    }
+
+    // 2. Format standar: "ganti kata X menjadi Y"
+    const m = text.match(/(?:ganti|ubah|replace)\s+(?:kata|word|text|teks|kalimat|frasa|tulisan)?\s*["'“]([^"'“”]+)["'”]\s*(?:menjadi|jadi|dengan|ke|with|to)\s*["'“]([^"'“”]+)["'”]/i) ||
+              text.match(/(?:ganti|ubah|replace)\s+(?:1\s+kata|kata|word|text|teks|kalimat|frasa|tulisan)\s+([^\s"']+)\s+(?:menjadi|jadi|dengan|ke|with|to)\s+([^\s"']+)/i) ||
+              text.match(/(?:ganti|ubah|replace)\s+([^\s"']+)\s+(?:menjadi|jadi|dengan|with)\s+([^\s"']+)\s+(?:di|pada|in)\s+(?:gdocs|docs|google\s+docs|dokumen)/i);
+    if (m) {
+      return {
+        findText: m[1].trim(),
+        replaceText: m[2].trim(),
+        replaceAll: /(?:semua|seluruh|all)/i.test(text)
+      };
+    }
+    return null;
+  }
+
+  function sanitizeDocInsertText(rawText) {
+    if (!rawText) return "";
+    let clean = String(rawText).trim();
+    // 1. Buang pembuka percakapan / permohonan maaf / pengantar AI
+    clean = clean.replace(/^(?:(?:mohon\s+)?maaf(?:\s+(?:atas|ya|sebelumnya|kekeliruannya))?[^.\n]*[.:\n]+|\b(?:tentu|baik(?:lah)?|halo|hai)\b[^.\n]*[.:\n]+)/i, "");
+    clean = clean.replace(/^(?:(?:i\s+)?apologize|sorry\s+(?:for|about)?|sure|certainly)[^.\n]*[.:\n]+/i, "");
+    clean = clean.replace(/^(?:berikut(?:\s+adalah)?\s+(?:hasil|draf|teks|konten|perbaikan|pengganti(?:nya)?)[^.:\n]*[.:\n]+)/i, "");
+    clean = clean.replace(/^(?:here\s+is\s+(?:the\s+)?(?:text|replacement|result)[^.:\n]*[.:\n]+)/i, "");
+    // 2. Buang salam penutup percakapan
+    clean = clean.replace(/\n+(?:semoga\s+membantu|ada\s+yang\s+bisa\s+saya\s+bantu|apakah\s+ada\s+hal\s+lain|let\s+me\s+know|hope\s+this\s+helps)[^\n]*$/i, "");
+    return clean.trim();
+  }
+
+  async function runWordReplacementFlow(userPrompt, params) {
+    const findText = params?.findText;
+    const replaceText = params?.replaceText;
+    const replaceAll = !!params?.replaceAll;
+    const isDirectSelection = !!params?.isDirectSelection;
+
+    if (!replaceText) {
+      addMessageToCurrentSession("assistant", "⚠️ Mohon sertakan kata penggantinya. Format: *'Ganti kata yang ditandai menjadi \"rangkuman\"'* atau *'Ganti kata \"laporan\" menjadi \"rangkuman\"'*.");
+      return;
+    }
+
+    setAgentRunning(true);
+    showStatusIndicator(isDirectSelection ? `Mengganti kata yang ditandai menjadi "${replaceText}"...` : `Mengganti kata "${findText}" menjadi "${replaceText}"...`);
+    appendLog(`📝 Menjalankan penggantian kata: "${findText}" ➔ "${replaceText}"...`);
+
+    try {
+      const res = await sendToContentScript({
+        type: "EXECUTE_ACTION",
+        actionData: {
+          action: "replace_text_in_doc",
+          findText,
+          replaceText,
+          replaceAll,
+          isDirectSelection
+        }
+      });
+
+      if (res && res.success) {
+        appendLog(`✅ Kata berhasil diganti menjadi "${replaceText}".`);
+        const targetLabel = isDirectSelection || res.directSelection ? `Kata yang Ditandai (Seleksi Langsung)` : `\`${findText}\``;
+        const reply = `### ✏️ Penggantian Kata Berhasil\n\n` +
+          `- **Target Penggantian:** ${targetLabel}\n` +
+          `- **Kata Pengganti:** \`${replaceText}\`\n` +
+          `- **Status:** Sukses diperbarui langsung pada dokumen aktif.\n\n` +
+          `💡 _Kata telah langsung diganti secara presisi tanpa memunculkan dialog opsi._`;
+        addMessageToCurrentSession("assistant", reply, { skipClean: true });
+      } else {
+        appendLog(`⚠️ Penggantian kata gagal: ${res?.error || "Kata tidak ditemukan"}`, "WARN");
+        addMessageToCurrentSession("assistant", `⚠️ **Tidak dapat mengganti kata:**\n${res?.error || `Kata "${findText}" tidak ditemukan di dokumen yang sedang dibuka.`}`);
+      }
+    } catch (err) {
+      appendLog(`Error penggantian kata: ${err.message}`, "ERROR");
+      addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat mencoba mengganti kata: ${err.message}`);
+    } finally {
+      setAgentRunning(false);
+      hideStatusIndicator();
+    }
+  }
+
+  // ─────────────────────────────────────────────────────
+  // CROSS-TAB INTELLIGENT AI-TO-DOCS ORCHESTRATION
+  // ─────────────────────────────────────────────────────
+  function isPromptToDocsIntent(prompt = "") {
+    const text = String(prompt).trim();
+    return /(?:buka\s+(?:claude|chatgpt|gpt|ai|web).*(?:proses|buat|tulis|jawab|generate).*(?:lalu|kemudian|dan)?\s*(?:paste|tempel|masukkan|isi)\s+ke\s+(?:gdocs|docs|dokumen)|(?:proses|jalankan|buatkan).*prompt.*(?:lalu|kemudian|dan)?\s*(?:paste|tempel|masukkan)\s+ke\s+(?:gdocs|docs|dokumen))/i.test(text);
+  }
+
+  async function runPromptToDocsFlow(userPrompt) {
+    setAgentRunning(true);
+    showStatusIndicator("Memproses alur kerja lintas layanan (AI ➔ Google Docs)...");
+    appendLog("🚀 Menjalankan otomatisasi lintas layanan: Pemrosesan prompt ➔ Penulisan Google Docs...");
+
+    try {
+      // 1. Jika pengguna meminta buka Claude / AI di tab baru, buka tab tersebut
+      const isClaudeTab = /buka\s+claude/i.test(userPrompt);
+      const isGptTab = /buka\s+(?:chatgpt|gpt)/i.test(userPrompt);
+      if (isClaudeTab) {
+        appendLog("🌐 Membuka tab baru Claude (claude.ai)...");
+        await sendToBackground({ action: "NEW_TAB", url: "https://claude.ai" });
+        await new Promise(r => setTimeout(r, 800));
+      } else if (isGptTab) {
+        appendLog("🌐 Membuka tab baru ChatGPT (chatgpt.com)...");
+        await sendToBackground({ action: "NEW_TAB", url: "https://chatgpt.com" });
+        await new Promise(r => setTimeout(r, 800));
+      }
+
+      // 2. Ekstrak teks prompt yang ingin diproses
+      let promptToRun = userPrompt
+        .replace(/^(?:tolong\s+|mohon\s+)?(?:buka\s+(?:claude|chatgpt|gpt|ai)[^,]*,?\s*)?/i, "")
+        .replace(/(?:proses\s+prompt\s+(?:dibawah|ini|berikut)|jalankan\s+prompt\s+(?:dibawah|ini|berikut))[:\s]*/i, "")
+        .replace(/(?:lalu|kemudian|dan)?\s*(?:paste|tempel|masukkan|isi)\s+ke\s+(?:gdocs|docs|google\s+docs|dokumen).*$/i, "")
+        .trim();
+
+      if (!promptToRun || promptToRun.length < 5) {
+        promptToRun = userPrompt;
+      }
+
+      appendLog(`🧠 Memproses konten prompt dengan AI Model (${promptToRun.slice(0, 60)}...)...`);
+      showStatusIndicator("Menghasilkan konten via AI Engine...");
+      const rawResult = await callLLM("chat", `Bertindaklah sebagai asisten profesional. Tolong kerjakan dan hasilkan konten secara lengkap, mendalam, dan rapi sesuai instruksi berikut tanpa basa-basi pengantar atau penutup:\n\n${promptToRun}`);
+
+      const cleanContent = sanitizeDocInsertText(rawResult);
+
+      // 3. Alihkan kembali fokus ke tab Google Docs
+      appendLog("📄 Menemukan tab Google Docs aktif dan menyisipkan konten...");
+      showStatusIndicator("Menuliskan hasil ke Google Docs...");
+      await sendToBackground({ action: "SWITCH_TAB", matchUrl: "docs.google.com/document" });
+      await new Promise(r => setTimeout(r, 800));
+
+      const writeRes = await sendToContentScript({
+        type: "EXECUTE_ACTION",
+        actionData: {
+          action: "paste_text",
+          value: cleanContent
+        }
+      });
+
+      if (!writeRes || !writeRes.success) {
+        await executeAgentAction({ action: "paste_text", value: cleanContent });
+      }
+
+      appendLog("✅ Alur kerja lintas layanan sukses diselesaikan!");
+      const reply = `### 🚀 Otomasi Lintas Layanan Berhasil Dijalankan\n\n` +
+        `1. **Pemrosesan AI:** Prompt berhasil diproses secara cerdas.\n` +
+        `2. **Penyisipan Dokumen:** Teks bersih telah langsung disalin dan ditempelkan ke tab Google Docs Anda.\n\n` +
+        `---\n\n### 📝 Pratinjau Teks yang Disisipkan:\n\n${cleanContent}`;
+
+      addMessageToCurrentSession("assistant", reply, { skipClean: true });
+    } catch (err) {
+      appendLog(`Error pada otomasi lintas layanan: ${err.message}`, "ERROR");
+      addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan pada alur kerja lintas layanan: ${err.message}`);
+    } finally {
+      setAgentRunning(false);
+      hideStatusIndicator();
+    }
+  }
+
   // ═══════════════════════════════════════════════════
   // MAIN: TASK EXECUTION LOOP (BYOK Gate Checked)
   // ═══════════════════════════════════════════════════
@@ -4223,13 +4396,6 @@ ${topCompStr}
       return;
     }
 
-    // 0. Deteksi Tugas Pengecekan Peringkat SERP Google Multi-Halaman (Feedback Mas Alfu)
-    const serpParams = parseSerpRankingParams(userPrompt);
-    if (serpParams) {
-      await runSerpRankingFlow(userPrompt, serpParams);
-      return;
-    }
-
     // Deteksi konteks tab aktif saat ini untuk routing presisi
     let currentTabActive = null;
     try {
@@ -4241,6 +4407,26 @@ ${topCompStr}
 
     const isCurrentTabDocs = (currentTabUrl.includes("docs.google.com/document") || currentTabTitle.includes("Google Dokumen") || currentTabTitle.includes("Google Docs") || currentTabUrl.includes("word.office.com")) && !currentTabUrl.includes("/spreadsheets");
     const isCurrentTabSheets = (currentTabUrl.includes("docs.google.com/spreadsheets") || currentTabTitle.includes("Google Spreadsheet") || currentTabTitle.includes("Google Sheets") || currentTabUrl.includes("excel.office.com"));
+
+    // 0. Deteksi Tugas Pengecekan Peringkat SERP Google Multi-Halaman (Feedback Mas Alfu)
+    const serpParams = parseSerpRankingParams(userPrompt);
+    if (serpParams) {
+      await runSerpRankingFlow(userPrompt, serpParams);
+      return;
+    }
+
+    // 0.1. Deteksi Permintaan Penggantian Kata Presisi (Find & Replace) di Google Docs / Dokumen
+    const wordRepParams = parseWordReplacementParams(userPrompt);
+    if (wordRepParams && (isCurrentTabDocs || /(?:gdocs|docs|google\s+docs|dokumen)/i.test(userPrompt))) {
+      await runWordReplacementFlow(userPrompt, wordRepParams);
+      return;
+    }
+
+    // 0.2. Deteksi Alur Kerja Lintas Layanan Cerdas (Prompt AI ➔ Paste Google Docs)
+    if (isPromptToDocsIntent(userPrompt)) {
+      await runPromptToDocsFlow(userPrompt);
+      return;
+    }
 
     // Deteksi pembuatan draf konten murni (revisi/ganti draft tanpa aksi fisik)
     const isContentDraftingIntent = /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan|ulasan|ringkasan|makalah|esai)/i.test(userPrompt) &&
@@ -4259,8 +4445,10 @@ ${topCompStr}
       /^(?:tolong\s+|mohon\s+)?(?:cari|search|carikan|temukan)\s+.+\s+(?:di|pada|ke)\s+[a-zA-Z0-9.-]+/i.test(userPrompt)
     ) && (!/(?:rangkum|ringkas|summarize|ringkasan|rangkuman|intisari|jelaskan|analisa|analisis|apa\s+isi|baca\s+tab)/i.test(userPrompt) || /(?:komposer|twitter|x\.com|threads|medsos|isi\s+(?:seluruh\s+|semua\s+)?(?:form|formulir)|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(userPrompt));
 
+    const isMultiStepGoal = /(?:lalu|kemudian|setelah\s+itu|\bthen\b|setelahnya|dan\s+(?:buka|paste|tempel|masukkan|kirim)|(?:buka|kunjungi).*(?:lalu|kemudian|setelah|paste|tempel))/i.test(userPrompt);
+
     const typedIntent = globalThis.PesatAgentEngine?.classifyTask?.(userPrompt, contextSourcesToSend) || null;
-    const needsAgentLoop = !isContentDraftingIntent && (isPhysicalAutomation ||
+    const needsAgentLoop = !isContentDraftingIntent && (isPhysicalAutomation || isMultiStepGoal ||
       typedIntent?.mode === "execute" ||
       typedIntent?.mode === "research" || typedIntent?.mode === "hybrid" ||
       /(?:knowledge(?:\s+base)?|dokumen tersimpan|cari sumber|riset multi[- ]?sumber|laporan enterprise|simpan (?:halaman|dokumen)|hapus (?:source|sumber|dokumen))/i.test(userPrompt));
@@ -4295,6 +4483,38 @@ ${topCompStr}
     return rows.length > 0 ? rows : null;
   }
 
+  // ═══════════════════════════════════════════════════
+  // PENGURAI TAUTAN SUMBER DARI PERINTAH RAMAH PENGGUNA
+  // ═══════════════════════════════════════════════════
+  function resolveSourceUrlFromPrompt(prompt = "") {
+    // 1. Direct explicit URL (https://... or http://...)
+    const directUrlMatch = prompt.match(/https?:\/\/[^\s`"']+/i);
+    if (directUrlMatch) return directUrlMatch[0];
+
+    // 2. Domain dengan TLD (wikipedia.org, detik.com, kompas.com, dll)
+    const domainMatch = prompt.match(/\b([a-zA-Z0-9-]+\.(?:com|org|id|net|io|co\.id|gov|edu)(?:\/[^\s`"']*)?)\b/i);
+    if (domainMatch) return "https://" + domainMatch[1];
+
+    // 3. Situs Wikipedia + kueri pencarian (misal: "Kunijungi wikipedia dan cari kecerdasan buatan" atau "Buka wikipedia tentang AI")
+    const wikiSearch = prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]+(?:lalu|kemudian|setelah|dan|rangkum|ke|$)/i) ||
+                       prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+)/i);
+    if (wikiSearch && wikiSearch[1].trim()) {
+      const q = wikiSearch[1].trim().replace(/^(?:tentang|artikel)\s+/i, "").trim();
+      if (q) return "https://id.wikipedia.org/wiki/" + encodeURIComponent(q.replace(/\s+/g, "_"));
+    }
+    if (/(?:kuni?jungi|buka|ke|akses)\s+wikipedia/i.test(prompt)) {
+      return "https://id.wikipedia.org";
+    }
+
+    // 4. Pencarian umum di Google (misal: "cari di google tren AI 2026")
+    const googleSearchMatch = prompt.match(/(?:cari\s+(?:di\s+)?google|search\s+google)\s+(?:tentang\s+)?["'“]?([^.'"“”\n]+)["'”]?/i);
+    if (googleSearchMatch && googleSearchMatch[1].trim()) {
+      return "https://www.google.com/search?q=" + encodeURIComponent(googleSearchMatch[1].trim());
+    }
+
+    return null;
+  }
+
   async function runAnalysisFlow(userPrompt, contextSources = []) {
     // Guard: Jika ada proses analisis/task yang sedang berjalan, tolak pemanggilan ganda
     if (isAgentRunning) {
@@ -4311,6 +4531,25 @@ ${topCompStr}
         const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
         if (tabs && tabs[0]) activeTabInfo = tabs[0];
       } catch (_) {}
+
+      // 0.0. Jika perintah menyertakan situs/URL sumber, buka situs target di tab baru/aktif terlebih dahulu
+      const detectedSourceUrl = resolveSourceUrlFromPrompt(userPrompt);
+      if (detectedSourceUrl && (!activeTabInfo?.url || !activeTabInfo.url.includes(detectedSourceUrl.replace(/^https?:\/\//i, "").replace(/\/$/, "")))) {
+        if (activeTabInfo?.url?.includes("docs.google.com/document")) {
+          appendLog(`🌐 Membuka tautan sumber di tab baru: ${detectedSourceUrl}...`);
+          showStatusIndicator("Membuka sumber...");
+          await sendToBackground({ action: "NAVIGATE_TAB", url: detectedSourceUrl, newTab: true });
+        } else {
+          appendLog(`🌐 Membuka tautan sumber target: ${detectedSourceUrl}...`);
+          showStatusIndicator("Membuka sumber...");
+          await navigateToUrl(detectedSourceUrl);
+        }
+        await new Promise(r => setTimeout(r, 2200));
+        try {
+          const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+          if (tabs && tabs[0]) activeTabInfo = tabs[0];
+        } catch (_) {}
+      }
 
       // 0. Ekstraksi Dokumen / File Lampiran Pengguna
       const attachedFiles = (contextSources || []).filter(s => s && (s.type === "File" || s.type === "Image" || s.type === "Download" || s.content || s.metadata?.extractedText || s.metadata?.content || s.dataUrl || s.metadata?.dataUrl));
@@ -4407,19 +4646,19 @@ ${topCompStr}
                          pageUrl.includes("word.office.com");
 
       const isExplicitExcelOrCsv = /(?:excel|\.xls|\.xlsx|\.csv|spreadsheet|sheets)/i.test(userPrompt);
-      const isExplicitNavigateDocs = /(?:buka|open|ke|masukkan\s+ke|buatkan\s+ke)\s+(?:google\s+)?docs|docs\.new/i.test(userPrompt);
-      const isExplicitNavigateSheets = /(?:buka|open|ke|masukkan\s+ke|buatkan\s+ke)\s+(?:google\s+)?sheets|sheets\.new/i.test(userPrompt);
+      const isExplicitNavigateDocs = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|rangkum(?:kan)?|taruh|post)\s+(?:.*?\s+)?(?:ke|di|pada)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:ke|di|pada)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:buka|open)\s+(?:google\s+)?(?:docs?|dokumen|document)|docs\.new)/i.test(userPrompt);
+      const isExplicitNavigateSheets = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|taruh)\s+(?:.*?\s+)?(?:ke|di|pada)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:ke|di|pada)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:buka|open)\s+(?:google\s+)?(?:sheets?|spreadsheet)|sheets\.new)/i.test(userPrompt);
 
-      const userExplicitDocs = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke|tempel\s+ke|salin\s+ke|ekspor\s+ke|pindahkan\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen|(?:tulis\s+ke|simpan\s+ke|masukkan\s+ke|tempel\s+ke|ekspor\s+ke)\s+(?:dokumen|docs))/i.test(userPrompt);
+      const userExplicitDocs = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke|tempel\s+ke|salin\s+ke|ekspor\s+ke|pindahkan\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen|(?:tulis\s+ke|simpan\s+ke|masukkan\s+ke|tempel\s+ke|ekspor\s+ke)\s+(?:dokumen|docs)|(?:ke|di)\s+(?:google\s+)?(?:docs?|dokumen|document))/i.test(userPrompt);
       const userExplicitSheets = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|buatkan spreadsheet)/i.test(userPrompt);
       const isDocsTarget = !isExplicitExcelOrCsv && (userExplicitDocs || (attachedFiles.length === 0 && isDocsSite));
 
       const hasTableCreationIntent = /(?:buatkan tabel|buat tabel|bikin tabel|tabel data|isi data|tabel komparasi|data penjualan|tabel\b|\d+\s*kolom)/i.test(userPrompt);
 
-      // 1. isDocsTableTask: jika tujuannya Google Docs dan ada perintah membuat/mengubah tabel atau daftar perbandingan
-      const isDocsTableTask = !isExplicitExcelOrCsv && isDocsTarget && (
-        hasTableCreationIntent || (isDocsSite && /(?:tabel|perusahaan|komparasi|peringkat|top\s*\d+|daftar|ganti|ubah|edit)/i.test(userPrompt))
-      );
+	      // 1. isDocsTableTask: jika tujuannya Google Docs dan ada perintah membuat/mengubah tabel atau daftar perbandingan
+	      const isDocsTableTask = !isExplicitExcelOrCsv && isDocsTarget && (
+	        hasTableCreationIntent || (isDocsSite && /(?:tabel\s+data|buatkan\s+tabel|bikin\s+tabel|tabel\s+komparasi|tabel\s+perusahaan|tabel\b)/i.test(userPrompt))
+	      );
 
       // 2. isSpreadsheetTask: jika pengguna eksplisit meminta Sheets atau sedang berada di tab Sheets atau meminta export Excel/CSV
       const isSpreadsheetTask = isExplicitExcelOrCsv || (!isDocsTableTask && (
@@ -4847,8 +5086,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
                            /x\.com|twitter\.com|linkedin\.com|facebook\.com|threads\.net|threads\.com/i.test(pageUrl);
       const userSocialFillIntent = /(?:isi|tempel|masukkan|tulis|posting|post)\s+(?:ke|di|pada)?\s*(?:threads|x|twitter|linkedin|medsos|postingan|komposer)/i.test(userPrompt);
 
-      const shouldAutoPasteDocs = !!storedSettings.autoPasteDocs && (isExplicitNavigateDocs || /(?:tulis|ketik|isi|tempel|salin)\s+ke\s+(?:docs|dokumen)/i.test(userPrompt));
-      const shouldAutoPasteSheets = !!storedSettings.autoPasteDocs && (isExplicitNavigateSheets || /(?:tulis|isi|tempel)\s+(?:ke\s+)?spreadsheet/i.test(userPrompt));
+      const shouldAutoPasteDocs = isExplicitNavigateDocs || (!!storedSettings.autoPasteDocs && (isDocsSite || /(?:tulis|ketik|isi|tempel|salin)\s+ke\s+(?:docs|dokumen)/i.test(userPrompt)));
+      const shouldAutoPasteSheets = isExplicitNavigateSheets || (!!storedSettings.autoPasteDocs && (isSheetsSite || /(?:tulis|isi|tempel)\s+(?:ke\s+)?spreadsheet/i.test(userPrompt)));
 
       if (isDocsOutput && shouldAutoPasteDocs && (isDocsSite || isExplicitNavigateDocs)) {
         if (!isDocsSite && isExplicitNavigateDocs) {
@@ -4880,7 +5119,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
 
         showStatusIndicator("Menuliskan dokumen langsung ke Google Docs...");
         appendLog("📄 Menuliskan dokumen ke Google Docs...");
-        const docsWrite = await executeAgentAction({ action: "paste_text", value: aiReply, replace: isReplaceDocIntent, message: "Menulis hasil analisis ke Google Docs" });
+        const cleanInsert = sanitizeDocInsertText(aiReply);
+        const docsWrite = await executeAgentAction({ action: "paste_text", value: cleanInsert, replace: isReplaceDocIntent, message: "Menulis hasil analisis ke Google Docs" });
         if (!docsWrite?.success) throw new Error(docsWrite?.error || "Penulisan Google Docs gagal atau tidak disetujui.");
 
         addMessageToCurrentSession("assistant", `### 📝 Dokumen Berhasil Dibuat & Dituliskan ke Google Docs\n\n${aiReply}`, {
@@ -4973,7 +5213,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
       )) {
         showStatusIndicator("Menuliskan teks langsung ke Google Dokumen / editor...");
         appendLog("📄 Menuliskan teks langsung ke Google Dokumen / Lembar kerja aktif...");
-        const editorWrite = await executeAgentAction({ action: "paste_text", value: aiReply, message: "Menulis teks ke editor eksternal" });
+        const cleanInsert = sanitizeDocInsertText(aiReply);
+        const editorWrite = await executeAgentAction({ action: "paste_text", value: cleanInsert, message: "Menulis teks ke editor eksternal" });
         if (!editorWrite?.success) throw new Error(editorWrite?.error || "Penulisan editor gagal atau tidak disetujui.");
         addMessageToCurrentSession("assistant", `### 📝 Teks Berhasil Dibuat & Dituliskan ke Dokumen\n\n${aiReply}`, {
           skipClean: true,
@@ -5205,12 +5446,39 @@ ATURAN KETAT:
 					        const tabs = await new Promise(r => chrome.tabs.query({ active: true, currentWindow: true }, r));
 					        if (tabs && tabs[0]) activeTabForGoal = tabs[0];
 					      } catch (_) {}
-					      const goalTabUrl = activeTabForGoal?.url || "";
-					      const isDocsSiteGoal = (goalTabUrl.includes("docs.google.com/document") || goalTabUrl.includes("word.office.com")) && !goalTabUrl.includes("/spreadsheets");
-					      const isSheetsSiteGoal = goalTabUrl.includes("docs.google.com/spreadsheets") || goalTabUrl.includes("excel.office.com");
+						      const goalTabUrl = activeTabForGoal?.url || "";
+						      const isDocsSiteGoal = (goalTabUrl.includes("docs.google.com/document") || goalTabUrl.includes("word.office.com")) && !goalTabUrl.includes("/spreadsheets");
+						      const isSheetsSiteGoal = goalTabUrl.includes("docs.google.com/spreadsheets") || goalTabUrl.includes("excel.office.com");
 
-					      const isDocsGoal = isDocsSiteGoal || /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|ke|di|dalam|pada|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen)/i.test(goal);
-					      if (isDocsGoal && !/(?:spreadsheet|sheets\.new|google sheets?)/i.test(goal)) {
+							      // 1.4.1. Cek apakah ini tugas penggantian kata presisi di dokumen
+							      const wordRepParams = parseWordReplacementParams(goal);
+							      if (wordRepParams && (isDocsSiteGoal || /(?:gdocs|docs|google\s+docs|dokumen)/i.test(goal))) {
+							        setAgentRunning(false);
+							        if (activeTask) {
+							          activeTask.status = "COMPLETED";
+							          clearPersistedTask();
+							          activeTask = null;
+							        }
+							        await runWordReplacementFlow(goal, wordRepParams);
+							        return;
+							      }
+
+							      // 1.4.2. Cek apakah ini tugas pemrosesan prompt ke Google Docs (cross-tab AI to Docs)
+							      if (isPromptToDocsIntent(goal)) {
+							        setAgentRunning(false);
+							        if (activeTask) {
+							          activeTask.status = "COMPLETED";
+							          clearPersistedTask();
+							          activeTask = null;
+							        }
+							        await runPromptToDocsFlow(goal);
+							        return;
+							      }
+
+							      const isMultiStepGoal = /(?:lalu|kemudian|setelah\s+itu|\bthen\b|setelahnya|dan\s+(?:buka|paste|tempel|masukkan|kirim)|(?:buka|kunjungi).*(?:lalu|kemudian|setelah|paste|tempel))/i.test(goal);
+
+						      const isDocsGoal = isDocsSiteGoal || /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|ke|di|dalam|pada|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen)/i.test(goal);
+						      if (isDocsGoal && !isMultiStepGoal && !/(?:spreadsheet|sheets\.new|google sheets?)/i.test(goal)) {
 					        appendLog("📄 Mengalihkan ke Document Writing Engine (Google Docs)...");
 					        setAgentRunning(false);
 					        if (activeTask) {
