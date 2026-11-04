@@ -167,3 +167,93 @@ test('resolveSourceUrlFromPrompt: accurately extracts target URL from natural us
   assert.equal(resolveSourceUrlFromPrompt('cari di google tren AI 2026'), 'https://www.google.com/search?q=tren%20AI%202026');
   assert.equal(resolveSourceUrlFromPrompt('buatkan draf artikel tentang kesehatan'), null);
 });
+
+test('parseDirectDocTypingParams: extracts exact literal word/text from Mas Alfu prompt without summarizing', () => {
+  function parseDirectDocTypingParams(prompt = "") {
+    const text = String(prompt).trim();
+    const quotedMatch = text.match(/(?:tulis(?:kan)?|ketik(?:kan)?|masukkan|isi(?:kan)?|tambah(?:kan)?|sisip(?:kan)?|paste|tempel(?:kan)?)\s+(?:kata|teks|kalimat|frasa|tulisan)?\s*["'“]([^"'“”\n]+)["'”]\s*(?:di|ke|pada)?\s*(?:docs|dokumen|document|gdocs|tab|halaman|kursor)?/i);
+    if (quotedMatch && quotedMatch[1].trim()) {
+      return { text: quotedMatch[1].trim() };
+    }
+    const unquotedMatch = text.match(/(?:tulis(?:kan)?|ketik(?:kan)?|masukkan|isi(?:kan)?|tambah(?:kan)?|sisip(?:kan)?)\s+(?:kata|teks|kalimat|frasa|tulisan)\s+([^\s"'.,;]+)\s*(?:di|ke|pada)?\s*(?:docs|dokumen|document|gdocs|kursor)?/i) ||
+                          text.match(/(?:tulis(?:kan)?|ketik(?:kan)?)\s+([^\s"'.,;]+)\s+(?:di|ke|pada)\s+(?:docs|dokumen|document|gdocs|kursor)/i);
+    if (unquotedMatch && unquotedMatch[1].trim()) {
+      const val = unquotedMatch[1].trim();
+      if (!/^(?:artikel|tabel|table|draf|draft|rangkuman|ringkasan|makalah|esai|laporan|berita|spreadsheet|excel|csv)$/i.test(val)) {
+        return { text: val };
+      }
+    }
+    return null;
+  }
+
+  // Mas Alfu's exact case
+  const res1 = parseDirectDocTypingParams("tuliskan kata 'thankyou' di docs yang terbuka");
+  assert.ok(res1);
+  assert.equal(res1.text, "thankyou");
+
+  const res2 = parseDirectDocTypingParams('tulis kata "thankyou" di docs');
+  assert.ok(res2);
+  assert.equal(res2.text, "thankyou");
+
+  const res3 = parseDirectDocTypingParams('ketik "thankyou" di dokumen');
+  assert.ok(res3);
+  assert.equal(res3.text, "thankyou");
+
+  const res4 = parseDirectDocTypingParams('tulis thankyou di docs');
+  assert.ok(res4);
+  assert.equal(res4.text, "thankyou");
+
+  // Rejects article/table drafting prompts
+  assert.equal(parseDirectDocTypingParams('tuliskan 3 paragraf artikel tentang AI'), null);
+  assert.equal(parseDirectDocTypingParams('buatkan tabel perbandingan harga di docs'), null);
+});
+
+test('parseNewTabIntent: accurately detects and formats new tab URLs from user commands', () => {
+  function parseNewTabIntent(prompt = "") {
+    const text = String(prompt).trim();
+    const m1 = text.match(/(?:buka|open|buat|create)\s+tab\s+baru\s*(?:ke|buka|menuju|akses|url|web|situs)?\s*([^\s]+)?/i);
+    const m2 = text.match(/(?:buka|open)\s+(?:link\s+|url\s+|situs\s+|website\s+)?([^\s]+)\s+(?:di|ke)\s+tab\s+baru/i);
+
+    if (m1 || m2) {
+      let raw = (m2 ? m2[1] : (m1 ? m1[1] : "")) || "";
+      raw = raw.trim().replace(/^[:="']+|[:="']+$/g, "");
+      if (!raw || /^(?:ke|dan|di|buka|kosong|baru)$/i.test(raw)) {
+        return { url: "https://www.google.com", isDefault: true };
+      }
+      if (/^wikipedia/i.test(raw)) {
+        return { url: "https://id.wikipedia.org" };
+      }
+      if (/^google/i.test(raw)) {
+        return { url: "https://www.google.com" };
+      }
+      if (!/^https?:\/\//i.test(raw)) {
+        if (raw.includes(".") || raw.startsWith("localhost")) {
+          raw = "https://" + raw;
+        } else {
+          raw = "https://www.google.com/search?q=" + encodeURIComponent(raw);
+        }
+      }
+      return { url: raw };
+    }
+    return null;
+  }
+
+  // Mas Alfu's second feedback case
+  const res1 = parseNewTabIntent('Buka tab baru ke https://detik.com');
+  assert.ok(res1);
+  assert.equal(res1.url, 'https://detik.com');
+
+  const res2 = parseNewTabIntent('buka tab baru wikipedia');
+  assert.ok(res2);
+  assert.equal(res2.url, 'https://id.wikipedia.org');
+
+  const res3 = parseNewTabIntent('buka link https://github.com di tab baru');
+  assert.ok(res3);
+  assert.equal(res3.url, 'https://github.com');
+
+  const res4 = parseNewTabIntent('buka tab baru');
+  assert.ok(res4);
+  assert.equal(res4.url, 'https://www.google.com');
+
+  assert.equal(parseNewTabIntent('buka https://detik.com'), null);
+});

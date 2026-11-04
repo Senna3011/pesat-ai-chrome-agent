@@ -85,7 +85,7 @@
         parameters: {
           type: "object",
           properties: {
-            url: { type: "string", pattern: "^https?://", maxLength: 2048 },
+            url: { type: "string", maxLength: 2048 },
             active: { type: "boolean" }
           },
           required: ["url"],

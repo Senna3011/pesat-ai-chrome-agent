@@ -76,9 +76,11 @@ async function persistSWState() {
 hydrateSWState();
 
 // Buka side panel otomatis ketika ikon ekstensi di-klik di toolbar atau via shortcut _execute_action
-chrome.sidePanel
-  .setPanelBehavior({ openPanelOnActionClick: true })
-  .catch((error) => console.error("[Pesat SW] Error setting panel behavior:", error));
+if (chrome.sidePanel?.setPanelBehavior) {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch(() => {});
+}
 
 if (chrome.action && chrome.action.onClicked) {
   chrome.action.onClicked.addListener(async (tab) => {
@@ -134,9 +136,11 @@ function setupContextMenus() {
 
 chrome.runtime.onInstalled.addListener(() => {
   setupContextMenus();
-  chrome.sidePanel
-    .setPanelBehavior({ openPanelOnActionClick: true })
-    .catch((error) => console.error("[Pesat SW] Error setting panel behavior:", error));
+  if (chrome.sidePanel?.setPanelBehavior) {
+    chrome.sidePanel
+      .setPanelBehavior({ openPanelOnActionClick: true })
+      .catch(() => {});
+  }
 
   bgLog("INFO", "SW_INSTALLED", "Background Service Worker berhasil diinstal & aktif.");
   console.log("[Pesat AI Agent] Background Service Worker installed successfully.");
@@ -612,7 +616,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  if (request.action === "NEW_TAB") {
+  if (request.action === "NEW_TAB" || request.action === "OPEN_NEW_TAB" || request.action === "open_new_tab") {
     const raw = request.url || request.value || "https://www.google.com";
     const dest = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     chrome.tabs.create({ url: dest }, (tab) => {
@@ -948,7 +952,7 @@ ATURAN KETAT:
   }
 
   // Navigasi URL tab aktif atau buka tab baru via Chrome Tabs API (aman untuk chrome://newtab, about:blank dll)
-  if (request.action === "NAVIGATE_TAB" || request.action === "navigate_to" || request.action === "CREATE_TAB" || request.action === "OPEN_TAB") {
+  if (request.action === "NAVIGATE_TAB" || request.action === "navigate_to" || request.action === "CREATE_TAB" || request.action === "OPEN_TAB" || request.action === "OPEN_NEW_TAB" || request.action === "open_new_tab") {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       try {
         let rawUrl = (request.url || request.value || "").trim();

@@ -4162,6 +4162,132 @@ ${topCompStr}
   }
 
   // ─────────────────────────────────────────────────────
+  // DIRECT DOC WORD / TEXT TYPING & INSERTION (Feedback Mas Alfu #1)
+  // ─────────────────────────────────────────────────────
+  function parseDirectDocTypingParams(prompt = "") {
+    const text = String(prompt).trim();
+    // 1. Quoted string: "tuliskan kata 'thankyou' di docs yang terbuka", "ketik 'thankyou' di docs"
+    const quotedMatch = text.match(/(?:tulis(?:kan)?|ketik(?:kan)?|masukkan|isi(?:kan)?|tambah(?:kan)?|sisip(?:kan)?|paste|tempel(?:kan)?)\s+(?:kata|teks|kalimat|frasa|tulisan)?\s*["'“]([^"'“”\n]+)["'”]\s*(?:di|ke|pada)?\s*(?:docs|dokumen|document|gdocs|tab|halaman|kursor)?/i);
+    if (quotedMatch && quotedMatch[1].trim()) {
+      return {
+        text: quotedMatch[1].trim()
+      };
+    }
+
+    // 2. Unquoted explicit word: "tuliskan kata thankyou di docs", "ketik kata thankyou di dokumen"
+    const unquotedMatch = text.match(/(?:tulis(?:kan)?|ketik(?:kan)?|masukkan|isi(?:kan)?|tambah(?:kan)?|sisip(?:kan)?)\s+(?:kata|teks|kalimat|frasa|tulisan)\s+([^\s"'.,;]+)\s*(?:di|ke|pada)?\s*(?:docs|dokumen|document|gdocs|kursor)?/i) ||
+                          text.match(/(?:tulis(?:kan)?|ketik(?:kan)?)\s+([^\s"'.,;]+)\s+(?:di|ke|pada)\s+(?:docs|dokumen|document|gdocs|kursor)/i);
+    if (unquotedMatch && unquotedMatch[1].trim()) {
+      const val = unquotedMatch[1].trim();
+      if (!/^(?:artikel|tabel|table|draf|draft|rangkuman|ringkasan|makalah|esai|laporan|berita|spreadsheet|excel|csv)$/i.test(val)) {
+        return {
+          text: val
+        };
+      }
+    }
+    return null;
+  }
+
+  async function runDirectDocTypingFlow(userPrompt, params) {
+    const insertText = params?.text;
+    if (!insertText) return;
+
+    setAgentRunning(true);
+    showStatusIndicator(`Menuliskan "${insertText}" ke Google Docs...`);
+    appendLog(`✍️ Menuliskan langsung teks "${insertText}" ke Google Docs aktif...`);
+
+    try {
+      const res = await sendToContentScript({
+        type: "EXECUTE_ACTION",
+        actionData: {
+          action: "paste_text",
+          value: insertText,
+          inlineOnly: true
+        }
+      });
+
+      if (res && res.success !== false) {
+        appendLog(`✅ Teks "${insertText}" berhasil dituliskan ke dokumen.`);
+        const reply = `### ✍️ Teks Berhasil Dituliskan\n\n` +
+          `- **Teks:** \`${insertText}\`\n` +
+          `- **Status:** Sukses disisipkan langsung ke posisi kursor dokumen aktif.\n\n` +
+          `💡 _Teks dituliskan secara presisi tanpa merangkum atau mengubah isi dokumen lainnya._`;
+        addMessageToCurrentSession("assistant", reply, { skipClean: true });
+      } else {
+        appendLog(`⚠️ Penulisan teks gagal: ${res?.error || "Gagal menyisipkan teks"}`, "WARN");
+        addMessageToCurrentSession("assistant", `⚠️ **Tidak dapat menuliskan teks:**\n${res?.error || "Gagal menyisipkan teks ke Google Docs."}`);
+      }
+    } catch (err) {
+      appendLog(`Error penulisan langsung: ${err.message}`, "ERROR");
+      addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat mencoba menuliskan teks: ${err.message}`);
+    } finally {
+      setAgentRunning(false);
+      hideStatusIndicator();
+    }
+  }
+
+  // ─────────────────────────────────────────────────────
+  // DIRECT BROWSER NEW TAB CONTROLLER (Feedback Mas Alfu #2)
+  // ─────────────────────────────────────────────────────
+  function parseNewTabIntent(prompt = "") {
+    const text = String(prompt).trim();
+    // 1. "buka tab baru (ke/menuju/akses/buka)? <url/query>?"
+    const m1 = text.match(/(?:buka|open|buat|create)\s+tab\s+baru\s*(?:ke|buka|menuju|akses|url|web|situs)?\s*([^\s]+)?/i);
+    // 2. "buka <url> di tab baru"
+    const m2 = text.match(/(?:buka|open)\s+(?:link\s+|url\s+|situs\s+|website\s+)?([^\s]+)\s+(?:di|ke)\s+tab\s+baru/i);
+
+    if (m1 || m2) {
+      let raw = (m2 ? m2[1] : (m1 ? m1[1] : "")) || "";
+      raw = raw.trim().replace(/^[:="']+|[:="']+$/g, "");
+      if (!raw || /^(?:ke|dan|di|buka|kosong|baru)$/i.test(raw)) {
+        return { url: "https://www.google.com", isDefault: true };
+      }
+      if (/^wikipedia/i.test(raw)) {
+        return { url: "https://id.wikipedia.org" };
+      }
+      if (/^google/i.test(raw)) {
+        return { url: "https://www.google.com" };
+      }
+      if (!/^https?:\/\//i.test(raw)) {
+        if (raw.includes(".") || raw.startsWith("localhost")) {
+          raw = "https://" + raw;
+        } else {
+          raw = "https://www.google.com/search?q=" + encodeURIComponent(raw);
+        }
+      }
+      return { url: raw };
+    }
+    return null;
+  }
+
+  async function runNewTabFlow(userPrompt, params) {
+    const destUrl = params?.url || "https://www.google.com";
+    setAgentRunning(true);
+    showStatusIndicator(`Membuka tab baru: ${destUrl}...`);
+    appendLog(`🌐 Membuka tab baru menuju: ${destUrl}...`);
+
+    try {
+      const res = await sendToBackground({ action: "NEW_TAB", url: destUrl });
+      if (res && res.success !== false) {
+        appendLog(`✅ Tab baru berhasil dibuka: ${destUrl}`);
+        const reply = `### 🌐 Tab Baru Berhasil Dibuka\n\n` +
+          `- **URL Tujuan:** [${destUrl}](${destUrl})\n` +
+          `- **Status:** Tab baru telah dibuka dan diarahkan ke tautan yang diperintahkan.`;
+        addMessageToCurrentSession("assistant", reply, { skipClean: true });
+      } else {
+        appendLog(`⚠️ Gagal membuka tab baru: ${res?.error || "Gagal membuka tab"}`, "WARN");
+        addMessageToCurrentSession("assistant", `⚠️ **Gagal membuka tab baru:**\n${res?.error || "Peramban menolak pembuatan tab baru."}`);
+      }
+    } catch (err) {
+      appendLog(`Error buka tab baru: ${err.message}`, "ERROR");
+      addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat membuka tab baru: ${err.message}`);
+    } finally {
+      setAgentRunning(false);
+      hideStatusIndicator();
+    }
+  }
+
+  // ─────────────────────────────────────────────────────
   // CROSS-TAB INTELLIGENT AI-TO-DOCS ORCHESTRATION
   // ─────────────────────────────────────────────────────
   function isPromptToDocsIntent(prompt = "") {
@@ -4419,6 +4545,20 @@ ${topCompStr}
     const wordRepParams = parseWordReplacementParams(userPrompt);
     if (wordRepParams && (isCurrentTabDocs || /(?:gdocs|docs|google\s+docs|dokumen)/i.test(userPrompt))) {
       await runWordReplacementFlow(userPrompt, wordRepParams);
+      return;
+    }
+
+    // 0.2. Deteksi Penulisan / Pengetikan Kata Langsung ke Google Docs (Feedback Mas Alfu #1)
+    const directDocTypingParams = parseDirectDocTypingParams(userPrompt);
+    if (directDocTypingParams && (isCurrentTabDocs || /(?:gdocs|docs|google\s+docs|dokumen)/i.test(userPrompt))) {
+      await runDirectDocTypingFlow(userPrompt, directDocTypingParams);
+      return;
+    }
+
+    // 0.3. Deteksi Perintah Buka Tab Baru Langsung (Feedback Mas Alfu #2)
+    const newTabParams = parseNewTabIntent(userPrompt);
+    if (newTabParams && !/(?:lalu|kemudian|setelah\s+itu|kemudian\s+cari|dan\s+(?:rangkum|ketik|isi|paste))/i.test(userPrompt)) {
+      await runNewTabFlow(userPrompt, newTabParams);
       return;
     }
 
@@ -4840,6 +4980,10 @@ PEDOMAN FORMAT DOKUMEN GOOGLE DOCS (SUPER RAPI & COPYWRITING EXPERT STANDAR INTE
         } else {
           const paragraphMatch = userPrompt.match(/(?:tulis|buatkan|buat|ketik|isi|bahas)\s+(\d+)\s+paragraf/i) || userPrompt.match(/(\d+)\s+paragraf/i);
           const paragraphCount = paragraphMatch ? parseInt(paragraphMatch[1], 10) : null;
+          const isDocEditingOrSummary = isSummarize || isBusinessOrPageAnalysis || /(?:rangkum|ringkas|audit|evaluasi|perbaiki|koreksi|rapikan|revisi|edit|bedah)/i.test(userPrompt);
+          const docsRefText = (!isDocsSite || isDocEditingOrSummary)
+            ? cleanText.substring(0, 20000)
+            : "(Tab aktif saat ini adalah dokumen Google Docs tujuan penulisan; hasilkan teks/tulisan murni sesuai perintah pengguna di atas tanpa merangkum dokumen ini)";
 
           promptPayload = `Bertindaklah sebagai JURNALIS PROFESIONAL & EDITOR KONTEN DOKUMEN GOOGLE DOCS (Standar Publikasi Dokumen Resmi).
 
@@ -4848,17 +4992,17 @@ ${userPrompt}
 
 [REFERENSI SUMBER DARI WEB / TAB TERLAMPIR]:
 Judul: ${pageTitle} | URL: ${pageUrl}
-${cleanText.substring(0, 20000) || "(Gunakan instruksi pengguna sebagai referensi)"}
+${docsRefText || "(Gunakan instruksi pengguna sebagai referensi)"}
 
 PEDOMAN KETAT PENULISAN DOKUMEN GOOGLE DOCS:
 1. TULISKAN KONTEN SESUAI PERMINTAAN SECARA MENDALAM, MENARIK, DAN FAKTUAL (Jelaskan makna, fakta, atau analisis secara lengkap dan komprehensif!).
-2. DILARANG KERAS memberikan instruksi manual atau panduan (seperti "Buka Google Docs...", "Langkah 1:...", dll.). LANGSUNG TULISKAN KONTEN DOKUMEN / PEMBAHASANNYA DARI DATA REFERENSI!
+2. DILARANG KERAS memberikan instruksi manual atau panduan (seperti "Buka Google Docs...", "Langkah 1:...", dll.). LANGSUNG TULISKAN KONTEN / TEKS YANG DIMINTA PENGGUNA!
 3. DILARANG membuat format briefing militer/intelijen kecuali pengguna secara eksplisit memintanya.
 4. JANGAN menyertakan tabel Markdown jika pengguna tidak meminta tabel.
 5. Format dokumen yang rapi:
    - Judul Dokumen di baris pertama (# Judul)
    - Lead / Paragraf pengantar
-   - Rincian butir-butir pembahasan utama (fakta, makna, pesan moral, atau poin analisis penting dari video/web referensi)
+   - Rincian butir-butir pembahasan utama (fakta, makna, pesan moral, atau poin analisis penting)
    - Kesimpulan atau penutup yang relevan
 6. Gaya bahasa: Mengalir alami, tajam, bernas, dan bebas klise robotik AI.
 7. DILARANG KERAS MENGGUNAKAN SIMBOL BLOCKQUOTE (>) DI AWAL BARIS! Tuliskan seluruh teks dan butir secara langsung tanpa karakter '>'.
@@ -5450,18 +5594,44 @@ ATURAN KETAT:
 						      const isDocsSiteGoal = (goalTabUrl.includes("docs.google.com/document") || goalTabUrl.includes("word.office.com")) && !goalTabUrl.includes("/spreadsheets");
 						      const isSheetsSiteGoal = goalTabUrl.includes("docs.google.com/spreadsheets") || goalTabUrl.includes("excel.office.com");
 
-							      // 1.4.1. Cek apakah ini tugas penggantian kata presisi di dokumen
-							      const wordRepParams = parseWordReplacementParams(goal);
-							      if (wordRepParams && (isDocsSiteGoal || /(?:gdocs|docs|google\s+docs|dokumen)/i.test(goal))) {
-							        setAgentRunning(false);
-							        if (activeTask) {
-							          activeTask.status = "COMPLETED";
-							          clearPersistedTask();
-							          activeTask = null;
-							        }
-							        await runWordReplacementFlow(goal, wordRepParams);
-							        return;
-							      }
+								      // 1.4.1. Cek apakah ini tugas penggantian kata presisi di dokumen
+								      const wordRepParams = parseWordReplacementParams(goal);
+								      if (wordRepParams && (isDocsSiteGoal || /(?:gdocs|docs|google\s+docs|dokumen)/i.test(goal))) {
+								        setAgentRunning(false);
+								        if (activeTask) {
+								          activeTask.status = "COMPLETED";
+								          clearPersistedTask();
+								          activeTask = null;
+								        }
+								        await runWordReplacementFlow(goal, wordRepParams);
+								        return;
+								      }
+
+								      // 1.4.1b. Cek apakah ini tugas penulisan kata langsung di dokumen (Feedback Mas Alfu #1)
+								      const directTypingInGoal = parseDirectDocTypingParams(goal);
+								      if (directTypingInGoal && (isDocsSiteGoal || /(?:gdocs|docs|google\s+docs|dokumen)/i.test(goal))) {
+								        setAgentRunning(false);
+								        if (activeTask) {
+								          activeTask.status = "COMPLETED";
+								          clearPersistedTask();
+								          activeTask = null;
+								        }
+								        await runDirectDocTypingFlow(goal, directTypingInGoal);
+								        return;
+								      }
+
+								      // 1.4.1c. Cek apakah ini tugas pembukaan tab baru langsung (Feedback Mas Alfu #2)
+								      const newTabInGoal = parseNewTabIntent(goal);
+								      if (newTabInGoal && !/(?:lalu|kemudian|setelah\s+itu|kemudian\s+cari|dan\s+(?:rangkum|ketik|isi|paste))/i.test(goal)) {
+								        setAgentRunning(false);
+								        if (activeTask) {
+								          activeTask.status = "COMPLETED";
+								          clearPersistedTask();
+								          activeTask = null;
+								        }
+								        await runNewTabFlow(goal, newTabInGoal);
+								        return;
+								      }
 
 							      // 1.4.2. Cek apakah ini tugas pemrosesan prompt ke Google Docs (cross-tab AI to Docs)
 							      if (isPromptToDocsIntent(goal)) {
@@ -5827,7 +5997,9 @@ ${sub.description}
 - Jika instruksi merupakan pertanyaan, analisis, penjelasan, pemecahan masalah (troubleshooting/fix), saran, atau penulisan konten/tabel:
   Sajikan jawaban secara LANGSUNG, mendalam, dan terstruktur rapi dalam teks Markdown. DILARANG memanggil tool manipulasi jika pengguna hanya meminta informasi atau panduan.
 - Jika instruksi membutuhkan manipulasi fisik halaman web:
-  Panggil tool yang sesuai (navigate_to, click_element, type_text, press_key, finish_task).
+  Panggil tool yang sesuai (open_new_tab, switch_to_tab, navigate_to, click_element, type_text, press_key, finish_task).
+  * Gunakan open_new_tab({ url: "https://..." }) saat pengguna meminta membuka tab baru atau menjelajah tautan baru.
+  * Gunakan switch_to_tab({ matchTitle: "...", matchUrl: "..." }) saat perlu beralih ke tab yang sudah terbuka (seperti Google Docs atau spreadsheet).
 - Jika instruksi selesai sepenuhnya, sajikan teks jawaban akhir atau panggil finish_task.
 `.trim();
 
