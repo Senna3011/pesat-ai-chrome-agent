@@ -270,7 +270,7 @@
       pointer-events: none !important;
     `;
 
-    pesatShadowRoot = pesatHostElement.attachShadow({ mode: "open" });
+    pesatShadowRoot = pesatHostElement.attachShadow({ mode: "closed" });
     ensurePesatStylesInShadow(pesatShadowRoot);
 
     (document.body || document.documentElement).appendChild(pesatHostElement);
@@ -3725,7 +3725,7 @@ ${tabText}`;
 
         const isPassword = targetEl instanceof HTMLInputElement && targetEl.type === "password";
         const displayVal = isPassword ? "••••••••" : textToFill;
-        const readBack = isPassword ? textToFill : (targetEl.value ?? targetEl.innerText ?? textToFill);
+        const readBack = isPassword ? "[PROTECTED]" : (targetEl.value ?? targetEl.innerText ?? textToFill);
         restoreOutline();
         return {
           success: true,

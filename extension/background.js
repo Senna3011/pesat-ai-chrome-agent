@@ -73,7 +73,7 @@ async function persistSWState() {
   } catch (_) {}
 }
 
-hydrateSWState();
+const hydrationPromise = hydrateSWState();
 
 // Buka side panel otomatis ketika ikon ekstensi di-klik di toolbar atau via shortcut _execute_action
 if (chrome.sidePanel?.setPanelBehavior) {
@@ -297,8 +297,37 @@ ${userPrompt || "Tolong buat ringkasan poin-poin penting (bullet points) dari is
   return data.reply || "Gagal menghasilkan rangkuman.";
 }
 
+const SENSITIVE_INTERNAL_ACTIONS = new Set([
+  "BACKEND_SESSION",
+  "GOOGLE_STATUS",
+  "SAVE_GOOGLE_AUTH",
+  "CLEAR_GOOGLE_AUTH",
+  "FETCH_GDOCS_TAB_TEXT",
+  "SCREENSHOT",
+  "LIST_TABS",
+  "DOWNLOAD_FILE",
+  "EXECUTE_IN_CONTENT",
+  "EXECUTE_SAFE_ACTION"
+]);
+
+function isSenderAuthorized(request, sender) {
+  if (sender.id && sender.id !== chrome.runtime.id) {
+    return false;
+  }
+  const actionName = request?.action || request?.type;
+  if (SENSITIVE_INTERNAL_ACTIONS.has(actionName)) {
+    return !sender.tab && sender.url && sender.url.startsWith(`chrome-extension://${chrome.runtime.id}/`);
+  }
+  return true;
+}
+
 // Listener komunikasi pesan dari Side Panel atau Content Script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (!isSenderAuthorized(request, sender)) {
+    sendResponse({ success: false, error: "Forbidden: Aksi sensitif ini dibatasi hanya untuk internal extension context." });
+    return false;
+  }
+
   if (request.action === "PING" || request.type === "PING") {
     sendResponse({ status: "OK", message: "Background service worker active", timestamp: Date.now() });
     return true;
@@ -611,19 +640,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
       } else {
         sendResponse({ success: false, error: "Target tab tidak ditemukan berdasarkan filter judul atau URL." });
-      }
-    });
-    return true;
-  }
-
-  if (request.action === "NEW_TAB" || request.action === "OPEN_NEW_TAB" || request.action === "open_new_tab") {
-    const raw = request.url || request.value || "https://www.google.com";
-    const dest = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-    chrome.tabs.create({ url: dest }, (tab) => {
-      if (chrome.runtime.lastError) {
-        sendResponse({ success: false, error: chrome.runtime.lastError.message });
-      } else {
-        sendResponse({ success: true, tabId: tab.id });
       }
     });
     return true;
@@ -952,7 +968,7 @@ ATURAN KETAT:
   }
 
   // Navigasi URL tab aktif atau buka tab baru via Chrome Tabs API (aman untuk chrome://newtab, about:blank dll)
-  if (request.action === "NAVIGATE_TAB" || request.action === "navigate_to" || request.action === "CREATE_TAB" || request.action === "OPEN_TAB" || request.action === "OPEN_NEW_TAB" || request.action === "open_new_tab") {
+  if (request.action === "NAVIGATE_TAB" || request.action === "navigate_to" || request.action === "CREATE_TAB" || request.action === "OPEN_TAB" || request.action === "OPEN_NEW_TAB" || request.action === "open_new_tab" || request.action === "NEW_TAB") {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       try {
         let rawUrl = (request.url || request.value || "").trim();
@@ -966,11 +982,20 @@ ATURAN KETAT:
           if (url.includes(".") || url.startsWith("localhost")) {
             url = "https://" + url;
           } else {
-            url = "https://www.google.com/search?q=" + encodeURIComponent(url);
+            url = "https://www.google.com/search?q=" + encodeURIComponent(rawUrl);
           }
         }
 
-        if (request.action === "CREATE_TAB" || request.action === "OPEN_TAB" || request.newTab) {
+        try {
+          const parsed = new URL(url);
+          if (!["http:", "https:"].includes(parsed.protocol)) {
+            url = "https://www.google.com/search?q=" + encodeURIComponent(rawUrl);
+          }
+        } catch (_) {
+          url = "https://www.google.com/search?q=" + encodeURIComponent(rawUrl);
+        }
+
+        if (request.action === "CREATE_TAB" || request.action === "OPEN_TAB" || request.action === "OPEN_NEW_TAB" || request.action === "open_new_tab" || request.action === "NEW_TAB" || request.newTab) {
           const newTab = await chrome.tabs.create({ url, active: true });
           sendResponse({ success: true, message: `Membuka tab baru: ${url}`, url, tabId: newTab?.id });
           return;

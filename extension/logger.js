@@ -51,6 +51,7 @@
       return val
         .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[EMAIL_REDACTED]")
         .replace(/(?:sk-[A-Za-z0-9_-]{20,}|bearer\s+[A-Za-z0-9._~+/-]+=*|ghp_[A-Za-z0-9]{36}|AIza[0-9A-Za-z-_]{35})/gi, "[KEY_REDACTED]")
+        .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "[JWT_REDACTED]")
         .replace(/([?&](?:token|key|auth|api_key|password|secret|code)=)[^&]+/gi, "$1[REDACTED]")
         .replace(/\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g, "[PHONE_REDACTED]");
     }
@@ -58,10 +59,18 @@
       return val.map((item) => scrubPII(item, depth + 1));
     }
     if (typeof val === "object") {
+      const isSensitiveContext =
+        Boolean(val.isPassword) ||
+        (val.action === "type" && /pass|pwd|token|pin|secret|cvv|credit|card/i.test(String(val.elementId || val.target || val.name || val.placeholder || "")));
+
       const out = {};
       for (const [k, v] of Object.entries(val)) {
-        if (/password|token|secret|auth|apikey|api_key|cookie/i.test(k)) {
+        if (/password|token|secret|auth|apikey|api_key|cookie|credential|cvv|pin/i.test(k)) {
           out[k] = "[REDACTED]";
+        } else if (isSensitiveContext && /value|textToFill|insertText|valueReadBack/i.test(k)) {
+          out[k] = "[REDACTED]";
+        } else if (k === "valueReadBack" && v === "[PROTECTED]") {
+          out[k] = "[PROTECTED]";
         } else {
           out[k] = scrubPII(v, depth + 1);
         }

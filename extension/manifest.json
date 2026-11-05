@@ -8,13 +8,11 @@
     "activeTab",
     "scripting",
     "storage",
-    "unlimitedStorage",
     "tabs",
     "downloads",
     "identity",
     "contextMenus",
-    "clipboardWrite",
-    "clipboardRead"
+    "clipboardWrite"
   ],
   "host_permissions": [
     "https://*/*",

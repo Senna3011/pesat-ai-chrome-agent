@@ -25,6 +25,17 @@ export async function onRequestOptions(context) {
 export async function onRequestGet(context) {
   const { request, env } = context;
   const corsHeaders = getCorsHeaders(request, env);
+
+  if (!isAuthorizedAdmin(request, env)) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: "Unauthorized: Akses bug reports memerlukan autentikasi Admin Token."
+    }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  }
+
   const url = new URL(request.url);
 
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "100", 10), MAX_REPORTS);
@@ -122,11 +133,14 @@ export async function onRequestPost(context) {
 }
 
 function isAuthorizedAdmin(request, env) {
+  const adminSecret = env?.ADMIN_API_KEY || env?.ADMIN_KEY || env?.PESAT_ADMIN_KEY;
+  if (!adminSecret || typeof adminSecret !== "string" || adminSecret.trim() === "") {
+    return false; // Fail closed jika token admin tidak dikonfigurasi di environment
+  }
   const authHeader = request.headers.get("Authorization") || "";
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
   const url = new URL(request.url);
   const queryToken = url.searchParams.get("token") || url.searchParams.get("key") || "";
-  const adminSecret = env?.ADMIN_API_KEY || env?.ADMIN_KEY || env?.PESAT_ADMIN_KEY || "pesat-telemetry-secret-2026";
   return (token && token === adminSecret) || (queryToken && queryToken === adminSecret);
 }
 

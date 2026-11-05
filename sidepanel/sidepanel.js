@@ -4255,7 +4255,15 @@ ${topCompStr}
           raw = "https://www.google.com/search?q=" + encodeURIComponent(raw);
         }
       }
-      return { url: raw };
+      try {
+        const parsed = new URL(raw);
+        if (!["http:", "https:"].includes(parsed.protocol)) {
+          return { url: "https://www.google.com/search?q=" + encodeURIComponent(raw) };
+        }
+        return { url: parsed.href };
+      } catch (_) {
+        return { url: "https://www.google.com/search?q=" + encodeURIComponent(raw) };
+      }
     }
     return null;
   }
@@ -4627,32 +4635,46 @@ ${topCompStr}
   // PENGURAI TAUTAN SUMBER DARI PERINTAH RAMAH PENGGUNA
   // ═══════════════════════════════════════════════════
   function resolveSourceUrlFromPrompt(prompt = "") {
+    let resolvedUrl = null;
     // 1. Direct explicit URL (https://... or http://...)
     const directUrlMatch = prompt.match(/https?:\/\/[^\s`"']+/i);
-    if (directUrlMatch) return directUrlMatch[0];
-
-    // 2. Domain dengan TLD (wikipedia.org, detik.com, kompas.com, dll)
-    const domainMatch = prompt.match(/\b([a-zA-Z0-9-]+\.(?:com|org|id|net|io|co\.id|gov|edu)(?:\/[^\s`"']*)?)\b/i);
-    if (domainMatch) return "https://" + domainMatch[1];
-
-    // 3. Situs Wikipedia + kueri pencarian (misal: "Kunijungi wikipedia dan cari kecerdasan buatan" atau "Buka wikipedia tentang AI")
-    const wikiSearch = prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]+(?:lalu|kemudian|setelah|dan|rangkum|ke|$)/i) ||
-                       prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+)/i);
-    if (wikiSearch && wikiSearch[1].trim()) {
-      const q = wikiSearch[1].trim().replace(/^(?:tentang|artikel)\s+/i, "").trim();
-      if (q) return "https://id.wikipedia.org/wiki/" + encodeURIComponent(q.replace(/\s+/g, "_"));
+    if (directUrlMatch) {
+      resolvedUrl = directUrlMatch[0];
+    } else {
+      // 2. Domain dengan TLD (wikipedia.org, detik.com, kompas.com, dll)
+      const domainMatch = prompt.match(/\b([a-zA-Z0-9-]+\.(?:com|org|id|net|io|co\.id|gov|edu)(?:\/[^\s`"']*)?)\b/i);
+      if (domainMatch) {
+        resolvedUrl = "https://" + domainMatch[1];
+      } else {
+        // 3. Situs Wikipedia + kueri pencarian (misal: "Kunijungi wikipedia dan cari kecerdasan buatan" atau "Buka wikipedia tentang AI")
+        const wikiSearch = prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]+(?:lalu|kemudian|setelah|dan|rangkum|ke|$)/i) ||
+                           prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+)/i);
+        if (wikiSearch && wikiSearch[1].trim()) {
+          const q = wikiSearch[1].trim().replace(/^(?:tentang|artikel)\s+/i, "").trim();
+          if (q) resolvedUrl = "https://id.wikipedia.org/wiki/" + encodeURIComponent(q.replace(/\s+/g, "_"));
+        } else if (/(?:kuni?jungi|buka|ke|akses)\s+wikipedia/i.test(prompt)) {
+          resolvedUrl = "https://id.wikipedia.org";
+        } else {
+          // 4. Pencarian umum di Google (misal: "cari di google tren AI 2026")
+          const googleSearchMatch = prompt.match(/(?:cari\s+(?:di\s+)?google|search\s+google)\s+(?:tentang\s+)?["'“]?([^.'"“”\n]+)["'”]?/i);
+          if (googleSearchMatch && googleSearchMatch[1].trim()) {
+            resolvedUrl = "https://www.google.com/search?q=" + encodeURIComponent(googleSearchMatch[1].trim());
+          }
+        }
+      }
     }
-    if (/(?:kuni?jungi|buka|ke|akses)\s+wikipedia/i.test(prompt)) {
-      return "https://id.wikipedia.org";
-    }
 
-    // 4. Pencarian umum di Google (misal: "cari di google tren AI 2026")
-    const googleSearchMatch = prompt.match(/(?:cari\s+(?:di\s+)?google|search\s+google)\s+(?:tentang\s+)?["'“]?([^.'"“”\n]+)["'”]?/i);
-    if (googleSearchMatch && googleSearchMatch[1].trim()) {
-      return "https://www.google.com/search?q=" + encodeURIComponent(googleSearchMatch[1].trim());
-    }
+    if (!resolvedUrl) return null;
 
-    return null;
+    try {
+      const parsed = new URL(resolvedUrl);
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return null;
+      }
+      return parsed.href;
+    } catch (_) {
+      return null;
+    }
   }
 
   async function runAnalysisFlow(userPrompt, contextSources = []) {
