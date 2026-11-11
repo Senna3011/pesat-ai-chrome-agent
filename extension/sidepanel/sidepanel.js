@@ -28,6 +28,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const btnHistory = document.getElementById("btnHistory");
   const btnMemory = document.getElementById("btnMemory");
   const btnSettings = document.getElementById("btnSettings");
+  const btnMoreMenu = document.getElementById("btnMoreMenu");
+  const moreDropdown = document.getElementById("moreDropdown");
 
   const historyDrawer = document.getElementById("historyDrawer");
   const btnCloseHistory = document.getElementById("btnCloseHistory");
@@ -1574,8 +1576,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
               </div>
               <div class="doc-card-actions">
-                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi thread">📋 Salin Thread</button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke kotak postingan X / medsos aktif">⤴️ Tempel ke X / Medsos</button>
+                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi thread">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                  <span>Salin Thread</span>
+                </button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke kotak postingan X / medsos aktif">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                  <span>Tempel ke Medsos</span>
+                </button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -1596,12 +1604,30 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
               </div>
               <div class="doc-card-actions">
-                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh penjelasan dan teks jawaban biasa">📋 Salin Teks</button>
-                <button class="doc-action-btn" data-artifact-act="copy_tsv" title="Salin data tabel dalam format baris & kolom untuk Spreadsheet / Excel">📊 Salin Data Sheet</button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_excel" title="Unduh spreadsheet Excel dengan format tabel visual rapi">⬇️ Unduh Excel (.xls)</button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_csv" title="Unduh file tabel dalam format data murni .CSV">⬇️ .CSV</button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Sheets baru di tab terpisah dan tempelkan rapi">⤴️ Tempel ke Sheet (Tab Baru)</button>
-                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Isikan langsung ke lembar kerja spreadsheet aktif saat ini">⤴️ Di Sheet Ini</button>
+                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh penjelasan dan teks jawaban biasa">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                  <span>Salin</span>
+                </button>
+                <button class="doc-action-btn" data-artifact-act="copy_tsv" title="Salin data tabel dalam format baris & kolom untuk Spreadsheet / Excel">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                  <span>Data Sheet</span>
+                </button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_excel" title="Unduh spreadsheet Excel .xls">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Excel</span>
+                </button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_csv" title="Unduh file tabel .CSV">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>.CSV</span>
+                </button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Sheets baru di tab terpisah">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                  <span>Sheet Baru</span>
+                </button>
+                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Isikan langsung ke spreadsheet aktif saat ini">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+                  <span>Di Sheet Ini</span>
+                </button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -1622,10 +1648,22 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
               </div>
               <div class="doc-card-actions">
-                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi artikel">📋 Salin Teks</button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Unduh file dokumen resmi Microsoft Word .docx">⬇️ Unduh Word (.docx)</button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Docs baru di tab terpisah dan tempelkan rapi">⤴️ Tempel ke Docs (Tab Baru)</button>
-                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Tempelkan langsung di posisi kursor dokumen aktif saat ini">⤴️ Di Kursor Ini</button>
+                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi artikel">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                  <span>Salin Teks</span>
+                </button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Unduh file dokumen resmi Microsoft Word .docx">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Word (.docx)</span>
+                </button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Docs baru di tab terpisah dan tempelkan rapi">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                  <span>Docs Baru</span>
+                </button>
+                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Tempelkan langsung di posisi kursor dokumen aktif saat ini">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+                  <span>Di Kursor Ini</span>
+                </button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -7584,11 +7622,13 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     historyDrawer?.classList.add("hidden");
     memoryDrawer?.classList.add("hidden");
     settingsPanel?.classList.add("hidden");
+    moreDropdown?.classList.add("hidden");
     createNewSession();
   });
   btnDrawerNewChat.addEventListener("click", () => createNewSession());
 
   btnHistory.addEventListener("click", () => {
+    moreDropdown?.classList.add("hidden");
     const isHidden = historyDrawer.classList.toggle("hidden");
     if (!isHidden) {
       memoryDrawer?.classList.add("hidden");
@@ -7605,7 +7645,25 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     }
   });
 
+  if (btnMoreMenu && moreDropdown) {
+    btnMoreMenu.addEventListener("click", (e) => {
+      e.stopPropagation();
+      moreDropdown.classList.toggle("hidden");
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!moreDropdown.classList.contains("hidden") && !btnMoreMenu.contains(e.target) && !moreDropdown.contains(e.target)) {
+        moreDropdown.classList.add("hidden");
+      }
+    });
+
+    moreDropdown.addEventListener("click", () => {
+      moreDropdown.classList.add("hidden");
+    });
+  }
+
   btnSettings.addEventListener("click", () => {
+    moreDropdown?.classList.add("hidden");
     const isHidden = settingsPanel.classList.toggle("hidden");
     if (!isHidden) {
       historyDrawer?.classList.add("hidden");
@@ -7673,6 +7731,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
 
   if (btnMemory && memoryDrawer) {
     btnMemory.addEventListener("click", () => {
+      moreDropdown?.classList.add("hidden");
       const isHidden = memoryDrawer.classList.toggle("hidden");
       if (!isHidden) {
         historyDrawer?.classList.add("hidden");
