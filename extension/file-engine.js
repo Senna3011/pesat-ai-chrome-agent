@@ -373,7 +373,8 @@
         }
 
         if (combinedText.length >= 20) {
-          const maxExcerpt = combinedText.length > 20000 ? combinedText.substring(0, 20000) + "\n\n...[teks dokumen dipotong untuk batas konteks]..." : combinedText;
+          // Mendukung long-context window (hingga ~125.000 token input dokumen)
+          const maxExcerpt = combinedText.length > 500000 ? combinedText.substring(0, 500000) + "\n\n...[teks dokumen dipotong untuk batas konteks 500K karakter]..." : combinedText;
           return `[DOKUMEN PDF: ${file.name}]\n\n${maxExcerpt}`;
         }
         return `[DOKUMEN PDF: ${file.name} (${Math.round(file.size / 1024)} KB) - Format terstruktur PDF terlampir]`;
@@ -409,7 +410,7 @@
               if (matches.length > 0) {
                 const extracted = matches.map(m => m.replace(/<[^>]+>/g, "")).join(" ");
                 const clean = extracted.replace(/\s+/g, " ").trim();
-                const maxExcerpt = clean.length > 20000 ? clean.substring(0, 20000) + "\n\n...[dipotong]..." : clean;
+                const maxExcerpt = clean.length > 500000 ? clean.substring(0, 500000) + "\n\n...[dipotong batas konteks 500K karakter]..." : clean;
                 return `[DOKUMEN WORD (.DOCX): ${file.name}]\n\n${maxExcerpt}`;
               }
             }
