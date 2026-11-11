@@ -2,6 +2,7 @@ import { exchangeGoogleSession, verifySession } from "./auth.mjs";
 import { chat } from "./chat.mjs";
 import { HttpError, corsHeaders, json } from "./helpers.mjs";
 import { createDocument, deleteDocument, listDocuments, readDocument, reindexDocument, searchKnowledge } from "./knowledge.mjs";
+import { handleTelemetryLogs, handleTelemetryReports } from "./telemetry.mjs";
 
 async function health(env) {
   const bindings = { d1: Boolean(env.DB), originals: Boolean(env.ORIGINALS), artifacts: Boolean(env.ARTIFACTS), vectorize: Boolean(env.VECTORIZE), ai: Boolean(env.AI || (env.EMBEDDING_BASE_URL && env.EMBEDDING_API_KEY)) };
@@ -28,6 +29,11 @@ async function route(request, env) {
     }
     return exchangeGoogleSession(request, env);
   }
+
+  // Telemetry logs and bug reports routes
+  if (url.pathname === "/api/logs") return handleTelemetryLogs(request, env);
+  if (url.pathname === "/api/reports") return handleTelemetryReports(request, env);
+
   const session = await verifySession(request, env);
   if (env.API_RATE_LIMITER) {
     const rate = await env.API_RATE_LIMITER.limit({ key: `${session.tenantId}:${session.userId}` });

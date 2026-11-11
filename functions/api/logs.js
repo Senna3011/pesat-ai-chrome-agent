@@ -297,7 +297,7 @@ function renderTelemetryDashboardHtml(logs, total) {
               </td>
               <td>
                 <div style="font-size:12.5px;word-break:break-all;">
-                  <a href="${b.url || b.details?.url || '#'}" target="_blank" style="color:#60a5fa;text-decoration:none;">${escapeHtml(b.details?.tabTitle || b.url || 'Tidak ada URL')}</a>
+                  <a href="${safeUrl(b.url || b.details?.url)}" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;text-decoration:none;">${escapeHtml(b.details?.tabTitle || b.url || 'Tidak ada URL')}</a>
                 </div>
               </td>
               <td>
@@ -338,6 +338,18 @@ function escapeHtml(text) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function safeUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== "string") return "#";
+  try {
+    const trimmed = rawUrl.trim();
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return escapeHtml(trimmed);
+    }
+  } catch (_) {}
+  return "#";
 }
 
 export async function onRequestGet(context) {

@@ -3599,6 +3599,16 @@ ${tabText}`;
       }
     }
 
+    // SPA Dynamic Fallback: Re-index DOM jika elemen belum ditemukan setelah re-render dinamis
+    if (!targetEl && (cleanId || actionData.targetText || actionData.fallbackText)) {
+      try {
+        scanInteractiveDOM(false);
+        if (cleanId) {
+          targetEl = activeElementsMap.get(Number(cleanId)) || document.querySelector(`[data-pesat-id="${cleanId}"]`);
+        }
+      } catch (_) {}
+    }
+
     if (!targetEl && actionData.selector) {
       try {
         const foundBySelector = document.querySelector(actionData.selector);

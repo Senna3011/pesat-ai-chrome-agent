@@ -200,43 +200,10 @@ html, body {
 }
 
 /* ==========================================================================
-   QUICK ACTION CHIPS (Pill style ala Pesat.ai)
+   QUICK ACTION CHIPS (Visible only on initial empty chat)
    ========================================================================== */
-.quick-chips-container {
-  display: flex;
-  gap: 6px;
-  padding: 8px 12px;
-  background: rgba(10, 10, 20, 0.6);
-  border-bottom: 1px solid var(--border-subtle);
-  overflow-x: auto;
-  scrollbar-width: none;
-  flex-shrink: 0;
-  z-index: 5;
-}
-
-.quick-chips-container::-webkit-scrollbar {
-  display: none;
-}
-
-.chip-btn {
-  flex-shrink: 0;
-  padding: 5px 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-subtle);
-  border-radius: 9999px;
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-
-.chip-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(99, 102, 241, 0.5);
-  color: var(--text-primary);
-  transform: translateY(-1px);
+.quick-chips-slider-wrapper.hidden {
+  display: none !important;
 }
 
 /* ==========================================================================

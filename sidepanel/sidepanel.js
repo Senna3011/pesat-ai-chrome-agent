@@ -418,13 +418,39 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function saveSessions() {
-    if (sessions.length > 30) {
-      sessions = sessions.slice(0, 30);
+    if (sessions.length > 25) {
+      sessions = sessions.slice(0, 25);
     }
-    await chrome.storage.local.set({
-      agent_sessions: sessions,
-      current_session_id: currentSessionId
-    });
+    // Prune excessively large messages in non-active sessions to protect Chrome storage quota
+    for (let i = 0; i < sessions.length; i++) {
+      const s = sessions[i];
+      if (s.messages && s.messages.length > 60) {
+        s.messages = [s.messages[0], ...s.messages.slice(-50)];
+      }
+    }
+
+    try {
+      await chrome.storage.local.set({
+        agent_sessions: sessions,
+        current_session_id: currentSessionId
+      });
+    } catch (err) {
+      console.warn("[Pesat Storage] Gagal menyimpan sesi ke storage.local (kuota penuh?), melakukan emergency prune:", err);
+      if (sessions.length > 10) {
+        sessions = sessions.slice(0, 10);
+      }
+      for (const s of sessions) {
+        if (s.messages && s.messages.length > 25) {
+          s.messages = s.messages.slice(-25);
+        }
+      }
+      try {
+        await chrome.storage.local.set({
+          agent_sessions: sessions,
+          current_session_id: currentSessionId
+        });
+      } catch (_) {}
+    }
     renderSessionList();
   }
 
@@ -511,11 +537,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     return sessions.find(s => s.id === currentSessionId) || null;
   }
 
+  function updateQuickChipsVisibility() {
+    const wrapper = document.querySelector(".quick-chips-slider-wrapper");
+    if (!wrapper) return;
+    const session = getCurrentSession();
+    const isEmpty = !session || !session.messages || session.messages.length === 0;
+    if (isEmpty) {
+      wrapper.classList.remove("hidden");
+    } else {
+      wrapper.classList.add("hidden");
+    }
+  }
+
   function renderCurrentSession() {
     chatArea.innerHTML = "";
     const session = getCurrentSession();
     if (!session || session.messages.length === 0) {
       renderWelcomeMessage();
+      updateQuickChipsVisibility();
       return;
     }
 
@@ -523,6 +562,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (!msg.taskCard && !msg.multiAgent) renderMessageBubble(msg, idx);
     });
     chatArea.scrollTop = chatArea.scrollHeight;
+    updateQuickChipsVisibility();
   }
 
   function renderWelcomeMessage() {
@@ -1971,6 +2011,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (session.messages.length === 1 && role === "user") {
       const titleStr = typeof cleanContent === "string" ? cleanContent : "Percakapan Baru";
       session.title = titleStr.substring(0, 32) + (titleStr.length > 32 ? "..." : "");
+      updateQuickChipsVisibility();
     }
 
     session.timestamp = Date.now();
@@ -2232,14 +2273,27 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ── Usage Tracker (Informasional Pengganti Kuota & Realtime Task Token Tracker) ──
+  function getModelContextWindow(modelName = "") {
+    const m = String(modelName || storedSettings.model || "pesat-flash").toLowerCase();
+    if (m.includes("flash") || m.includes("gemini") || m.includes("1m")) return "1M";
+    if (m.includes("claude-3-5") || m.includes("sonnet") || m.includes("opus")) return "200K";
+    if (m.includes("gpt-4o") || m.includes("gpt-4-turbo")) return "128K";
+    if (m.includes("deepseek") || m.includes("r1") || m.includes("v3")) return "64K";
+    return "1M";
+  }
+
   function updateTokenTrackerUI(usage = {}) {
     if (!tokenTrackerText) return;
     const promptToks = Number(usage.prompt_tokens) || 0;
     const compToks = Number(usage.completion_tokens) || 0;
     const totalToks = Number(usage.total_tokens) || (promptToks + compToks);
-    const maxToks = Number(storedSettings.maxTokens || 4096);
+    const maxOutputToks = Number(storedSettings.maxTokens || 4096);
+    const contextLimit = getModelContextWindow(storedSettings.model);
 
-    tokenTrackerText.innerHTML = `Tokens: <strong>${totalToks.toLocaleString("id-ID")}</strong> (Prompt: ${promptToks.toLocaleString("id-ID")}, Output: ${compToks.toLocaleString("id-ID")}) | Max: ${maxToks.toLocaleString("id-ID")}`;
+    tokenTrackerText.innerHTML = `Tokens: <strong>${totalToks.toLocaleString("id-ID")}</strong> (Prompt: ${promptToks.toLocaleString("id-ID")}, Output: ${compToks.toLocaleString("id-ID")}) | Context: ${contextLimit}`;
+    if (tokenTrackerBar) {
+      tokenTrackerBar.title = `Total Tokens: ${totalToks.toLocaleString("id-ID")} | Model Context Window: ${contextLimit} | Max Output: ${maxOutputToks.toLocaleString("id-ID")}`;
+    }
   }
 
   async function refreshUsageDisplay() {
@@ -2682,7 +2736,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  function sendToContentScript(payload, timeoutMs = 15000, maxRetries = 2) {
+  function sendToContentScript(payload, timeoutMs = 15000, maxRetries = 2, explicitTabId = null) {
     return new Promise((resolve) => {
       let resolved = false;
       let retryCount = 0;
@@ -2704,8 +2758,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           }
         }, timeoutMs);
 
+        const targetTabId = explicitTabId || payload?.targetTabId || payload?.tabId || activeTask?.targetTabId || null;
+
         chrome.runtime.sendMessage(
-          { action: "EXECUTE_IN_CONTENT", payload },
+          { action: "EXECUTE_IN_CONTENT", payload, targetTabId },
           (response) => {
             if (!resolved) {
               clearTimeout(timer);
@@ -2763,15 +2819,20 @@ document.addEventListener("DOMContentLoaded", async () => {
       dest = "https://" + dest;
     }
 
-    // 1. Prioritas Utama: Navigasi langsung via chrome.tabs API di Tab Aktif
+    // 1. Prioritas Utama: Navigasi langsung via chrome.tabs API di Tab Target atau Aktif
     try {
-      if (typeof chrome !== "undefined" && chrome.tabs?.query && chrome.tabs?.update) {
-        const tabs = await new Promise((resolve) => {
-          chrome.tabs.query({ active: true, currentWindow: true }, (t) => resolve(t || []));
-        });
-        if (tabs && tabs.length > 0 && tabs[0].id) {
-          const tabId = tabs[0].id;
-          await chrome.tabs.update(tabId, { url: dest });
+      if (typeof chrome !== "undefined" && chrome.tabs?.update) {
+        let tabId = activeTask?.targetTabId || null;
+        if (!tabId && chrome.tabs?.query) {
+          const tabs = await new Promise((resolve) => {
+            chrome.tabs.query({ active: true, currentWindow: true }, (t) => resolve(t || []));
+          });
+          if (tabs && tabs.length > 0 && tabs[0].id) {
+            tabId = tabs[0].id;
+          }
+        }
+        if (tabId) {
+          await chrome.tabs.update(Number(tabId), { url: dest });
           appendLog(`🌐 chrome.tabs.update berhasil membuka tab ${tabId}: ${dest}`);
           return { success: true, url: dest, message: `Membuka URL: ${dest}` };
         }
@@ -2781,7 +2842,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // 2. Fallback via background script NAVIGATE_TAB
-    const bgRes = await sendToBackground({ action: "NAVIGATE_TAB", url: dest });
+    const bgRes = await sendToBackground({ action: "NAVIGATE_TAB", url: dest, targetTabId: activeTask?.targetTabId });
     if (bgRes && bgRes.success) {
       return bgRes;
     }
@@ -2910,6 +2971,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function cancelActiveTask(reason) {
     if (activeTask) {
+      if (activeTask.targetTabId) {
+        try { chrome.runtime.sendMessage({ action: "CLEAR_ACTIVE_AGENT_TAB", tabId: activeTask.targetTabId }); } catch (_) {}
+      }
       activeTask.status = "CANCELLED";
       refreshTaskCard();
       appendLog(`⛔ Task dibatalkan: ${reason}`, "WARN");
@@ -3674,6 +3738,10 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       if (actionType === "new_tab") {
         r = await sendToBackground({ action: "NEW_TAB", url: resObj.url || resObj.value });
         if (r && r.success) {
+          if (r.tabId && activeTask) {
+            activeTask.targetTabId = r.tabId;
+            try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: r.tabId }); } catch (_) {}
+          }
           await new Promise(res => setTimeout(res, 800));
           await sendToContentScript({ type: "LOCK_PAGE", message: "Tab baru sedang dikontrol oleh Pesat AI Agent..." }).catch(() => {});
         }
@@ -3682,6 +3750,10 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         await sendToContentScript({ type: "UNLOCK_PAGE" }).catch(() => {});
         r = await sendToBackground({ action: "SWITCH_TAB", matchTitle: resObj.matchTitle, matchUrl: resObj.matchUrl, tabId: resObj.tabId });
         if (r && r.success) {
+          if (r.tabId && activeTask) {
+            activeTask.targetTabId = r.tabId;
+            try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: r.tabId }); } catch (_) {}
+          }
           await new Promise(res => setTimeout(res, 600));
           await sendToContentScript({
             type: "LOCK_PAGE",
@@ -4576,8 +4648,13 @@ ${topCompStr}
       return;
     }
 
+    // Deteksi intent navigasi atau pencarian berita/informasi (jangan dibajak sebagai draf konten)
+    const isNavigationOrSearch = /(?:(?:ke|buka|kunjungi|akses|open|go\s*to)\s+[a-zA-Z0-9.-]+|cari\s+.+\s+(?:di|pada|ke)|cari\s+berita\s+(?:di|ke)|(?:di|ke)\s+(?:cnn|detik|kompas|tribun|kumparan|tempo|liputan6|antara|cnbc|viva|tirto|google|bing|wikipedia))/i.test(userPrompt) ||
+      /(?:(?:ke|buka|kunjungi)\s+(?:cnn|detik|kompas|tribun|kumparan|tempo|liputan6|antara|cnbc|viva|tirto))/i.test(userPrompt) ||
+      /(?:cari\s+(?:berita|informasi|artikel|data)\s+(?:tentang|mengenai)?\s+)/i.test(userPrompt);
+
     // Deteksi pembuatan draf konten murni (revisi/ganti draft tanpa aksi fisik)
-    const isContentDraftingIntent = /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan|ulasan|ringkasan|makalah|esai)/i.test(userPrompt) &&
+    const isContentDraftingIntent = !isNavigationOrSearch && /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan|ulasan|ringkasan|makalah|esai)/i.test(userPrompt) &&
       !/(?:posting\s+ke|post\s+ke|kirim\s+ke|upload|unggah\s+ke|buka\s+komposer|isi\s+form|autofill|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos)|tempel.*(?:threads|x|twitter))/i.test(userPrompt);
 
     // Deteksi aksi otomasi browser fisik (klik, login, isi form, navigasi direct, posting medsos)
@@ -4646,19 +4723,48 @@ ${topCompStr}
       if (domainMatch) {
         resolvedUrl = "https://" + domainMatch[1];
       } else {
-        // 3. Situs Wikipedia + kueri pencarian (misal: "Kunijungi wikipedia dan cari kecerdasan buatan" atau "Buka wikipedia tentang AI")
-        const wikiSearch = prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]+(?:lalu|kemudian|setelah|dan|rangkum|ke|$)/i) ||
-                           prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+)/i);
-        if (wikiSearch && wikiSearch[1].trim()) {
-          const q = wikiSearch[1].trim().replace(/^(?:tentang|artikel)\s+/i, "").trim();
-          if (q) resolvedUrl = "https://id.wikipedia.org/wiki/" + encodeURIComponent(q.replace(/\s+/g, "_"));
-        } else if (/(?:kuni?jungi|buka|ke|akses)\s+wikipedia/i.test(prompt)) {
-          resolvedUrl = "https://id.wikipedia.org";
+        // 2.5. Portal Berita & Media Populer Indonesia
+        const mediaPortals = [
+          { pattern: /\b(?:cnn\s*indonesia|cnn)\b/i, home: "https://www.cnnindonesia.com", search: "https://www.cnnindonesia.com/search/?query=" },
+          { pattern: /\b(?:detik(?:\.com)?|detikcom|detiknews)\b/i, home: "https://www.detik.com", search: "https://www.detik.com/search/searchall?query=" },
+          { pattern: /\b(?:kompas(?:\.com)?|kompascom)\b/i, home: "https://www.kompas.com", search: "https://search.kompas.com/search/?q=" },
+          { pattern: /\b(?:tribun(?:\s*news)?|tribunnews)\b/i, home: "https://www.tribunnews.com", search: "https://www.tribunnews.com/search?q=" },
+          { pattern: /\bkumparan\b/i, home: "https://kumparan.com", search: "https://kumparan.com/search/" },
+          { pattern: /\btempo(?:\.co)?\b/i, home: "https://www.tempo.co", search: "https://www.tempo.co/search?q=" },
+          { pattern: /\bliputan6\b/i, home: "https://www.liputan6.com", search: "https://www.liputan6.com/search?q=" },
+          { pattern: /\b(?:antara|antaranews)\b/i, home: "https://www.antaranews.com", search: "https://www.antaranews.com/search?q=" },
+          { pattern: /\b(?:cnbc\s*indonesia|cnbc)\b/i, home: "https://www.cnbcindonesia.com", search: "https://www.cnbcindonesia.com/search?query=" },
+          { pattern: /\bjawapos\b/i, home: "https://www.jawapos.com", search: "https://www.jawapos.com/?s=" },
+          { pattern: /\bsindo(?:news)?\b/i, home: "https://www.sindonews.com", search: "https://search.sindonews.com/search?q=" },
+          { pattern: /\bviva(?:\.co\.id)?\b/i, home: "https://www.viva.co.id", search: "https://www.viva.co.id/search?q=" },
+          { pattern: /\btirto(?:\.id)?\b/i, home: "https://tirto.id", search: "https://tirto.id/search?q=" }
+        ];
+
+        const matchedPortal = mediaPortals.find(p => p.pattern.test(prompt));
+        if (matchedPortal) {
+          const searchMatch = prompt.match(/(?:cari|search|temukan|baca)\s+(?:berita\s+|informasi\s+|artikel\s+|kabar\s+)?(?:tentang\s+|mengenai\s+|soal\s+)?["'“]?([^.,'”\n]+?)["'”]?[\.,\s]*(?:lalu|kemudian|setelah|dan|$)/i) ||
+                              prompt.match(/(?:tentang|mengenai|soal)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]*(?:lalu|kemudian|setelah|dan|$)/i);
+          const rawQuery = searchMatch ? searchMatch[1].trim().replace(/^(?:berita|kabar|artikel|tentang|mengenai|soal)\s+/i, "").trim() : "";
+          if (rawQuery && rawQuery.length > 1) {
+            resolvedUrl = matchedPortal.search + encodeURIComponent(rawQuery);
+          } else {
+            resolvedUrl = matchedPortal.home;
+          }
         } else {
-          // 4. Pencarian umum di Google (misal: "cari di google tren AI 2026")
-          const googleSearchMatch = prompt.match(/(?:cari\s+(?:di\s+)?google|search\s+google)\s+(?:tentang\s+)?["'“]?([^.'"“”\n]+)["'”]?/i);
-          if (googleSearchMatch && googleSearchMatch[1].trim()) {
-            resolvedUrl = "https://www.google.com/search?q=" + encodeURIComponent(googleSearchMatch[1].trim());
+          // 3. Situs Wikipedia + kueri pencarian (misal: "Kunijungi wikipedia dan cari kecerdasan buatan" atau "Buka wikipedia tentang AI")
+          const wikiSearch = prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]+(?:lalu|kemudian|setelah|dan|rangkum|ke|$)/i) ||
+                             prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+)/i);
+          if (wikiSearch && wikiSearch[1].trim()) {
+            const q = wikiSearch[1].trim().replace(/^(?:tentang|artikel)\s+/i, "").trim();
+            if (q) resolvedUrl = "https://id.wikipedia.org/wiki/" + encodeURIComponent(q.replace(/\s+/g, "_"));
+          } else if (/(?:kuni?jungi|buka|ke|akses)\s+wikipedia/i.test(prompt)) {
+            resolvedUrl = "https://id.wikipedia.org";
+          } else {
+            // 4. Pencarian umum di Google (misal: "cari di google tren AI 2026")
+            const googleSearchMatch = prompt.match(/(?:cari\s+(?:di\s+)?google|search\s+google|googling)\s+(?:berita\s+|informasi\s+)?(?:tentang\s+|mengenai\s+)?["'“]?([^.'"“”\n]+)["'”]?/i);
+            if (googleSearchMatch && googleSearchMatch[1].trim()) {
+              resolvedUrl = "https://www.google.com/search?q=" + encodeURIComponent(googleSearchMatch[1].trim());
+            }
           }
         }
       }
@@ -5429,6 +5535,13 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
 
     activeTask = newTask(goal, contextSources);
     taskCardMsgIndex = -1;
+    try {
+      const activeTabs = await new Promise(r => chrome.tabs.query({ active: true, currentWindow: true }, r));
+      if (activeTabs && activeTabs[0]?.id) {
+        activeTask.targetTabId = activeTabs[0].id;
+        try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: activeTask.targetTabId }); } catch (_) {}
+      }
+    } catch (_) {}
     await persistTask();
 
     try {
@@ -6693,6 +6806,10 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       "TASK_END"
     );
 
+    if (activeTask?.targetTabId) {
+      try { chrome.runtime.sendMessage({ action: "CLEAR_ACTIVE_AGENT_TAB", tabId: activeTask.targetTabId }); } catch (_) {}
+    }
+
     activeTask = null;
     taskCardMsgIndex = -1;
     await clearPersistedTask();
@@ -6712,6 +6829,28 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       activeTask._pendingScreenshot = null;
       shouldStopAgent = false;
       taskCardMsgIndex = -1;
+
+      // Verifikasi & rekoneksi targetTabId agar eksekusi tidak hilang arah jika tab ditutup atau berpindah
+      if (activeTask.targetTabId) {
+        try {
+          const tab = await chrome.tabs.get(Number(activeTask.targetTabId));
+          if (tab && tab.id) {
+            appendLog(`Target tab terhubung: "${tab.title || tab.url}"`);
+          }
+        } catch (_) {
+          appendLog("Tab target sebelumnya tidak tersedia, menyambungkan ke tab aktif saat ini...", "WARN");
+          const currentTabs = await new Promise(r => chrome.tabs.query({ active: true, currentWindow: true }, r));
+          if (currentTabs && currentTabs[0]?.id) {
+            activeTask.targetTabId = currentTabs[0].id;
+          }
+        }
+      } else {
+        const currentTabs = await new Promise(r => chrome.tabs.query({ active: true, currentWindow: true }, r));
+        if (currentTabs && currentTabs[0]?.id) {
+          activeTask.targetTabId = currentTabs[0].id;
+        }
+      }
+
       setAgentRunning(true);
       showStatusIndicator();
       appendLog(`▶ Melanjutkan task tersimpan: "${activeTask.goal}" (${activeTask.stepsUsed}/${activeTask.stepBudget} langkah)`);

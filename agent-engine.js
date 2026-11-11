@@ -20,7 +20,11 @@
 
   function classifyTask(goal = "", contextRefs = []) {
     const text = String(goal).trim();
-    const isContentDrafting = /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan|ulasan|ringkasan|makalah|esai)/i.test(text) &&
+    const isNavigationOrSearch = /(?:(?:ke|buka|kunjungi|akses|open|go\s*to)\s+[a-zA-Z0-9.-]+|cari\s+.+\s+(?:di|pada|ke)|cari\s+berita\s+(?:di|ke)|(?:di|ke)\s+(?:cnn|detik|kompas|tribun|kumparan|tempo|liputan6|antara|cnbc|viva|tirto|google|bing|wikipedia))/i.test(text) ||
+      /(?:(?:ke|buka|kunjungi)\s+(?:cnn|detik|kompas|tribun|kumparan|tempo|liputan6|antara|cnbc|viva|tirto))/i.test(text) ||
+      /(?:cari\s+(?:berita|informasi|artikel|data)\s+(?:tentang|mengenai)?\s+)/i.test(text);
+
+    const isContentDrafting = !isNavigationOrSearch && /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan|ulasan|ringkasan|makalah|esai)/i.test(text) &&
       !/(?:posting\s+ke|post\s+ke|kirim\s+ke|upload|unggah\s+ke|buka\s+komposer|isi\s+form|autofill|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos)|tempel.*(?:threads|x|twitter))/i.test(text);
 
     const isSerpCheck = /(?:(?:cek|cari|temukan|lihat|lacak)\s+(?:posisi|ranking|peringkat|urutan|halaman|website|situs)|(?:posisi|ranking|peringkat|urutan|halaman)\s+berapa|(?:serp|ranking\s+google|posisi\s+google))/i.test(text) &&

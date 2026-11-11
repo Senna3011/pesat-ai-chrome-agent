@@ -5,7 +5,10 @@
   "main": "index.mjs",
   "scripts": {
     "test": "playwright test --workers=2",
+    "test:unit": "node --test tests/*.test.js",
     "test:backend": "node --test tests/backend/*.test.mjs",
+    "test:all": "npm run test:unit && npm run test:backend",
+    "sync": "node scripts/sync-extension.mjs",
     "validate:deploy": "node scripts/validate-deploy-config.mjs"
   },
   "repository": {

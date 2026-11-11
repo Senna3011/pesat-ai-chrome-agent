@@ -32,6 +32,9 @@ function stringToBase64(str) {
 // Action history tracker untuk pencegahan infinite loop
 const actionHistoryPerTab = new Map();
 
+// Tab aktif yang sedang menjalankan otomasi agen (terproteksi dari pembersihan marker saat tab switch)
+const activeAgentTabs = new Set();
+
 // Task Token Usage Accumulator Tracker
 let taskTokenUsage = {
   prompt_tokens: 0,
@@ -474,9 +477,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Reset riwayat loop & token accumulator saat memulai sesi obrolan/perintah baru
   if (request.action === "RESET_LOOP_TRACKER" || request.type === "RESET_LOOP_TRACKER") {
     actionHistoryPerTab.clear();
+    activeAgentTabs.clear();
     taskTokenUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
     persistSWState();
     sendResponse({ success: true, taskTokenUsage });
+    return true;
+  }
+
+  if (request.action === "SET_ACTIVE_AGENT_TAB") {
+    if (request.tabId) activeAgentTabs.add(Number(request.tabId));
+    sendResponse({ success: true });
+    return true;
+  }
+
+  if (request.action === "CLEAR_ACTIVE_AGENT_TAB") {
+    if (request.tabId) activeAgentTabs.delete(Number(request.tabId));
+    sendResponse({ success: true });
     return true;
   }
 
@@ -864,15 +880,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (chrome.sidePanel?.open) {
       (async () => {
         let opened = false;
-        if (tabId) {
+        if (winId) {
           try {
-            await chrome.sidePanel.open({ tabId });
+            await chrome.sidePanel.open({ windowId: winId });
             opened = true;
           } catch (_) {}
         }
-        if (!opened && winId) {
+        if (!opened && tabId) {
           try {
-            await chrome.sidePanel.open({ windowId: winId });
+            await chrome.sidePanel.open({ tabId });
             opened = true;
           } catch (_) {}
         }
@@ -1001,14 +1017,19 @@ ATURAN KETAT:
           return;
         }
 
-        if (!tabs || tabs.length === 0 || !tabs[0].id) {
+        let targetId = request.targetTabId || request.tabId;
+        if (!targetId && tabs && tabs[0]?.id) {
+          targetId = tabs[0].id;
+        }
+
+        if (!targetId) {
           const newTab = await chrome.tabs.create({ url, active: true });
           sendResponse({ success: true, message: `Membuka tab baru: ${url}`, url, tabId: newTab?.id });
           return;
         }
 
-        actionHistoryPerTab.delete(tabs[0].id);
-        await chrome.tabs.update(tabs[0].id, { url });
+        actionHistoryPerTab.delete(Number(targetId));
+        await chrome.tabs.update(Number(targetId), { url });
         sendResponse({ success: true, message: `Membuka URL: ${url}`, url });
       } catch (err) {
         sendResponse({ success: false, error: err.message });
@@ -1017,16 +1038,36 @@ ATURAN KETAT:
     return true;
   }
 
-  // Meneruskan perintah dari Side Panel ke Content Script di Tab Aktif dengan Anti-Looping Protection & Safe Sender
+  // Meneruskan perintah dari Side Panel ke Content Script di Tab Target / Tab Aktif dengan Anti-Looping Protection & Safe Sender
   if (request.action === "EXECUTE_IN_CONTENT") {
-    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-      if (!tabs || tabs.length === 0 || !tabs[0].id) {
-        sendResponse({ success: false, error: "Tidak ada tab aktif yang ditemukan." });
+    (async () => {
+      let activeTab = null;
+      const explicitTabId = request.targetTabId || request.tabId || request.payload?.targetTabId || request.payload?.tabId;
+      if (explicitTabId) {
+        try {
+          const tab = await chrome.tabs.get(Number(explicitTabId));
+          if (tab && tab.id) {
+            activeTab = tab;
+          }
+        } catch (_) {
+          // Tab target spesifik mungkin telah ditutup
+        }
+      }
+
+      if (!activeTab) {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tabs && tabs.length > 0 && tabs[0].id) {
+          activeTab = tabs[0];
+        }
+      }
+
+      if (!activeTab || !activeTab.id) {
+        sendResponse({ success: false, error: "Tidak ada tab target atau tab aktif yang ditemukan." });
         return;
       }
 
-      const activeTab = tabs[0];
       const activeTabId = activeTab.id;
+      activeAgentTabs.add(Number(activeTabId));
       const tabUrl = activeTab.url || "";
 
       // 1. Handling Halaman internal Chrome (chrome://, edge://, about:)
@@ -1138,7 +1179,7 @@ ATURAN KETAT:
       } catch (err) {
         sendResponse({ success: false, error: err.message });
       }
-    });
+    })();
 
     return true; // Asynchronous sendResponse
   }
@@ -1147,17 +1188,19 @@ ATURAN KETAT:
 // Auto-clean visual markers & reset loop history saat user berpindah tab atau tab di-refresh
 chrome.tabs.onActivated.addListener((activeInfo) => {
   if (!activeInfo?.tabId) return;
-  actionHistoryPerTab.delete(activeInfo.tabId);
-  chrome.tabs.sendMessage(activeInfo.tabId, { type: "CLEAR_MARKERS" }, () => {
-    if (chrome.runtime.lastError) {}
-  });
+  // Jangan hapus marker atau reset history jika tab ini merupakan tab kerja agent yang aktif
+  if (activeAgentTabs.has(Number(activeInfo.tabId))) {
+    return;
+  }
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "loading") {
-    actionHistoryPerTab.delete(tabId);
-    chrome.tabs.sendMessage(tabId, { type: "CLEAR_MARKERS" }, () => {
-      if (chrome.runtime.lastError) {}
-    });
+    if (!activeAgentTabs.has(Number(tabId))) {
+      actionHistoryPerTab.delete(tabId);
+      chrome.tabs.sendMessage(tabId, { type: "CLEAR_MARKERS" }, () => {
+        if (chrome.runtime.lastError) {}
+      });
+    }
   }
 });

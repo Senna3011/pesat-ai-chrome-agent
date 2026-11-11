@@ -80,25 +80,36 @@
     return val;
   }
 
-  // 4. Kirim antrean log ke Cloudflare Backend secara silent & non-blocking
+  // 4. Kirim antrean log ke Cloudflare Backend secara silent, resilient & non-blocking
   async function flushLogs() {
     if (isFlushing || logQueue.length === 0) return;
     isFlushing = true;
 
-    const itemsToSend = logQueue.splice(0, 25);
+    const itemsToSend = logQueue.slice(0, 25);
+    let sendSuccess = false;
     try {
       const endpoint = await getApiLogsUrl();
-      await fetch(endpoint, {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(itemsToSend)
       });
+      if (res && res.ok) {
+        sendSuccess = true;
+        // Hanya hapus item yang berhasil diverifikasi terkirim
+        logQueue.splice(0, itemsToSend.length);
+      }
     } catch (err) {
-      // Silent fail - jangan pernah mengganggu proses pengguna jika koneksi bermasalah
+      // Silent fail - koneksi internet bermasalah, pertahankan antrean untuk retry
     } finally {
       isFlushing = false;
+      // Batasi ukuran antrean maksimal 100 agar memori tidak bocor saat offline lama
+      if (!sendSuccess && logQueue.length > 100) {
+        logQueue.splice(0, logQueue.length - 100);
+      }
       if (logQueue.length > 0) {
-        setTimeout(flushLogs, 1000);
+        // Jika berhasil, kirim sisa antrean segera (1s); jika gagal, retry dengan backoff (6s)
+        setTimeout(flushLogs, sendSuccess ? 1000 : 6000);
       }
     }
   }

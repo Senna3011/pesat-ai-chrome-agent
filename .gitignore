@@ -53,6 +53,8 @@ build/
 ROADMAP_AITOPIA_BENCHMARK.md
 To-do-list.md
 coldstart.md
+RANGKUMAN-*.md
 docs/
+*.pdf
 *.tmp
 *.log

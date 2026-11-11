@@ -143,6 +143,24 @@ test('resolveSourceUrlFromPrompt: accurately extracts target URL from natural us
     const domainMatch = prompt.match(/\b([a-zA-Z0-9-]+\.(?:com|org|id|net|io|co\.id|gov|edu)(?:\/[^\s`"']*)?)\b/i);
     if (domainMatch) return "https://" + domainMatch[1];
 
+    const mediaPortals = [
+      { pattern: /\b(?:cnn\s*indonesia|cnn)\b/i, home: "https://www.cnnindonesia.com", search: "https://www.cnnindonesia.com/search/?query=" },
+      { pattern: /\b(?:detik(?:\.com)?|detikcom|detiknews)\b/i, home: "https://www.detik.com", search: "https://www.detik.com/search/searchall?query=" },
+      { pattern: /\b(?:kompas(?:\.com)?|kompascom)\b/i, home: "https://www.kompas.com", search: "https://search.kompas.com/search/?q=" },
+      { pattern: /\b(?:tribun(?:\s*news)?|tribunnews)\b/i, home: "https://www.tribunnews.com", search: "https://www.tribunnews.com/search?q=" }
+    ];
+
+    const matchedPortal = mediaPortals.find(p => p.pattern.test(prompt));
+    if (matchedPortal) {
+      const searchMatch = prompt.match(/(?:cari|search|temukan|baca)\s+(?:berita\s+|informasi\s+|artikel\s+|kabar\s+)?(?:tentang\s+|mengenai\s+|soal\s+)?["'“]?([^.,'”\n]+?)["'”]?[\.,\s]*(?:lalu|kemudian|setelah|dan|$)/i) ||
+                          prompt.match(/(?:tentang|mengenai|soal)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]*(?:lalu|kemudian|setelah|dan|$)/i);
+      const rawQuery = searchMatch ? searchMatch[1].trim().replace(/^(?:berita|kabar|artikel|tentang|mengenai|soal)\s+/i, "").trim() : "";
+      if (rawQuery && rawQuery.length > 1) {
+        return matchedPortal.search + encodeURIComponent(rawQuery);
+      }
+      return matchedPortal.home;
+    }
+
     const wikiSearch = prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]+(?:lalu|kemudian|setelah|dan|rangkum|ke|$)/i) ||
                        prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+)/i);
     if (wikiSearch && wikiSearch[1].trim()) {
@@ -165,6 +183,8 @@ test('resolveSourceUrlFromPrompt: accurately extracts target URL from natural us
   assert.equal(resolveSourceUrlFromPrompt('Kunjungi https://id.wikipedia.org/wiki/Kecerdasan_buatan dan buat rangkuman nya ke google document'), 'https://id.wikipedia.org/wiki/Kecerdasan_buatan');
   assert.equal(resolveSourceUrlFromPrompt('Buka wikipedia.org lalu cari Machine Learning'), 'https://wikipedia.org');
   assert.equal(resolveSourceUrlFromPrompt('cari di google tren AI 2026'), 'https://www.google.com/search?q=tren%20AI%202026');
+  assert.equal(resolveSourceUrlFromPrompt('ke cnn indonesia dan cari berita tentang gibran'), 'https://www.cnnindonesia.com/search/?query=gibran');
+  assert.equal(resolveSourceUrlFromPrompt('buka detik.com lalu cari pemilu'), 'https://detik.com');
   assert.equal(resolveSourceUrlFromPrompt('buatkan draf artikel tentang kesehatan'), null);
 });
 
