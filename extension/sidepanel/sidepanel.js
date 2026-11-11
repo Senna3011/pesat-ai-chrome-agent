@@ -6820,13 +6820,6 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     refreshTaskCard();
 
     const isSuccess = activeTask.status === "DONE";
-    if (isSuccess && activeTask.currentUrl && activeTask.goal) {
-      try {
-        const lastAction = activeTask.history?.[activeTask.history.length - 1];
-        const actionNote = lastAction?.message || "Alur navigasi berhasil diselesaikan";
-        await globalThis.PesatMemoryEngine?.recordLearnedSkill?.(activeTask.currentUrl, activeTask.goal, actionNote);
-      } catch (_) {}
-    }
     const isCancelled = activeTask.status === "CANCELLED";
     const heading = isSuccess ? "✅ **Selesai**" : (isCancelled ? "⏹️ **Dihentikan**" : "⚠️ **Belum selesai**");
     const resultText = String(message || (isSuccess ? "Tugas selesai." : "Tugas belum dapat diselesaikan.")).trim();

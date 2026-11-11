@@ -31,6 +31,14 @@
               guardrails: Array.isArray(data[STORAGE_KEY].guardrails) ? data[STORAGE_KEY].guardrails : [],
               skills: Array.isArray(data[STORAGE_KEY].skills) ? data[STORAGE_KEY].skills : []
             };
+            // Otomatis bersihkan riwayat chat yang dulu salah masuk ke tab skill
+            const initialSkillCount = store.skills.length;
+            store.skills = store.skills.filter(
+              (s) => !(s.text && s.text.startsWith("[Tujuan: ") && s.text.includes("Alur navigasi berhasil diselesaikan"))
+            );
+            if (store.skills.length !== initialSkillCount) {
+              await this.save();
+            }
           }
         }
       } catch (err) {
