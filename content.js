@@ -1701,20 +1701,23 @@ ${tabText}`;
       for (const el of textElements) {
         if (
           el.closest(
-            "nav, header, footer, aside, [role='navigation'], [role='banner'], [role='contentinfo'], #pesat-markers-overlay, #pesat-markers-legend, .ad, [class*='advertisement']"
+            "nav, header, footer, aside, [role='navigation'], [role='banner'], [role='contentinfo'], #pesat-markers-overlay, #pesat-markers-legend, .ad, [class*='advertisement'], .mw-collapsible-toggle, .mw-collapsible-text, .sidebar, .infobox, .navbox, .vector-menu, .mw-jump-link, .noprint, [aria-hidden='true']"
           )
         ) {
           continue;
         }
 
         const str = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+        if (/^(?:\[?\s*(?:show|hide|tutup|buka|lihat|expand|collapse)\s*\]?)+$/i.test(str)) {
+          continue;
+        }
         if (str.length >= 10 && !seenText.has(str)) {
           seenText.add(str);
           cleanedBlocks.push(str);
         }
       }
 
-      let resultText = cleanedBlocks.join("\n\n");
+      let resultText = cleanedBlocks.join("\n\n").replace(/(?:\[?\s*(?:show|hide)\s*\]?\s*){2,}/gi, "").trim();
 
       // 2. Fallback tangguh berbasis document.body.innerText langsung (selalu ter-render pada peramban)
       if (!resultText || resultText.length < 50) {

@@ -108,15 +108,54 @@ test('Cross-service intent detector: identifies prompt-to-docs workflow', () => 
   assert.equal(isPromptToDocsIntent(p3), false);
 });
 
-test('SkillRegistry: registers open_new_tab and switch_to_tab as native tools', () => {
-  const all = SkillRegistry.getAllTools();
-  const openTool = all.find(t => (t.function?.name || t.name) === 'open_new_tab');
-  const switchTool = all.find(t => (t.function?.name || t.name) === 'switch_to_tab');
+	test('SkillRegistry: registers open_new_tab and switch_to_tab as native tools', () => {
+	  const all = SkillRegistry.getAllTools();
+	  const openTool = all.find(t => (t.function?.name || t.name) === 'open_new_tab');
+	  const switchTool = all.find(t => (t.function?.name || t.name) === 'switch_to_tab');
 
-  assert.ok(openTool, 'open_new_tab must be registered');
-  assert.ok(switchTool, 'switch_to_tab must be registered');
-  assert.deepEqual(openTool.function.parameters.required, ['url']);
-});
+	  assert.ok(openTool, 'open_new_tab must be registered');
+	  assert.ok(switchTool, 'switch_to_tab must be registered');
+	  assert.deepEqual(openTool.function.parameters.required, ['url']);
+	});
+
+	test('Doc navigation and save intent: supports "ke dalam docs" variations', () => {
+	  const isExplicitNavigateDocs = (prompt) => /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|rangkum(?:kan)?|taruh|post)\s+(?:.*?\s+)?(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:buka|open)\s+(?:google\s+)?(?:docs?|dokumen|document)|docs\.new)/i.test(prompt);
+
+	  const userExplicitDocs = (prompt) => /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|simpan\s+(?:ke|di|pada|ke\s+dalam)|isi\s+(?:ke|di|pada|ke\s+dalam)|masukkan\s+(?:ke|di|pada|ke\s+dalam)|tulis\s+(?:ke|di|pada|ke\s+dalam)|tempel\s+(?:ke|di|pada|ke\s+dalam)|salin\s+(?:ke|di|pada|ke\s+dalam)|ekspor\s+(?:ke|di|pada|ke\s+dalam)|pindahkan\s+(?:ke|di|pada|ke\s+dalam))\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen|(?:tulis|simpan|masukkan|tempel|ekspor)\s+(?:ke|di|pada|ke\s+dalam)\s+(?:dokumen|docs)|(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:docs?|dokumen|document))/i.test(prompt);
+
+	  const shouldAutoPasteDocs = (prompt) => isExplicitNavigateDocs(prompt) || /(?:tulis|ketik|isi|tempel|salin|simpan|masukkan)\s+(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:docs|dokumen)/i.test(prompt);
+
+	  const prompt1 = 'rangkum halaman ini dan simpan ke dalam docs';
+	  assert.equal(isExplicitNavigateDocs(prompt1), true);
+	  assert.equal(userExplicitDocs(prompt1), true);
+	  assert.equal(shouldAutoPasteDocs(prompt1), true);
+
+	  const prompt2 = 'rangkum halaman ini dan simpan ke docs';
+	  assert.equal(isExplicitNavigateDocs(prompt2), true);
+	  assert.equal(userExplicitDocs(prompt2), true);
+	  assert.equal(shouldAutoPasteDocs(prompt2), true);
+
+	  const prompt3 = 'masukkan hasil rangkuman ke dalam dokumen';
+	  assert.equal(isExplicitNavigateDocs(prompt3), true);
+	  assert.equal(shouldAutoPasteDocs(prompt3), true);
+	});
+
+	test('Noise filter: strips Wikipedia [show] collapsible toggle clutter', () => {
+	  const rawBlocks = [
+	    '[show]',
+	    '[show]',
+	    '[show] [show]',
+	    'Computer security, cybersecurity, digital security or information technology security is the protection of computer systems and networks.',
+	    '[show] [show] [show]'
+	  ];
+
+	  const toggleRegex = /^(?:\[?\s*(?:show|hide|tutup|buka|lihat|expand|collapse)\s*\]?)+$/i;
+	  const filtered = rawBlocks.filter(b => !toggleRegex.test(b.trim()));
+	  const joined = filtered.join('\n\n').replace(/(?:\[?\s*(?:show|hide)\s*\]?\s*){2,}/gi, '').trim();
+
+	  assert.ok(!joined.includes('[show]'));
+	  assert.ok(joined.startsWith('Computer security'));
+	});
 
 test('AgentEngine: classifies multi-step cross-tab request as execute/hybrid mode', () => {
   const task = Agent.classifyTask('buka Claude, proses prompt dibawah, lalu paste ke Gdocs');

@@ -5130,10 +5130,10 @@ ${topCompStr}
                          pageUrl.includes("word.office.com");
 
       const isExplicitExcelOrCsv = /(?:excel|\.xls|\.xlsx|\.csv|spreadsheet|sheets)/i.test(userPrompt);
-      const isExplicitNavigateDocs = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|rangkum(?:kan)?|taruh|post)\s+(?:.*?\s+)?(?:ke|di|pada)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:ke|di|pada)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:buka|open)\s+(?:google\s+)?(?:docs?|dokumen|document)|docs\.new)/i.test(userPrompt);
-      const isExplicitNavigateSheets = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|taruh)\s+(?:.*?\s+)?(?:ke|di|pada)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:ke|di|pada)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:buka|open)\s+(?:google\s+)?(?:sheets?|spreadsheet)|sheets\.new)/i.test(userPrompt);
+      const isExplicitNavigateDocs = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|rangkum(?:kan)?|taruh|post)\s+(?:.*?\s+)?(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:buka|open)\s+(?:google\s+)?(?:docs?|dokumen|document)|docs\.new)/i.test(userPrompt);
+      const isExplicitNavigateSheets = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|taruh)\s+(?:.*?\s+)?(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:buka|open)\s+(?:google\s+)?(?:sheets?|spreadsheet)|sheets\.new)/i.test(userPrompt);
 
-      const userExplicitDocs = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke|tempel\s+ke|salin\s+ke|ekspor\s+ke|pindahkan\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen|(?:tulis\s+ke|simpan\s+ke|masukkan\s+ke|tempel\s+ke|ekspor\s+ke)\s+(?:dokumen|docs)|(?:ke|di)\s+(?:google\s+)?(?:docs?|dokumen|document))/i.test(userPrompt);
+      const userExplicitDocs = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|simpan\s+(?:ke|di|pada|ke\s+dalam)|isi\s+(?:ke|di|pada|ke\s+dalam)|masukkan\s+(?:ke|di|pada|ke\s+dalam)|tulis\s+(?:ke|di|pada|ke\s+dalam)|tempel\s+(?:ke|di|pada|ke\s+dalam)|salin\s+(?:ke|di|pada|ke\s+dalam)|ekspor\s+(?:ke|di|pada|ke\s+dalam)|pindahkan\s+(?:ke|di|pada|ke\s+dalam))\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen|(?:tulis|simpan|masukkan|tempel|ekspor)\s+(?:ke|di|pada|ke\s+dalam)\s+(?:dokumen|docs)|(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:docs?|dokumen|document))/i.test(userPrompt);
       const userExplicitSheets = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|buatkan spreadsheet)/i.test(userPrompt);
       const isDocsTarget = !isExplicitExcelOrCsv && (userExplicitDocs || (attachedFiles.length === 0 && isDocsSite));
 
@@ -5549,6 +5549,20 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         }
       }
 
+      // Validasi dan pembersihan respon noise
+      let cleanAiReply = String(aiReply || "").replace(/(?:\[?\s*(?:show|hide)\s*\]?\s*){2,}/gi, "").trim();
+      if (!cleanAiReply || cleanAiReply.length < 20 || /^(?:\[?\s*(?:show|hide)\s*\]?\s*)+$/i.test(cleanAiReply)) {
+        appendLog("⚠️ Respons model terlalu pendek atau hanya memuat noise UI. Mencoba menghasilkan ulang ringkasan...", "WARN");
+        try {
+          const retryPayload = `Tolong buatkan ringkasan lengkap, mendalam, dan terstruktur rapi dari konten berikut tanpa menyertakan elemen UI web:\n\n${promptPayload}`;
+          const retryReply = await callLLM("chat", retryPayload, { isSummarize: false });
+          if (retryReply && String(retryReply).trim().length > 20) {
+            cleanAiReply = String(retryReply).trim();
+          }
+        } catch (_) {}
+      }
+      aiReply = cleanAiReply || String(aiReply || "");
+
       const isDocsOutput = !isExplicitExcelOrCsv && (isDocsTableTask || isDocsArticleTask || (isDocsTarget && !isSpreadsheetTask));
       const artType = (isExplicitExcelOrCsv || isSpreadsheetTask || isGeneralTableTask || isProductResearch) ? "table" : (isSocialThread ? "social" : ((isArticle || isDocsOutput) ? "doc" : "text"));
       const artTitle = (isExplicitExcelOrCsv || isSpreadsheetTask || isGeneralTableTask || isProductResearch)
@@ -5557,7 +5571,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
             ? `Thread-${(userPrompt || "Sosmed").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.txt`
             : `Draf-${(userPrompt || "Dokumen").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.docx`);
 
-      const artifact = (!isSummarize && (isExplicitExcelOrCsv || isSpreadsheetTask || isGeneralTableTask || isProductResearch || isSocialThread || isArticle || isDocsOutput)) ? {
+      const artifact = ((!isSummarize || isDocsOutput) && (isExplicitExcelOrCsv || isSpreadsheetTask || isGeneralTableTask || isProductResearch || isSocialThread || isArticle || isDocsOutput)) ? {
         artifactType: artType,
         name: artTitle,
         content: aiReply
@@ -5574,8 +5588,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
                            /x\.com|twitter\.com|linkedin\.com|facebook\.com|threads\.net|threads\.com/i.test(pageUrl);
       const userSocialFillIntent = /(?:isi|tempel|masukkan|tulis|posting|post)\s+(?:ke|di|pada)?\s*(?:threads|x|twitter|linkedin|medsos|postingan|komposer)/i.test(userPrompt);
 
-      const shouldAutoPasteDocs = isExplicitNavigateDocs || (!!storedSettings.autoPasteDocs && (isDocsSite || /(?:tulis|ketik|isi|tempel|salin)\s+ke\s+(?:docs|dokumen)/i.test(userPrompt)));
-      const shouldAutoPasteSheets = isExplicitNavigateSheets || (!!storedSettings.autoPasteDocs && (isSheetsSite || /(?:tulis|isi|tempel)\s+(?:ke\s+)?spreadsheet/i.test(userPrompt)));
+      const shouldAutoPasteDocs = isExplicitNavigateDocs || (!!storedSettings.autoPasteDocs && (isDocsSite || /(?:tulis|ketik|isi|tempel|salin|simpan|masukkan)\s+(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:docs|dokumen)/i.test(userPrompt)));
+      const shouldAutoPasteSheets = isExplicitNavigateSheets || (!!storedSettings.autoPasteDocs && (isSheetsSite || /(?:tulis|isi|tempel)\s+(?:ke\s+|ke\s+dalam\s+)?spreadsheet/i.test(userPrompt)));
 
       if (isDocsOutput && shouldAutoPasteDocs && (isDocsSite || isExplicitNavigateDocs)) {
         if (!isDocsSite && isExplicitNavigateDocs) {
