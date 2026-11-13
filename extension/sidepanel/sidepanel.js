@@ -202,12 +202,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!btnAgentMode) return;
     if (currentAgentMode === "planning") {
       btnAgentMode.className = "composer-mode-pill mode-planning";
-      if (agentModeIcon) agentModeIcon.textContent = "📋";
+      if (agentModeIcon) agentModeIcon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>';
       if (agentModeText) agentModeText.textContent = "Plan";
       btnAgentMode.title = "Mode: Planning (Wajib persetujuan user setelah rencana dibuat). Klik untuk beralih ke Full Mode.";
     } else {
       btnAgentMode.className = "composer-mode-pill";
-      if (agentModeIcon) agentModeIcon.textContent = "⚡";
+      if (agentModeIcon) agentModeIcon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>';
       if (agentModeText) agentModeText.textContent = "Full";
       btnAgentMode.title = "Mode: Full (Eksekusi otomatis sampai selesai). Klik untuk beralih ke Planning Mode.";
     }
@@ -569,49 +569,126 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function renderWelcomeMessage() {
     chatArea.innerHTML = `
-      <div class="message assistant-message" id="welcomeMessage">
-        <div class="message-bubble welcome-card">
-          <div class="welcome-header">
-            <div class="welcome-logo-circle">⚡</div>
-            <div class="welcome-header-text">
-              <span class="welcome-title">Pesat Agent</span>
-              <span class="welcome-subtitle">Computer-Use AI Browser Assistant</span>
+      <div id="welcomeView">
+        <section class="hero-section">
+          <svg class="hero-wave-svg" viewBox="0 0 400 160" fill="none" preserveAspectRatio="none">
+            <path d="M-20 40 C 80 110, 240 120, 420 20 L 420 85 C 250 155, 90 140, -20 90 Z" fill="url(#pesatWaveGrad)" opacity="0.22"/>
+            <path d="M-20 75 C 110 130, 270 110, 420 55 L 420 110 C 260 160, 100 155, -20 115 Z" fill="url(#pesatWaveGrad)" opacity="0.12"/>
+            <defs>
+              <linearGradient id="pesatWaveGrad" x1="0" y1="0" x2="400" y2="0" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#D91B24"/>
+                <stop offset="50%" stop-color="#FB7185"/>
+                <stop offset="100%" stop-color="#D91B24"/>
+              </linearGradient>
+            </defs>
+          </svg>
+
+          <div class="mascot-container">
+            <div class="mascot-badge-float">
+              <svg width="96" height="96" viewBox="0 0 120 120" fill="none">
+                <circle cx="60" cy="64" r="46" fill="#FFF1F2"/>
+                <path d="M26 62C14 52 12 38 22 34C28 32 35 42 38 52" fill="#FFFFFF" stroke="#D91B24" stroke-width="3" stroke-linecap="round"/>
+                <path d="M94 62C106 52 108 38 98 34C92 32 85 42 82 52" fill="#FFFFFF" stroke="#D91B24" stroke-width="3" stroke-linecap="round"/>
+                <ellipse cx="60" cy="66" rx="28" ry="30" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2"/>
+                <path d="M52 36C52 26 62 22 66 30C70 25 76 30 72 38" fill="#D91B24"/>
+                <rect x="36" y="37" width="48" height="10" rx="5" fill="#D91B24"/>
+                <rect x="43" y="39" width="34" height="5" rx="2.5" fill="#FECDD3"/>
+                <circle cx="88" cy="54" r="6" fill="#1E293B"/>
+                <circle cx="49" cy="56" r="4.5" fill="#0F172A"/>
+                <circle cx="47.5" cy="54.5" r="1.5" fill="#FFFFFF"/>
+                <path d="M67 56C69 53 73 53 75 56" stroke="#0F172A" stroke-width="2.8" stroke-linecap="round"/>
+                <ellipse cx="43" cy="63" rx="4" ry="2.5" fill="#FDA4AF"/>
+                <ellipse cx="77" cy="63" rx="4" ry="2.5" fill="#FDA4AF"/>
+                <path d="M55 61C55 59 65 59 65 61C65 65 60 69 60 69C60 69 55 65 55 61Z" fill="#F59E0B"/>
+                <path d="M40 78C48 83 72 83 80 78L83 86C72 91 48 91 37 86L40 78Z" fill="#D91B24"/>
+                <rect x="63" y="82" width="13" height="16" rx="4" transform="rotate(-10 63 82)" fill="#D91B24"/>
+                <path d="M67 88L70 90L67 92M71 88L74 90L71 92" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
             </div>
           </div>
-          <p class="welcome-desc">
-            Beri tahu saya apa yang ingin Anda kerjakan di web ini. Gunakan <strong>@</strong> untuk merujuk tab peramban atau tombol <strong>📎</strong> untuk melampirkan dataset / dokumen.
+
+          <h1 class="hero-title">
+            Halo! 👋<br>
+            Ada yang bisa <span class="highlight">Pesat Agent</span> bantu?
+          </h1>
+          <p class="hero-subtitle">
+            Asisten AI serba bisa untuk menjelajah, memahami, merangkum, dan menyelesaikan tugas di web.
           </p>
-          <div class="welcome-suggestions">
-            <div class="suggestion-item" data-prompt="Tolong buat ringkasan poin-poin penting dari isi konten halaman web ini.">
-              <span class="suggestion-icon">📄</span>
-              <div class="suggestion-text">
-                <span class="suggestion-title">Rangkum Halaman</span>
-                <span class="suggestion-sub">Ekstraksi intisari artikel aktif</span>
-              </div>
+        </section>
+
+        <section class="quick-grid">
+          <button type="button" class="action-card card-red" data-prompt="Rangkum poin-poin utama halaman web ini secara ringkas dan terstruktur.">
+            <div class="action-card__icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="3" width="16" height="18" rx="3"/>
+                <line x1="8" y1="8" x2="16" y2="8"/>
+                <line x1="8" y1="12" x2="16" y2="12"/>
+                <line x1="8" y1="16" x2="12" y2="16"/>
+              </svg>
             </div>
-            <div class="suggestion-item" data-prompt="Tolong ekstrak data atau tabel penting dari halaman ini dalam format tabel Markdown.">
-              <span class="suggestion-icon">📊</span>
-              <div class="suggestion-text">
-                <span class="suggestion-title">Ekstrak Tabel Data</span>
-                <span class="suggestion-sub">Konversi data ke tabel rapi</span>
-              </div>
+            <span class="action-card__label">Rangkum halaman ini</span>
+          </button>
+
+          <button type="button" class="action-card card-amber" data-prompt="Jelaskan isi halaman ini dengan bahasa yang sederhana, jelas, dan mudah dipahami.">
+            <div class="action-card__icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z"/>
+              </svg>
             </div>
-            <div class="suggestion-item" data-prompt="Tuliskan skrip Python sederhana untuk memproses data dari web ini.">
-              <span class="suggestion-icon">💻</span>
-              <div class="suggestion-text">
-                <span class="suggestion-title">Buat Skrip / Kode</span>
-                <span class="suggestion-sub">Hasilkan artefak kode yang siap diunduh</span>
-              </div>
+            <span class="action-card__label">Jelaskan halaman ini</span>
+          </button>
+
+          <button type="button" class="action-card card-purple" data-prompt="Ekstrak seluruh data penting atau tabel di halaman ini ke format tabel Markdown yang rapi.">
+            <div class="action-card__icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                <polyline points="2 17 12 22 22 17"/>
+                <polyline points="2 12 12 17 22 12"/>
+              </svg>
             </div>
-          </div>
-        </div>
+            <span class="action-card__label">Ekstrak data</span>
+          </button>
+
+          <button type="button" class="action-card card-blue" data-prompt="Terjemahkan isi utama halaman web ini ke Bahasa Indonesia yang alami dan baku.">
+            <div class="action-card__icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 8l6 6"/>
+                <path d="M4 14l6-6 2-3"/>
+                <path d="M2 5h12"/>
+                <path d="M7 2h1"/>
+                <path d="M22 22l-5-10-5 10"/>
+                <path d="M14 18h6"/>
+              </svg>
+            </div>
+            <span class="action-card__label">Terjemahkan halaman ini</span>
+          </button>
+
+          <button type="button" class="action-card card-green" data-prompt="Bantu saya menulis atau memperbaiki teks di dokumen yang sedang dibuka.">
+            <div class="action-card__icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+              </svg>
+            </div>
+            <span class="action-card__label">Tulis atau perbaiki teks</span>
+          </button>
+
+          <button type="button" class="action-card card-rose" data-prompt="Kerjakan tugas otomatis di tab aktif: periksa formulir dan lengkapi data yang diperlukan.">
+            <div class="action-card__icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="4" width="16" height="16" rx="3"/>
+                <polyline points="9 12 11 14 15 10"/>
+              </svg>
+            </div>
+            <span class="action-card__label">Kerjakan tugas untukku</span>
+          </button>
+        </section>
       </div>
     `;
     attachSuggestionListeners();
   }
 
   function attachSuggestionListeners() {
-    document.querySelectorAll(".suggestion-item, .suggestion-tag").forEach(tag => {
+    document.querySelectorAll(".suggestion-item, .suggestion-tag, .action-card").forEach(tag => {
       tag.addEventListener("click", () => {
         const prompt = tag.getAttribute("data-prompt");
         if (prompt) {
@@ -643,7 +720,12 @@ document.addEventListener("DOMContentLoaded", async () => {
           <div class="session-title">${escapeHtml(sess.title)}</div>
           <div class="session-time">${timeStr} · ${sess.messages.length} pesan</div>
         </div>
-        <button class="session-delete" title="Hapus Sesi">🗑️</button>
+        <button class="session-delete" title="Hapus Sesi" aria-label="Hapus Sesi">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
       `;
 
       item.querySelector(".session-info")?.addEventListener("click", () => {
@@ -1471,16 +1553,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       let askHtml = `
         <div class="message-bubble">
           <div class="ask-user-container">
-            <div class="ask-user-question">🤔 ${escapeHtml(question || msgText)}</div>
+            <div class="ask-user-question">${escapeHtml(question || msgText)}</div>
       `;
       if (Array.isArray(options) && options.length > 0 && !msg.answered) {
         askHtml += `<div class="ask-user-options">`;
         options.forEach((opt) => {
-          askHtml += `<button class="ask-user-option-btn" data-answer="${escapeHtml(opt)}">⚡ ${escapeHtml(opt)}</button>`;
+          askHtml += `<button class="ask-user-option-btn" data-answer="${escapeHtml(opt)}">${escapeHtml(opt)}</button>`;
         });
         askHtml += `</div>`;
       } else if (msg.answered) {
-        askHtml += `<div style="font-size:14px;color:var(--text-accent);margin-top:8px;">✔️ Dijawab: ${escapeHtml(msg.answered)}</div>`;
+        askHtml += `<div style="font-size:13px;color:var(--brand-primary);margin-top:8px;font-weight:500;">✓ Dijawab: ${escapeHtml(msg.answered)}</div>`;
       }
       askHtml += `
           </div>
@@ -2096,8 +2178,17 @@ document.addEventListener("DOMContentLoaded", async () => {
           ${infoHtml}
         </div>
         <div class="model-item-actions">
-          <button type="button" class="btn-model-action btn-edit-model" title="Ubah Nama Model">✏️</button>
-          <button type="button" class="btn-model-action btn-del-model" title="Hapus Model">🗑️</button>
+          <button type="button" class="btn-model-action btn-edit-model" title="Ubah Nama Model" aria-label="Ubah Model">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+            </svg>
+          </button>
+          <button type="button" class="btn-model-action btn-del-model" title="Hapus Model" aria-label="Hapus Model">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </button>
           <label class="toggle-switch small" title="Status Model">
             <input type="checkbox" class="model-item-toggle" ${m.enabled !== false ? "checked" : ""} />
             <span class="toggle-slider"></span>
@@ -2240,7 +2331,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       sessionOnly: !!(sessionKey || local.sessionOnly),
       googleClientId: local.googleClientId || "",
       autoPasteDocs: !!local.autoPasteDocs,
-      enableInPageToolbar: local.enableInPageToolbar !== false
+      enableInPageToolbar: false
     };
 
     // Sinkronisasi ke form Settings
@@ -2249,7 +2340,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (apiKeyInput) apiKeyInput.value = storedSettings.apiKey;
     if (settingsSessionOnly) settingsSessionOnly.checked = storedSettings.sessionOnly;
     if (settingsAutoPasteDocs) settingsAutoPasteDocs.checked = storedSettings.autoPasteDocs;
-    if (settingsEnableInPageToolbar) settingsEnableInPageToolbar.checked = storedSettings.enableInPageToolbar;
+    if (settingsEnableInPageToolbar) settingsEnableInPageToolbar.checked = false;
     if (googleClientIdInput) googleClientIdInput.value = storedSettings.googleClientId;
 
     // Sinkronisasi ke form Wizard
@@ -2300,7 +2391,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!inputEl) return;
     const isPass = inputEl.type === "password";
     inputEl.type = isPass ? "text" : "password";
-    if (btnEl) btnEl.textContent = isPass ? "🙈" : "👁️";
+    if (btnEl) {
+      btnEl.innerHTML = isPass
+        ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>'
+        : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+    }
   }
 
   if (btnToggleWizardKey && wizardApiKey) {
@@ -2432,7 +2527,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     }, (response) => {
       if (btnSubmitBugReport) {
         btnSubmitBugReport.disabled = false;
-        btnSubmitBugReport.innerHTML = `<span>🚀 Kirim Laporan</span>`;
+        btnSubmitBugReport.innerHTML = `
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+          <span>Kirim Laporan</span>
+        `;
       }
 
       if (response && response.success) {
@@ -2583,7 +2684,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const rawKey = (apiKeyInput?.value || "").trim();
     const sessionOnly = !!settingsSessionOnly?.checked;
     const autoPasteDocs = !!settingsAutoPasteDocs?.checked;
-    const enableInPageToolbar = settingsEnableInPageToolbar ? !!settingsEnableInPageToolbar.checked : true;
+    const enableInPageToolbar = false;
     const base = (apiUrlInput?.value || "").trim() || CFG.DEFAULT_API_BASE_URL;
     const fmt = apiFormatSelect?.value || CFG.DEFAULT_API_FORMAT;
     const googleId = (googleClientIdInput?.value || "").trim();
@@ -3143,6 +3244,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     return { to, subject, body };
   }
 
+  function shouldSendImmediately(text = "") {
+    const isExplicitDraft = /(?:draf|draft|simpan\s+(?:di|ke)\s+draf|tulis\s+saja|hanya\s+buat|tuliskan\s+draf|buatkan\s+draf|tulis\s+draf|buat\s+draf|jangan\s+kirim)/i.test(text);
+    if (isExplicitDraft) return false;
+    return /(?:kirim|kirimkan|send|submit|langsung|sekarang|auto\s*send)/i.test(text);
+  }
+
+  if (typeof globalThis !== "undefined") {
+    globalThis.shouldSendImmediately = shouldSendImmediately;
+    globalThis.extractEmailParameters = extractEmailParameters;
+  }
+
   // Recovery parser natural language (fallback jika LLM jawab teks instruktif)
   function tryParseNaturalLanguageActions(text, userPrompt = "") {
     if (!text && !userPrompt) return null;
@@ -3198,14 +3310,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     const emailParams = extractEmailParameters(combined);
 
     if (isEmailIntent && emailParams.to) {
+      const sendNow = shouldSendImmediately(combined);
       return {
-        planner: { steps: [`1. Membuka formulir compose Gmail`, `2. Mengisi penerima (${emailParams.to})`, `3. Mengisi subjek (${emailParams.subject})`, `4. Menuliskan isi pesan & menyelesaikan pengisian`] },
+        planner: { steps: [
+          `1. Membuka formulir compose Gmail`,
+          `2. Mengisi penerima (${emailParams.to})`,
+          `3. Mengisi subjek (${emailParams.subject})`,
+          sendNow ? `4. Menuliskan isi pesan & mengirimkan email` : `4. Menuliskan isi pesan & menyimpan draf`
+        ] },
         action: "send_email",
         to: emailParams.to,
         subject: emailParams.subject,
         body: emailParams.body,
-        sendNow: /(?:kirim sekarang|langsung kirim|auto send)/i.test(combined),
-        message: `Mempersiapkan pengiriman email ke ${emailParams.to}...`
+        sendNow,
+        message: sendNow ? `Mengirimkan email ke ${emailParams.to}...` : `Mempersiapkan draf email ke ${emailParams.to}...`
       };
     }
 
@@ -3322,7 +3440,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 <div class="plan-approval-card" id="activePlanApprovalCard">
   <div class="plan-approval-header">
     <div style="display:flex; align-items:center; gap:6px;">
-      <span>📋</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+      </svg>
       <span>Persetujuan Rencana Tugas</span>
     </div>
     <span class="plan-approval-badge">Planning Mode</span>
@@ -3336,7 +3457,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   </div>
   <div class="plan-approval-actions">
     <button type="button" class="btn-approve-plan" id="btnApprovePlan">
-      <span>🚀</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+      </svg>
       <span>Setujui & Jalankan Rencana</span>
     </button>
     <button type="button" class="btn-reject-plan" id="btnRejectPlan">
@@ -3677,20 +3800,48 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
 
     // ── Aksi otomatisasi Email Khusus (Gmail / Webmail) ──
     if (actionType === "send_email" || actionType === "compose_email") {
-      let currentTab = null;
-      try {
-        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
-        if (tabs && tabs[0]) currentTab = tabs[0];
-      } catch (e) {}
+      let targetTab = null;
+      let targetTabId = activeTask?.targetTabId || null;
 
-      const isAlreadyOnGmail = currentTab && /mail\.google\.com/i.test(currentTab.url || "");
+      // 1. Cek tab kerja yang tersemat (pinned targetTabId) terlebih dahulu
+      if (targetTabId && typeof chrome !== "undefined" && chrome.tabs?.get) {
+        try {
+          const t = await chrome.tabs.get(Number(targetTabId));
+          if (t && t.id) targetTab = t;
+        } catch (_) {}
+      }
+
+      // 2. Tab reuse: jika targetTab bukan Gmail, cari apakah sudah ada tab Gmail terbuka di jendela
+      if (!targetTab || !/mail\.google\.com/i.test(targetTab.url || "")) {
+        try {
+          const allTabs = await new Promise(resolve => chrome.tabs.query({ currentWindow: true }, resolve));
+          const existingGmailTab = (allTabs || []).find(t => /mail\.google\.com/i.test(t.url || ""));
+          if (existingGmailTab && existingGmailTab.id) {
+            targetTab = existingGmailTab;
+            targetTabId = existingGmailTab.id;
+            if (activeTask) activeTask.targetTabId = targetTabId;
+            try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: targetTabId }); } catch (_) {}
+          }
+        } catch (_) {}
+      }
+
+      const isAlreadyOnGmail = targetTab && /mail\.google\.com/i.test(targetTab.url || "");
 
       if (!isAlreadyOnGmail) {
-        appendLog("Membuka halaman Gmail...");
+        appendLog("Membuka formulir Tulis Gmail...");
         showStatusIndicator("Membuka formulir Tulis Gmail...");
-        await sendToBackground({ action: "NAVIGATE_TAB", url: "https://mail.google.com/mail/u/0/#inbox?compose=new" });
-        await new Promise(r => setTimeout(r, 4500));
-        await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 3000, stableWindowMs: 600 }, 5000).catch(() => {});
+        if (targetTabId) {
+          await sendToBackground({ action: "NAVIGATE_TAB", url: "https://mail.google.com/mail/u/0/#inbox?compose=new", targetTabId });
+        } else {
+          const rNew = await sendToBackground({ action: "NEW_TAB", url: "https://mail.google.com/mail/u/0/#inbox?compose=new" });
+          if (rNew && rNew.tabId) {
+            targetTabId = rNew.tabId;
+            if (activeTask) activeTask.targetTabId = targetTabId;
+            try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: targetTabId }); } catch (_) {}
+          }
+        }
+        await new Promise(r => setTimeout(r, 4000));
+        await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 3500, stableWindowMs: 600 }, 5000, targetTabId).catch(() => {});
       }
 
       showStatusIndicator("Mengisi formulir email di Gmail...");
@@ -3703,35 +3854,62 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           body: resObj.body || resObj.message || resObj.value,
           sendNow: resObj.sendNow === true
         }
-      }, 25000);
+      }, 25000, targetTabId);
 
       result.success = !!(r && r.success);
-      result.message = (r && (r.message || r.error)) || "Email berhasil diproses.";
-      result.stateChanged = true;
-      result.isFinished = true;
+      result.message = (r && (r.message || r.error)) || (result.success ? "Email berhasil diproses." : "Gagal mengisi formulir email di Gmail.");
+      result.stateChanged = result.success;
+      result.isFinished = result.success;
       return result;
     }
 
     // ── Aksi otomatisasi Media Sosial Khusus (Twitter/X, Threads, LinkedIn, Facebook) ──
     if (actionType === "post_social" || actionType === "post_twitter" || actionType === "post_x" || actionType === "tweet" || actionType === "social_post" || actionType === "post_threads") {
-      let currentTab = null;
-      try {
-        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
-        if (tabs && tabs[0]) currentTab = tabs[0];
-      } catch (e) {}
+      let targetTab = null;
+      let targetTabId = activeTask?.targetTabId || null;
+
+      if (targetTabId && typeof chrome !== "undefined" && chrome.tabs?.get) {
+        try {
+          const t = await chrome.tabs.get(Number(targetTabId));
+          if (t && t.id) targetTab = t;
+        } catch (_) {}
+      }
 
       const targetPlatform = detectTargetSocialPlatform(
         `${resObj.platform || ""} ${resObj.target || ""} ${activeTask?.goal || ""} ${resObj.text || ""}`,
-        currentTab?.url || ""
+        targetTab?.url || ""
       );
 
-      const isAlreadyOnSocial = currentTab && targetPlatform.domainCheck.test(currentTab.url || "");
+      // Tab reuse untuk platform media sosial
+      if (!targetTab || !targetPlatform.domainCheck.test(targetTab.url || "")) {
+        try {
+          const allTabs = await new Promise(resolve => chrome.tabs.query({ currentWindow: true }, resolve));
+          const existingSocialTab = (allTabs || []).find(t => targetPlatform.domainCheck.test(t.url || ""));
+          if (existingSocialTab && existingSocialTab.id) {
+            targetTab = existingSocialTab;
+            targetTabId = existingSocialTab.id;
+            if (activeTask) activeTask.targetTabId = targetTabId;
+            try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: targetTabId }); } catch (_) {}
+          }
+        } catch (_) {}
+      }
+
+      const isAlreadyOnSocial = targetTab && targetPlatform.domainCheck.test(targetTab.url || "");
       if (!isAlreadyOnSocial) {
         appendLog(`Navigasi ke ${targetPlatform.name}...`);
         showStatusIndicator(`Membuka halaman ${targetPlatform.name}...`);
-        await sendToBackground({ action: "NAVIGATE_TAB", url: targetPlatform.url });
-        await new Promise(r => setTimeout(r, 4500));
-        await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
+        if (targetTabId) {
+          await sendToBackground({ action: "NAVIGATE_TAB", url: targetPlatform.url, targetTabId });
+        } else {
+          const rNew = await sendToBackground({ action: "NEW_TAB", url: targetPlatform.url });
+          if (rNew && rNew.tabId) {
+            targetTabId = rNew.tabId;
+            if (activeTask) activeTask.targetTabId = targetTabId;
+            try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: targetTabId }); } catch (_) {}
+          }
+        }
+        await new Promise(r => setTimeout(r, 4000));
+        await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000, targetTabId).catch(() => {});
       }
 
       showStatusIndicator(`Menuliskan draf postingan di ${targetPlatform.name}...`);
@@ -3743,12 +3921,12 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           text: postText,
           sendNow: resObj.sendNow === true || resObj.postNow === true
         }
-      }, 20000);
+      }, 20000, targetTabId);
 
       result.success = !!(r && r.success);
-      result.message = (r && (r.message || r.error)) || `Postingan di ${targetPlatform.name} berhasil diproses.`;
-      result.stateChanged = true;
-      result.isFinished = true;
+      result.message = (r && (r.message || r.error)) || (result.success ? `Postingan di ${targetPlatform.name} berhasil diproses.` : `Gagal memproses postingan di ${targetPlatform.name}.`);
+      result.stateChanged = result.success;
+      result.isFinished = result.success;
       return result;
     }
 
@@ -5574,9 +5752,21 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
     activeTask = newTask(goal, contextSources);
     taskCardMsgIndex = -1;
     try {
-      const activeTabs = await new Promise(r => chrome.tabs.query({ active: true, currentWindow: true }, r));
-      if (activeTabs && activeTabs[0]?.id) {
-        activeTask.targetTabId = activeTabs[0].id;
+      const allTabs = await new Promise(r => chrome.tabs.query({ currentWindow: true }, r));
+      const isEmailGoal = /(?:kirim|tulis|buat|draft|send|compose)\s+(?:ke\s+|pesan\s+)?email|gmail/i.test(goal);
+      if (isEmailGoal && allTabs) {
+        const existingGmail = allTabs.find(t => /mail\.google\.com/i.test(t.url || ""));
+        if (existingGmail && existingGmail.id) {
+          activeTask.targetTabId = existingGmail.id;
+        }
+      }
+      if (!activeTask.targetTabId) {
+        const activeTab = (allTabs || []).find(t => t.active);
+        if (activeTab && activeTab.id) {
+          activeTask.targetTabId = activeTab.id;
+        }
+      }
+      if (activeTask.targetTabId) {
         try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: activeTask.targetTabId }); } catch (_) {}
       }
     } catch (_) {}
@@ -6361,7 +6551,7 @@ ${sub.description}
               to: toM ? toM[1] : "",
               subject: subM ? subM[1].trim() : "Pesan Baru",
               body: bodyM ? bodyM[1].trim() : goalText,
-              sendNow: /(?:kirim sekarang|langsung kirim|auto send|kirimkan|kirim)/i.test(goalText)
+              sendNow: shouldSendImmediately(goalText)
             };
           }
         }
@@ -6426,7 +6616,7 @@ ${sub.description}
             to: emailParams.to,
             subject: emailParams.subject,
             body: emailParams.body || reply || activeTask.goal,
-            sendNow: /(?:kirim sekarang|langsung kirim|auto send)/i.test(activeTask.goal)
+            sendNow: shouldSendImmediately(activeTask.goal || sub.description || "")
           };
         } else if (isSocialAction) {
           appendLog(`📱 Mengonversi draf ke aksi postingan fisik di Twitter/X / Media Sosial...`);
@@ -6706,9 +6896,15 @@ ${sub.description}
           await finalizeTask("done", finalMsg);
           return;
         }
+
+        // Masih ada subtask lanjutan: wajib lanjut ke subtask berikutnya tanpa memotong tugas
+        appendLog(`⏩ Subtask #${sub.id} selesai. Melanjutkan ke langkah rencana berikutnya...`);
+        continue;
       }
 
-      if (verdict.verdict === "DONE" && exec.success) {
+      // Hanya selesaikan langsung jika rencana single-step atau seluruh subtask telah berstatus done
+      const remainingPlanSubs = (activeTask.plan || []).filter(s => s.status !== "done");
+      if (verdict.verdict === "DONE" && exec.success && (remainingPlanSubs.length === 0 || (activeTask.plan || []).length <= 1)) {
         const finalDoneMsg = (exec.message && exec.message !== "Aksi sukses dijalankan.")
           ? exec.message
           : (verdict.reason ? `✅ ${verdict.reason}` : "✅ Validator menilai seluruh tujuan pengguna telah tercapai.");
@@ -7478,12 +7674,53 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   // ═══════════════════════════════════════════════════
   // HELPERS: STATUS, STOP, LOG, ABORT
   // ═══════════════════════════════════════════════════
+  function updateActiveWorkingTabUI(tabId, title) {
+    const bar = document.getElementById("activeTabWorkingBar");
+    const titleEl = document.getElementById("activeWorkingTabTitle");
+    const btnFocus = document.getElementById("btnFocusWorkingTab");
+    if (!bar) return;
+    if (tabId) {
+      bar.classList.remove("hidden");
+      if (titleEl) titleEl.textContent = title || `Tab #${tabId}`;
+      if (btnFocus) {
+        btnFocus.onclick = () => {
+          try { chrome.tabs.update(Number(tabId), { active: true }); } catch (_) {}
+        };
+      }
+    } else {
+      bar.classList.add("hidden");
+    }
+  }
+
   function setAgentRunning(running) {
     isAgentRunning = running;
     agentStatus.textContent = running ? "Bekerja" : "Siap";
     if (running) {
       agentStatus.classList.add("working");
       stopBar.classList.remove("hidden");
+
+      if (activeTask?.targetTabId) {
+        try {
+          chrome.tabs.get(Number(activeTask.targetTabId), (tab) => {
+            if (!chrome.runtime.lastError && tab) {
+              updateActiveWorkingTabUI(tab.id, tab.title || tab.url);
+            } else {
+              updateActiveWorkingTabUI(activeTask.targetTabId, "Tab Aktif");
+            }
+          });
+        } catch (_) {
+          updateActiveWorkingTabUI(activeTask.targetTabId, "Tab Aktif");
+        }
+      } else {
+        try {
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs && tabs[0]) {
+              updateActiveWorkingTabUI(tabs[0].id, tabs[0].title || tabs[0].url);
+            }
+          });
+        } catch (_) {}
+      }
+
       if (btnSend) {
         btnSend.classList.add("stop-btn");
         btnSend.title = "Hentikan / Batal Proses AI (Klik untuk STOP)";
@@ -7500,6 +7737,8 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     } else {
       agentStatus.classList.remove("working");
       stopBar.classList.add("hidden");
+      updateActiveWorkingTabUI(null);
+
       if (btnSend) {
         btnSend.classList.remove("stop-btn");
         btnSend.title = "Kirim Perintah (Enter)";

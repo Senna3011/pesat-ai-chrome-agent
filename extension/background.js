@@ -477,6 +477,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Reset riwayat loop & token accumulator saat memulai sesi obrolan/perintah baru
   if (request.action === "RESET_LOOP_TRACKER" || request.type === "RESET_LOOP_TRACKER") {
     actionHistoryPerTab.clear();
+    for (const tid of activeAgentTabs) {
+      if (chrome.tabs?.ungroup) {
+        try { chrome.tabs.ungroup([tid], () => { if (chrome.runtime.lastError) {} }); } catch (_) {}
+      }
+      try { chrome.tabs.sendMessage(tid, { type: "PESAT_SET_WORKING_BORDER", active: false }); } catch (_) {}
+    }
     activeAgentTabs.clear();
     taskTokenUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
     persistSWState();
@@ -485,13 +491,50 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "SET_ACTIVE_AGENT_TAB") {
-    if (request.tabId) activeAgentTabs.add(Number(request.tabId));
+    const tid = Number(request.tabId);
+    if (tid) {
+      activeAgentTabs.add(tid);
+      // Comet Browser Experience: Chrome Tab Group berwarna Merah Pesat
+      if (chrome.tabs?.group && chrome.tabGroups) {
+        try {
+          chrome.tabs.group({ tabIds: [tid] }, (groupId) => {
+            if (!chrome.runtime.lastError && typeof groupId === "number") {
+              chrome.tabGroups.update(groupId, {
+                title: "⚡ Pesat Agent",
+                color: "red"
+              }, () => {
+                if (chrome.runtime.lastError) {}
+              });
+            }
+          });
+        } catch (_) {}
+      }
+      // Kirim sinyal border ambient glow ke content script tab tersebut
+      try {
+        chrome.tabs.sendMessage(tid, { type: "PESAT_SET_WORKING_BORDER", active: true });
+      } catch (_) {}
+    }
     sendResponse({ success: true });
     return true;
   }
 
   if (request.action === "CLEAR_ACTIVE_AGENT_TAB") {
-    if (request.tabId) activeAgentTabs.delete(Number(request.tabId));
+    const tid = Number(request.tabId);
+    if (tid) {
+      activeAgentTabs.delete(tid);
+      // Lepas tab dari Tab Group saat tugas selesai
+      if (chrome.tabs?.ungroup) {
+        try {
+          chrome.tabs.ungroup([tid], () => {
+            if (chrome.runtime.lastError) {}
+          });
+        } catch (_) {}
+      }
+      // Matikan border ambient glow di tab
+      try {
+        chrome.tabs.sendMessage(tid, { type: "PESAT_SET_WORKING_BORDER", active: false });
+      } catch (_) {}
+    }
     sendResponse({ success: true });
     return true;
   }
@@ -1012,25 +1055,49 @@ ATURAN KETAT:
         }
 
         if (request.action === "CREATE_TAB" || request.action === "OPEN_TAB" || request.action === "OPEN_NEW_TAB" || request.action === "open_new_tab" || request.action === "NEW_TAB" || request.newTab) {
+          // Tab deduplication: jika membuka URL layanan penting (Gmail, Docs, Sheets), cek apakah sudah ada tab terbuka
+          if (tabs && tabs.length > 0 && /mail\.google\.com|docs\.google\.com\/(?:document|spreadsheets)/i.test(url)) {
+            try {
+              const urlHost = new URL(url).hostname;
+              const existing = tabs.find(t => t.url && t.url.includes(urlHost));
+              if (existing && existing.id) {
+                activeAgentTabs.add(Number(existing.id));
+                sendResponse({ success: true, message: `Menggunakan tab yang sudah terbuka: ${existing.url}`, url: existing.url, tabId: existing.id, reused: true });
+                return;
+              }
+            } catch (_) {}
+          }
           const newTab = await chrome.tabs.create({ url, active: true });
+          if (newTab?.id) activeAgentTabs.add(Number(newTab.id));
           sendResponse({ success: true, message: `Membuka tab baru: ${url}`, url, tabId: newTab?.id });
           return;
         }
 
         let targetId = request.targetTabId || request.tabId;
+        // Jika tidak ada targetId eksplisit, prioritaskan tab kerja agent yang tercatat agar tidak menimpa tab yang sedang dilihat user
+        if (!targetId) {
+          for (const tab of tabs || []) {
+            if (activeAgentTabs.has(Number(tab.id))) {
+              targetId = tab.id;
+              break;
+            }
+          }
+        }
         if (!targetId && tabs && tabs[0]?.id) {
           targetId = tabs[0].id;
         }
 
         if (!targetId) {
           const newTab = await chrome.tabs.create({ url, active: true });
+          if (newTab?.id) activeAgentTabs.add(Number(newTab.id));
           sendResponse({ success: true, message: `Membuka tab baru: ${url}`, url, tabId: newTab?.id });
           return;
         }
 
+        activeAgentTabs.add(Number(targetId));
         actionHistoryPerTab.delete(Number(targetId));
         await chrome.tabs.update(Number(targetId), { url });
-        sendResponse({ success: true, message: `Membuka URL: ${url}`, url });
+        sendResponse({ success: true, message: `Membuka URL: ${url}`, url, tabId: Number(targetId) });
       } catch (err) {
         sendResponse({ success: false, error: err.message });
       }

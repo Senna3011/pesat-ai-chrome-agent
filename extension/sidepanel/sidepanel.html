@@ -19,9 +19,15 @@
     <!-- Drag and Drop Overlay Zone (§ 5, 11 PRD) -->
     <div class="drop-overlay hidden" id="dropOverlay">
       <div class="drop-overlay-box">
-        <div style="font-size:36px;margin-bottom:8px;">📁</div>
-        <div style="font-size:14.5px;font-weight:700;color:var(--text-accent);">Lepaskan file di sini</div>
-        <div style="font-size:14px;color:var(--text-secondary);margin-top:4px;">CSV, XLSX, PDF, DOCX, TXT, JSON, Gambar</div>
+        <div style="display:flex;justify-content:center;margin-bottom:8px;color:var(--brand-primary);">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            <line x1="12" y1="11" x2="12" y2="17"></line>
+            <polyline points="9 14 12 11 15 14"></polyline>
+          </svg>
+        </div>
+        <div style="font-size:14.5px;font-weight:700;color:var(--text-primary);">Lepaskan file di sini</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-top:4px;">CSV, XLSX, PDF, DOCX, TXT, JSON, Gambar</div>
       </div>
     </div>
 
@@ -107,18 +113,34 @@
     <div class="history-drawer hidden" id="historyDrawer">
       <div class="drawer-header">
         <h3>Riwayat Percakapan</h3>
-        <button class="close-btn" id="btnCloseHistory">✕</button>
+        <button class="close-btn" id="btnCloseHistory" aria-label="Tutup">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
       <div class="drawer-actions">
         <button class="btn btn-primary-pill btn-full" id="btnDrawerNewChat">
-          <span>➕ Obrolan Baru</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Obrolan Baru</span>
         </button>
       </div>
       <div class="session-list" id="sessionList">
         <div class="history-empty">Belum ada riwayat sesi.</div>
       </div>
       <div class="drawer-footer">
-        <button class="btn btn-secondary-pill btn-full" id="btnExportHistory" style="margin-bottom:10px;">📥 Ekspor Riwayat</button>
+        <button class="btn btn-secondary-pill btn-full" id="btnExportHistory" style="margin-bottom:10px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Ekspor Riwayat</span>
+        </button>
         <button class="btn btn-danger-link" id="btnClearHistory">Hapus Semua Riwayat</button>
       </div>
     </div>
@@ -126,8 +148,20 @@
     <!-- Memory Drawer (Slide-out panel) -->
     <div class="history-drawer hidden" id="memoryDrawer">
       <div class="drawer-header">
-        <h3>🧠 Memori & Preferensi AI</h3>
-        <button class="close-btn" id="btnCloseMemory">✕</button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a5 5 0 0 1 5 5v1a4 4 0 0 1 4 4 4 4 0 0 1-4 4v1a5 5 0 0 1-10 0v-1a4 4 0 0 1-4-4 4 4 0 0 1 4-4V7a5 5 0 0 1 5-5z"></path>
+            <path d="M12 12v6"></path>
+            <path d="M9 15h6"></path>
+          </svg>
+          <h3>Memori & Preferensi AI</h3>
+        </div>
+        <button class="close-btn" id="btnCloseMemory" aria-label="Tutup">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
       <div class="memory-filter-row">
         <button class="memory-filter-tab active" data-category="all">Semua</button>
@@ -139,7 +173,14 @@
       <!-- Memory Guide Toggle & Card -->
       <div class="memory-guide-wrapper">
         <button type="button" class="memory-guide-toggle" id="btnToggleMemoryGuide">
-          <span>💡 Panduan Cara Mengisi Memori</span>
+          <span style="display:flex;align-items:center;gap:6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            Panduan Cara Mengisi Memori
+          </span>
           <span id="memoryGuideArrow">▼</span>
         </button>
         <div class="memory-guide-content hidden" id="memoryGuideContent">
@@ -160,7 +201,7 @@
             <span class="guide-desc">Trik situs. Contoh: <code>tokopedia.com: Urutkan harga terendah</code></span>
           </div>
           <div class="memory-guide-tip">
-            ✨ <strong>Tips:</strong> Bisa juga ketik langsung di chat: <code>Ingat bahwa...</code> atau <code>/ingat [aturan]</code>.
+            <strong>Tips:</strong> Bisa juga ketik langsung di chat: <code>Ingat bahwa...</code> atau <code>/ingat [aturan]</code>.
           </div>
         </div>
       </div>
@@ -173,7 +214,12 @@
             <option value="skills">Skill Situs</option>
           </select>
           <input type="text" id="memoryInputText" class="memory-input-field" placeholder="Ketik aturan baru..." />
-          <button type="button" id="btnAddMemory" class="btn-memory-add" title="Tambah">+</button>
+          <button type="button" id="btnAddMemory" class="btn-memory-add" title="Tambah">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
         </div>
       </div>
       <div class="session-list" id="memoryList">
@@ -190,7 +236,11 @@
         <!-- Provider Header Bar -->
         <div class="provider-header-bar">
           <div class="provider-title-group">
-            <div class="provider-logo-icon">⚡</div>
+            <div class="provider-logo-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+            </div>
             <h2 class="provider-title">PesatRouter</h2>
           </div>
           <div class="provider-header-actions">
@@ -198,8 +248,12 @@
               <input type="checkbox" id="wizardProviderToggle" checked />
               <span class="toggle-slider"></span>
             </label>
-            <button type="button" class="btn-icon-ghost" id="btnWizardMore" title="Opsi">⋮</button>
-            <button type="button" class="btn-icon-ghost" id="btnWizardClose" title="Tutup">✕</button>
+            <button type="button" class="btn-icon-ghost" id="btnWizardClose" title="Tutup">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -230,7 +284,12 @@
           </div>
           <div class="config-input-wrapper password-wrapper">
             <input type="password" id="wizardApiKey" class="config-input" placeholder="sk-..." autocomplete="off" />
-            <button type="button" class="btn-eye-toggle" id="btnToggleWizardKey" title="Lihat/Sembunyikan">👁️</button>
+            <button type="button" class="btn-eye-toggle" id="btnToggleWizardKey" title="Lihat/Sembunyikan">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -246,7 +305,12 @@
         <!-- Extra controls in onboarding modal -->
         <div class="config-bottom-actions">
           <div class="test-row">
-            <button type="button" class="btn-test-conn" id="btnWizardTest">⚡ Test Connection</button>
+            <button type="button" class="btn-test-conn" id="btnWizardTest">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+              <span>Test Connection</span>
+            </button>
             <label class="session-only-label">
               <input type="checkbox" id="wizardSessionOnly" />
               <span>Simpan sesi ini saja</span>
@@ -261,14 +325,29 @@
     <!-- Settings Modal -->
     <div class="settings-panel hidden" id="settingsPanel">
       <div class="settings-header">
-        <h3>⚙️ Pengaturan Provider & Integrasi</h3>
-        <button class="close-btn" id="btnCloseSettings">✕</button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <h3>Pengaturan Provider & Integrasi</h3>
+        </div>
+        <button class="close-btn" id="btnCloseSettings" aria-label="Tutup">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
 
       <div class="provider-config-card in-settings">
         <div class="provider-header-bar">
           <div class="provider-title-group">
-            <div class="provider-logo-icon">⚡</div>
+            <div class="provider-logo-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+            </div>
             <h2 class="provider-title">PesatRouter</h2>
           </div>
           <div class="provider-header-actions">
@@ -303,7 +382,12 @@
           </div>
           <div class="config-input-wrapper password-wrapper">
             <input type="password" id="apiKeyInput" class="config-input" placeholder="sk-..." autocomplete="off" />
-            <button type="button" class="btn-eye-toggle" id="btnToggleSettingsKey" title="Lihat/Sembunyikan">👁️</button>
+            <button type="button" class="btn-eye-toggle" id="btnToggleSettingsKey" title="Lihat/Sembunyikan">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -316,7 +400,12 @@
 
         <div class="config-bottom-actions">
           <div class="test-row">
-            <button type="button" class="btn-test-conn" id="btnSettingsTest">⚡ Test Connection</button>
+            <button type="button" class="btn-test-conn" id="btnSettingsTest">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+              <span>Test Connection</span>
+            </button>
             <label class="session-only-label">
               <input type="checkbox" id="settingsSessionOnly" />
               <span>Simpan sesi ini saja</span>
@@ -338,22 +427,6 @@
           </div>
           <div style="font-size:11.5px; color:var(--text-muted); line-height:1.4; border-top:1px solid rgba(255,255,255,0.05); padding-top:6px;">
             💡 <em>Rekomendasi (OFF):</em> Hasil analisis disajikan di panel chat terlebih dahulu dengan opsi <strong>Tempel ke Docs (Tab Baru)</strong> agar susunan kursor Anda tidak rusak.
-          </div>
-        </div>
-
-        <div class="config-field-group" style="margin-top:10px; margin-bottom:12px; padding:12px 14px; background:rgba(255,255,255,0.03); border-radius:10px; border:1px solid rgba(255,255,255,0.07); display:flex; flex-direction:column; gap:8px;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
-              <div style="font-weight:600; color:var(--text-primary); font-size:14px;">Popup Toolbar Seleksi Teks In-Page</div>
-              <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">Tampilkan menu pintasan (Perbaiki, Rangkum, dll) saat memblok teks di web</div>
-            </div>
-            <label class="toggle-switch" title="Nyalakan / Matikan Popup Toolbar Seleksi Teks">
-              <input type="checkbox" id="settingsEnableInPageToolbar" checked />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div style="font-size:11.5px; color:var(--text-muted); line-height:1.4; border-top:1px solid rgba(255,255,255,0.05); padding-top:6px;">
-            💡 <em>Tips:</em> Saat menyala, toolbar otomatis sembunyi jika teks dilepas, atau dapat ditutup via tombol <strong>✕</strong> atau tombol <kbd style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); padding:0 4px; border-radius:3px;">Esc</kbd>.
           </div>
         </div>
 
@@ -448,85 +521,136 @@
       </div>
     </div>
 
-    <!-- Quick Action Chips Slider -->
-    <div class="quick-chips-slider-wrapper">
-      <button type="button" class="slide-nav-btn slide-prev hidden" id="btnSlideChipsLeft" title="Geser ke kiri" aria-label="Geser ke kiri">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-      </button>
-      <div class="quick-chips-container" id="quickChipsContainer">
-        <button class="chip-btn" id="chipSummarize">
-          <span class="chip-icon">📄</span>
-          <span>Rangkum</span>
-        </button>
-        <button class="chip-btn" id="chipExtract">
-          <span class="chip-icon">📊</span>
-          <span>Ekstrak Data</span>
-        </button>
-        <button class="chip-btn" id="chipAutoFill">
-          <span class="chip-icon">📝</span>
-          <span>Isi Form</span>
-        </button>
-        <button class="chip-btn" id="chipAuditSecurity">
-          <span class="chip-icon">🛡️</span>
-          <span>Audit Keamanan</span>
-        </button>
-        <button class="chip-btn" id="chipSeoAnalysis">
-          <span class="chip-icon">🔍</span>
-          <span>Analisis SEO</span>
-        </button>
-        <button class="chip-btn" id="chipCopyText">
-          <span class="chip-icon">📋</span>
-          <span>Salin Teks</span>
-        </button>
-        <button class="chip-btn" id="chipToggleMarkers">
-          <span class="chip-icon">🎯</span>
-          <span>Marker</span>
-        </button>
-      </div>
-      <button type="button" class="slide-nav-btn slide-next" id="btnSlideChipsRight" title="Geser ke kanan" aria-label="Geser ke kanan">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-      </button>
-    </div>
+    <!-- Quick Action Chips Container (Hidden Dummy for backward compatibility) -->
+    <div id="quickChipsContainer" style="display:none !important;"></div>
 
     <!-- Chat Messages Area -->
     <main class="chat-area" id="chatArea">
-      <!-- Pesan sambutan awal -->
-      <div class="message assistant-message" id="welcomeMessage">
-        <div class="message-bubble welcome-card">
-          <div class="welcome-header">
-            <div class="welcome-logo-circle">⚡</div>
-            <div class="welcome-header-text">
-              <span class="welcome-title">Pesat Agent</span>
-              <span class="welcome-subtitle">Computer-Use AI Browser Assistant</span>
-            </div>
-          </div>
-          <p class="welcome-desc">
-            Beri tahu saya apa yang ingin Anda kerjakan di web ini. Gunakan <strong>@</strong> untuk merujuk tab peramban atau tombol <strong>📎</strong> untuk melampirkan dataset / dokumen.
-          </p>
-          <div class="welcome-suggestions">
-            <div class="suggestion-item" data-prompt="Tolong buat ringkasan poin-poin penting dari isi konten halaman web ini.">
-              <span class="suggestion-icon">📄</span>
-              <div class="suggestion-text">
-                <span class="suggestion-title">Rangkum Halaman</span>
-                <span class="suggestion-sub">Ekstraksi intisari artikel aktif</span>
-              </div>
-            </div>
-            <div class="suggestion-item" data-prompt="Tolong ekstrak data atau tabel penting dari halaman ini dalam format tabel Markdown.">
-              <span class="suggestion-icon">📊</span>
-              <div class="suggestion-text">
-                <span class="suggestion-title">Ekstrak Tabel Data</span>
-                <span class="suggestion-sub">Konversi data ke tabel rapi</span>
-              </div>
-            </div>
-            <div class="suggestion-item" data-prompt="Tuliskan skrip Python sederhana untuk memproses data dari web ini.">
-              <span class="suggestion-icon">💻</span>
-              <div class="suggestion-text">
-                <span class="suggestion-title">Buat Skrip / Kode</span>
-                <span class="suggestion-sub">Hasilkan artefak kode yang siap diunduh</span>
-              </div>
-            </div>
-          </div>
+      <!-- Comet-Style Active Working Tab Indicator -->
+      <div class="active-tab-working-bar hidden" id="activeTabWorkingBar">
+        <div class="active-tab-working-left">
+          <span class="active-tab-working-pulse"></span>
+          <span>⚡ Bekerja di: <strong id="activeWorkingTabTitle">Halaman Web</strong></span>
         </div>
+        <button type="button" class="icon-btn" id="btnFocusWorkingTab" title="Fokuskan ke Tab Ini" style="width:24px;height:24px;font-size:11px;">↗</button>
+      </div>
+
+      <!-- Modern Light Welcome & Hero Section -->
+      <div id="welcomeView">
+        <section class="hero-section">
+          <svg class="hero-wave-svg" viewBox="0 0 400 160" fill="none" preserveAspectRatio="none">
+            <path d="M-20 40 C 80 110, 240 120, 420 20 L 420 85 C 250 155, 90 140, -20 90 Z" fill="url(#pesatWaveGrad)" opacity="0.22"/>
+            <path d="M-20 75 C 110 130, 270 110, 420 55 L 420 110 C 260 160, 100 155, -20 115 Z" fill="url(#pesatWaveGrad)" opacity="0.12"/>
+            <defs>
+              <linearGradient id="pesatWaveGrad" x1="0" y1="0" x2="400" y2="0" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#D91B24"/>
+                <stop offset="50%" stop-color="#FB7185"/>
+                <stop offset="100%" stop-color="#D91B24"/>
+              </linearGradient>
+            </defs>
+          </svg>
+
+          <!-- Maskot Avatar Asli Pesat AI -->
+          <div class="mascot-container">
+            <div class="mascot-badge-float">
+              <svg width="96" height="96" viewBox="0 0 120 120" fill="none">
+                <circle cx="60" cy="64" r="46" fill="#FFF1F2"/>
+                <path d="M26 62C14 52 12 38 22 34C28 32 35 42 38 52" fill="#FFFFFF" stroke="#D91B24" stroke-width="3" stroke-linecap="round"/>
+                <path d="M94 62C106 52 108 38 98 34C92 32 85 42 82 52" fill="#FFFFFF" stroke="#D91B24" stroke-width="3" stroke-linecap="round"/>
+                <ellipse cx="60" cy="66" rx="28" ry="30" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2"/>
+                <path d="M52 36C52 26 62 22 66 30C70 25 76 30 72 38" fill="#D91B24"/>
+                <rect x="36" y="37" width="48" height="10" rx="5" fill="#D91B24"/>
+                <rect x="43" y="39" width="34" height="5" rx="2.5" fill="#FECDD3"/>
+                <circle cx="88" cy="54" r="6" fill="#1E293B"/>
+                <circle cx="49" cy="56" r="4.5" fill="#0F172A"/>
+                <circle cx="47.5" cy="54.5" r="1.5" fill="#FFFFFF"/>
+                <path d="M67 56C69 53 73 53 75 56" stroke="#0F172A" stroke-width="2.8" stroke-linecap="round"/>
+                <ellipse cx="43" cy="63" rx="4" ry="2.5" fill="#FDA4AF"/>
+                <ellipse cx="77" cy="63" rx="4" ry="2.5" fill="#FDA4AF"/>
+                <path d="M55 61C55 59 65 59 65 61C65 65 60 69 60 69C60 69 55 65 55 61Z" fill="#F59E0B"/>
+                <path d="M40 78C48 83 72 83 80 78L83 86C72 91 48 91 37 86L40 78Z" fill="#D91B24"/>
+                <rect x="63" y="82" width="13" height="16" rx="4" transform="rotate(-10 63 82)" fill="#D91B24"/>
+                <path d="M67 88L70 90L67 92M71 88L74 90L71 92" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </div>
+          </div>
+
+          <h1 class="hero-title">
+            Halo! 👋<br>
+            Ada yang bisa <span class="highlight">Pesat Agent</span> bantu?
+          </h1>
+          <p class="hero-subtitle">
+            Asisten AI cerdas untuk menjelajah, merangkum, dan menyelesaikan tugas otomatis di web.
+          </p>
+        </section>
+
+        <!-- 3x2 Quick Action Cards Grid -->
+        <section class="quick-grid">
+          <button type="button" class="action-card card-red" data-prompt="Rangkum poin-poin utama halaman web ini secara ringkas dan terstruktur.">
+            <div class="action-card__icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="3" width="16" height="18" rx="3"/>
+                <line x1="8" y1="8" x2="16" y2="8"/>
+                <line x1="8" y1="12" x2="16" y2="12"/>
+                <line x1="8" y1="16" x2="12" y2="16"/>
+              </svg>
+            </div>
+            <span class="action-card__label">Rangkum halaman ini</span>
+          </button>
+
+          <button type="button" class="action-card card-amber" data-prompt="Jelaskan isi halaman ini dengan bahasa yang sederhana, jelas, dan mudah dipahami.">
+            <div class="action-card__icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z"/>
+              </svg>
+            </div>
+            <span class="action-card__label">Jelaskan halaman ini</span>
+          </button>
+
+          <button type="button" class="action-card card-purple" data-prompt="Ekstrak seluruh data penting atau tabel di halaman ini ke format tabel Markdown yang rapi.">
+            <div class="action-card__icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                <polyline points="2 17 12 22 22 17"/>
+                <polyline points="2 12 12 17 22 12"/>
+              </svg>
+            </div>
+            <span class="action-card__label">Ekstrak data</span>
+          </button>
+
+          <button type="button" class="action-card card-blue" data-prompt="Terjemahkan isi utama halaman web ini ke Bahasa Indonesia yang alami dan baku.">
+            <div class="action-card__icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 8l6 6"/>
+                <path d="M4 14l6-6 2-3"/>
+                <path d="M2 5h12"/>
+                <path d="M7 2h1"/>
+                <path d="M22 22l-5-10-5 10"/>
+                <path d="M14 18h6"/>
+              </svg>
+            </div>
+            <span class="action-card__label">Terjemahkan halaman ini</span>
+          </button>
+
+          <button type="button" class="action-card card-green" data-prompt="Bantu saya menulis atau memperbaiki teks di dokumen yang sedang dibuka.">
+            <div class="action-card__icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+              </svg>
+            </div>
+            <span class="action-card__label">Tulis atau perbaiki teks</span>
+          </button>
+
+          <button type="button" class="action-card card-rose" data-prompt="Kerjakan tugas otomatis di tab aktif: periksa formulir dan lengkapi data yang diperlukan.">
+            <div class="action-card__icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="4" width="16" height="16" rx="3"/>
+                <polyline points="9 12 11 14 15 10"/>
+              </svg>
+            </div>
+            <span class="action-card__label">Kerjakan tugas untukku</span>
+          </button>
+        </section>
       </div>
     </main>
 
@@ -538,8 +662,20 @@
 
     <!-- Emergency Stop Control Bar -->
     <div class="stop-bar hidden" id="stopBar">
-      <span class="stop-text">🤖 Agent sedang mengeksekusi otomatisasi...</span>
-      <button class="btn-stop" id="btnStopAgent">⏹️ Hentikan</button>
+      <span class="stop-text">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span>Agent sedang mengeksekusi otomatisasi...</span>
+      </span>
+      <button class="btn-stop" id="btnStopAgent">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+        </svg>
+        <span>Hentikan</span>
+      </button>
     </div>
 
     <!-- Input Footer (Unified Modern Composer) -->
@@ -587,49 +723,55 @@
               <div class="model-dropdown-list" id="modelDropdownList">
                 <button type="button" class="model-option-btn active" data-model="pesat-flash">
                   <div class="model-opt-info">
-                    <span class="model-opt-name">⚡ Pesat Flash</span>
+                    <span class="model-opt-name">Pesat Flash</span>
                     <span class="model-opt-desc">Cepat & Hemat (32K)</span>
                   </div>
                   <span class="model-opt-badge flash">Fast</span>
                 </button>
                 <button type="button" class="model-option-btn" data-model="pesat-pro">
                   <div class="model-opt-info">
-                    <span class="model-opt-name">🧠 Pesat Pro</span>
+                    <span class="model-opt-name">Pesat Pro</span>
                     <span class="model-opt-desc">Penalaran Mendalam (128K)</span>
                   </div>
                   <span class="model-opt-badge pro">Smart</span>
                 </button>
                 <button type="button" class="model-option-btn" data-model="gpt-4o">
                   <div class="model-opt-info">
-                    <span class="model-opt-name">🚀 GPT-4o</span>
+                    <span class="model-opt-name">GPT-4o</span>
                     <span class="model-opt-desc">OpenAI Flagship</span>
                   </div>
                   <span class="model-opt-badge">BYOK</span>
                 </button>
                 <button type="button" class="model-option-btn" data-model="gemini-2.5-flash">
                   <div class="model-opt-info">
-                    <span class="model-opt-name">💎 Gemini 2.5 Flash</span>
+                    <span class="model-opt-name">Gemini 2.5 Flash</span>
                     <span class="model-opt-desc">Google Multi-modal</span>
                   </div>
                   <span class="model-opt-badge">BYOK</span>
                 </button>
                 <button type="button" class="model-option-btn" data-model="claude-3-5-sonnet">
                   <div class="model-opt-info">
-                    <span class="model-opt-name">🎭 Claude 3.5 Sonnet</span>
+                    <span class="model-opt-name">Claude 3.5 Sonnet</span>
                     <span class="model-opt-desc">Anthropic Frontier</span>
                   </div>
                   <span class="model-opt-badge">BYOK</span>
                 </button>
                 <button type="button" class="model-option-btn" data-model="deepseek-chat">
                   <div class="model-opt-info">
-                    <span class="model-opt-name">🐳 DeepSeek V3</span>
+                    <span class="model-opt-name">DeepSeek V3</span>
                     <span class="model-opt-desc">High Reasoning</span>
                   </div>
                   <span class="model-opt-badge">BYOK</span>
                 </button>
               </div>
               <div class="model-dropdown-footer">
-                <button type="button" id="btnOpenSettingsFromPill" class="link-btn">⚙️ Pengaturan Provider & API</button>
+                <button type="button" id="btnOpenSettingsFromPill" class="link-btn">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                  </svg>
+                  <span>Pengaturan Provider & API</span>
+                </button>
               </div>
             </div>
             <button id="btnSend" class="send-btn" title="Kirim Perintah (Enter)">
@@ -650,39 +792,60 @@
         <span class="token-tracker-text" id="tokenTrackerText">Tokens: <strong>0</strong> (Prompt: 0, Output: 0) | Context: 1M</span>
       </div>
     </footer>
+
+    <div class="bottom-wave-accent"></div>
   </div>
 
   <!-- BUG REPORT MODAL -->
   <div class="modal-overlay hidden" id="bugReportModal">
     <div class="bug-report-card">
-      <div class="drawer-header" style="padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+      <div class="drawer-header" style="padding: 14px 18px; border-bottom: 1px solid var(--border-subtle);">
         <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size: 18px;">🐞</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="8" height="14" x="8" y="6" rx="4"></rect>
+            <path d="m19 7-3 2"></path>
+            <path d="m5 7 3 2"></path>
+            <path d="m19 19-3-2"></path>
+            <path d="m5 19 3-2"></path>
+            <path d="M20 13h-4"></path>
+            <path d="M4 13h4"></path>
+            <path d="m10 4 1 2"></path>
+            <path d="m14 4-1 2"></path>
+          </svg>
           <h3 style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin: 0;">Laporkan Bug / Kendala</h3>
         </div>
-        <button class="close-btn" id="btnCloseBugReport">✕</button>
+        <button class="close-btn" id="btnCloseBugReport" aria-label="Tutup">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
       <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;">
-        <label style="font-size:14px; color: var(--text-secondary); font-weight: 500;">Jelaskan kendala atau perilaku yang dialami:</label>
-        <textarea id="bugDescriptionInput" placeholder="Contoh: Saat mengisi formulir, tombol tidak terklik otomatis..." rows="4" style="width: 100%; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); padding: 10px; font-size:14px; resize: vertical; font-family: inherit; box-sizing: border-box; min-height: 70px;"></textarea>
+        <label style="font-size:13px; color: var(--text-secondary); font-weight: 500;">Jelaskan kendala atau perilaku yang dialami:</label>
+        <textarea id="bugDescriptionInput" placeholder="Contoh: Saat mengisi formulir, tombol tidak terklik otomatis..." rows="4" style="width: 100%; background: #F8FAFC; border: 1px solid var(--border-subtle); border-radius: 8px; color: var(--text-primary); padding: 10px; font-size:13px; resize: vertical; font-family: inherit; box-sizing: border-box; min-height: 70px;"></textarea>
 
         <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 2px;">
-          <label style="display: flex; align-items: center; gap: 8px; font-size:14px; color: var(--text-secondary); cursor: pointer;">
-            <input type="checkbox" id="bugIncludeLogs" checked style="accent-color: #38bdf8;" />
+          <label style="display: flex; align-items: center; gap: 8px; font-size:13px; color: var(--text-secondary); cursor: pointer;">
+            <input type="checkbox" id="bugIncludeLogs" checked style="accent-color: var(--brand-primary);" />
             <span>Lampirkan riwayat log aksi terakhir</span>
           </label>
-          <label style="display: flex; align-items: center; gap: 8px; font-size:14px; color: var(--text-secondary); cursor: pointer;">
-            <input type="checkbox" id="bugIncludeDom" checked style="accent-color: #38bdf8;" />
+          <label style="display: flex; align-items: center; gap: 8px; font-size:13px; color: var(--text-secondary); cursor: pointer;">
+            <input type="checkbox" id="bugIncludeDom" checked style="accent-color: var(--brand-primary);" />
             <span>Lampirkan snapshot struktur DOM tab aktif</span>
           </label>
         </div>
 
-        <div id="bugReportAlert" class="hidden" style="padding: 8px 12px; border-radius: 6px; font-size:14px; font-weight: 500;"></div>
+        <div id="bugReportAlert" class="hidden" style="padding: 8px 12px; border-radius: 6px; font-size:13px; font-weight: 500;"></div>
 
         <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
-          <button type="button" class="btn btn-secondary-pill" id="btnCancelBugReport" style="padding: 6px 14px; font-size:14px;">Batal</button>
-          <button type="button" class="btn btn-primary-pill" id="btnSubmitBugReport" style="padding: 6px 18px; font-size:14px; font-weight: 600;">
-            <span>🚀 Kirim Laporan</span>
+          <button type="button" class="btn btn-secondary-pill" id="btnCancelBugReport" style="padding: 6px 14px; font-size:13px;">Batal</button>
+          <button type="button" class="btn btn-primary-pill" id="btnSubmitBugReport" style="padding: 6px 18px; font-size:13px; font-weight: 600; display:inline-flex; align-items:center; gap:6px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+            <span>Kirim Laporan</span>
           </button>
         </div>
       </div>
@@ -693,7 +856,12 @@
   <div class="modal-overlay hidden" id="clearChatModal">
     <div class="confirm-modal-box">
       <div class="confirm-modal-header">
-        <span class="confirm-modal-icon">🧹</span>
+        <div class="confirm-modal-icon" style="color:var(--brand-primary);display:flex;align-items:center;justify-content:center;width:32px;height:32px;background:var(--brand-soft);border-radius:8px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </div>
         <h3 class="confirm-modal-title">Bersihkan Percakapan?</h3>
       </div>
       <div class="confirm-modal-desc">
