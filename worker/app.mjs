@@ -5,7 +5,7 @@ import { createDocument, deleteDocument, listDocuments, readDocument, reindexDoc
 import { handleTelemetryLogs, handleTelemetryReports } from "./telemetry.mjs";
 
 async function health(env) {
-  const bindings = { d1: Boolean(env.DB), originals: Boolean(env.ORIGINALS), artifacts: Boolean(env.ARTIFACTS), vectorize: Boolean(env.VECTORIZE), ai: Boolean(env.AI || (env.EMBEDDING_BASE_URL && env.EMBEDDING_API_KEY)) };
+  const bindings = { d1: Boolean(env.DB), vectorize: Boolean(env.VECTORIZE), ai: Boolean(env.AI || (env.EMBEDDING_BASE_URL && env.EMBEDDING_API_KEY)) };
   return { status: Object.values(bindings).every(Boolean) ? "ok" : "degraded", service: "pesat-rag-worker", bindings };
 }
 

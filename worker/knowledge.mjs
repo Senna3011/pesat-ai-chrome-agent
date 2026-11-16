@@ -4,7 +4,7 @@ import { HttpError, LIMITS, chunkDocument, newId, normalizeMimeType, normalizeTe
 const SUPPORTED_MIME = new Set(["text/plain", "text/markdown", "text/html", "text/csv"]);
 
 function requireBindings(env) {
-  if (!env.DB || !env.ORIGINALS || !env.VECTORIZE) throw new HttpError(503, "KNOWLEDGE_BINDINGS_NOT_CONFIGURED");
+  if (!env.DB || !env.VECTORIZE) throw new HttpError(503, "KNOWLEDGE_BINDINGS_NOT_CONFIGURED");
 }
 
 export function normalizeSourceTypes(value) {
@@ -57,12 +57,12 @@ export async function createDocument(request, env, session) {
   const chunks = await chunkDocument(normalized, id, 1);
   if (chunks.length > LIMITS.maxDocumentChunks) throw new HttpError(413, "DOCUMENT_REQUIRES_ASYNC_INGESTION");
   const vectors = await embedTexts(chunks.map((chunk) => chunk.content), env);
-  await env.ORIGINALS.put(r2Key, content, { httpMetadata: { contentType: mimeType }, customMetadata: { tenantId: session.tenantId, documentId: id, contentHash } });
+  if (env.ORIGINALS) await env.ORIGINALS.put(r2Key, content, { httpMetadata: { contentType: mimeType }, customMetadata: { tenantId: session.tenantId, documentId: id, contentHash } });
 
   try {
     await env.DB.batch([
       env.DB.prepare("INSERT INTO documents (id, tenant_id, owner_user_id, title, source_type, source_url, mime_type, content_hash, r2_key, version, status, byte_size, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'indexing', ?, ?, ?, ?)")
-        .bind(id, session.tenantId, session.userId, title, sourceType, sourceUrl || null, mimeType, contentHash, r2Key, byteSize, JSON.stringify(body.metadata || {}), now, now),
+        .bind(id, session.tenantId, session.userId, title, sourceType, sourceUrl || null, mimeType, contentHash, env.ORIGINALS ? r2Key : null, byteSize, JSON.stringify(body.metadata || {}), now, now),
       ...chunks.map((chunk) => env.DB.prepare("INSERT INTO chunks (id, tenant_id, document_id, chunk_index, content, content_hash, char_start, char_end, token_estimate, vector_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(chunk.id, session.tenantId, id, chunk.index, chunk.content, chunk.contentHash, chunk.charStart, chunk.charEnd, Math.ceil(chunk.content.length / 4), chunk.id, now))
     ]);
@@ -74,7 +74,7 @@ export async function createDocument(request, env, session) {
     await env.DB.prepare("UPDATE documents SET status = 'ready', updated_at = ? WHERE id = ? AND tenant_id = ?").bind(new Date().toISOString(), id, session.tenantId).run();
     await audit(env, session, "document.create", "document", id, { chunkCount: chunks.length, contentHash });
   } catch (error) {
-    await Promise.allSettled([env.ORIGINALS.delete(r2Key), env.VECTORIZE.deleteByIds(chunks.map((chunk) => chunk.id))]);
+    await Promise.allSettled([(env.ORIGINALS ? env.ORIGINALS.delete(r2Key) : Promise.resolve()), env.VECTORIZE.deleteByIds(chunks.map((chunk) => chunk.id))]);
     await env.DB.prepare("DELETE FROM documents WHERE id = ? AND tenant_id = ?").bind(id, session.tenantId).run().catch(() => {});
     throw error;
   }
@@ -119,7 +119,7 @@ export async function deleteDocument(env, session, id) {
   const chunkRows = await env.DB.prepare("SELECT vector_id FROM chunks WHERE document_id = ? AND tenant_id = ?").bind(id, session.tenantId).all();
   const vectorIds = (chunkRows.results || []).map((row) => row.vector_id);
   if (vectorIds.length) await env.VECTORIZE.deleteByIds(vectorIds);
-  if (document.r2_key) await env.ORIGINALS.delete(document.r2_key);
+  if (env.ORIGINALS && document.r2_key) await env.ORIGINALS.delete(document.r2_key);
   await env.DB.batch([
     env.DB.prepare("DELETE FROM chunks WHERE document_id = ? AND tenant_id = ?").bind(id, session.tenantId),
     env.DB.prepare("UPDATE documents SET deleted_at = ?, status = 'deleted', updated_at = ? WHERE id = ? AND tenant_id = ?").bind(new Date().toISOString(), new Date().toISOString(), id, session.tenantId)
@@ -132,6 +132,7 @@ export async function reindexDocument(env, session, id) {
   requireBindings(env);
   const document = await env.DB.prepare("SELECT id, title, source_type, mime_type, content_hash, r2_key, version FROM documents WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL").bind(id, session.tenantId).first();
   if (!document) throw new HttpError(404, "DOCUMENT_NOT_FOUND");
+  if (!env.ORIGINALS) throw new HttpError(503, "R2_STORAGE_NOT_CONFIGURED");
   const object = await env.ORIGINALS.get(document.r2_key);
   if (!object) throw new HttpError(409, "ORIGINAL_NOT_FOUND");
   const normalized = normalizeText(await object.text(), document.mime_type);
