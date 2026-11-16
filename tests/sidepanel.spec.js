@@ -74,7 +74,7 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
   test('should render header, title, and status badge', async ({ page }) => {
     await expect(page.locator('h1.title')).toHaveText('Pesat Agent');
     await expect(page.locator('#agentStatus')).toHaveText('Siap');
-    await expect(page.locator('#btnSettings')).toBeVisible();
+    await expect(page.locator('#btnMoreMenu')).toBeVisible();
     await expect(page.locator('#btnHistory')).toBeVisible();
     await expect(page.locator('#btnNewChat')).toBeVisible();
   });
@@ -91,6 +91,8 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
   });
 
   test('should open, configure, and close Settings Modal', async ({ page }) => {
+    const btnMoreMenu = page.locator('#btnMoreMenu');
+    await btnMoreMenu.click();
     const btnSettings = page.locator('#btnSettings');
     const settingsPanel = page.locator('#settingsPanel');
 
@@ -121,8 +123,8 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
   });
 
   test('should render Quick Action Chips', async ({ page }) => {
-    await expect(page.locator('#chipSummarize')).toBeVisible();
-    await expect(page.locator('#chipExtract')).toBeVisible();
+    await expect(page.locator('.quick-grid')).toBeVisible();
+    await expect(page.locator('.action-card').first()).toBeVisible();
   });
 
   test('should enforce minimum 14px font size across all key UI elements', async ({ page }) => {
@@ -148,24 +150,28 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     }
   });
 
-  test('should verify eye-comfort slate theme CSS variables', async ({ page }) => {
+  test('should verify modern light theme CSS variables', async ({ page }) => {
     const vars = await page.evaluate(() => {
       const style = window.getComputedStyle(document.documentElement);
       return {
         bgBase: style.getPropertyValue('--bg-base').trim(),
         bgSurface: style.getPropertyValue('--bg-surface').trim(),
         accentPrimary: style.getPropertyValue('--accent-primary').trim(),
+        brandPrimary: style.getPropertyValue('--brand-primary').trim(),
         auroraDisplay: window.getComputedStyle(document.querySelector('.aurora-glow-top')).display
       };
     });
 
-    expect(vars.bgBase.toLowerCase()).toBe('#0f172a');
-    expect(vars.bgSurface.toLowerCase()).toBe('#1e293b');
-    expect(vars.accentPrimary.toLowerCase()).toBe('#3b82f6');
+    expect(vars.bgBase.toLowerCase()).toBe('#ffffff');
+    expect(vars.bgSurface.toLowerCase()).toBe('#f8fafc');
+    expect(vars.accentPrimary.toLowerCase()).toBe('#b42318');
+    expect(vars.brandPrimary.toLowerCase()).toBe('#b42318');
     expect(vars.auroraDisplay).toBe('none');
   });
 
   test('should close modals with Escape key', async ({ page }) => {
+    const btnMoreMenu = page.locator('#btnMoreMenu');
+    await btnMoreMenu.click();
     const btnSettings = page.locator('#btnSettings');
     const settingsPanel = page.locator('#settingsPanel');
 
@@ -323,6 +329,8 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
   });
 
   test('should open, validate empty rule, add custom rule, and close Memory Drawer', async ({ page }) => {
+    const btnMoreMenu = page.locator('#btnMoreMenu');
+    await btnMoreMenu.click();
     const btnMemory = page.locator('#btnMemory');
     const memoryDrawer = page.locator('#memoryDrawer');
 
@@ -716,6 +724,8 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
   });
 
   test('should render clear chat button and in-panel confirmation modal cleanly', async ({ page }) => {
+    const btnMoreMenu = page.locator('#btnMoreMenu');
+    await btnMoreMenu.click();
     const btnClearCurrentChat = page.locator('#btnClearCurrentChat');
     await expect(btnClearCurrentChat).toBeVisible();
     await expect(btnClearCurrentChat).toHaveAttribute('title', /Bersihkan Obrolan Sesi Ini/);

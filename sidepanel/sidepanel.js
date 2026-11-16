@@ -382,8 +382,69 @@ document.addEventListener("DOMContentLoaded", async () => {
   window.parseIncrementalMarkdown = parseIncrementalMarkdown;
 
   // ═══════════════════════════════════════════════════
-  // STATUS INDICATOR
+  // STATUS INDICATOR & AGENT STATUS (Phase 3 — UI/UX Spec § 6.2)
   // ═══════════════════════════════════════════════════
+  let statusResetTimer = null;
+
+  function setAgentStatus(state = "ready", labelOverride = null) {
+    if (!agentStatus) return;
+    if (statusResetTimer) {
+      clearTimeout(statusResetTimer);
+      statusResetTimer = null;
+    }
+
+    agentStatus.classList.remove(
+      "status-ready",
+      "status-thinking",
+      "status-executing",
+      "status-completed",
+      "status-failed",
+      "working"
+    );
+
+    let label = "Siap";
+    let cls = "status-ready";
+
+    switch (String(state || "ready").toLowerCase()) {
+      case "thinking":
+        label = "Berpikir";
+        cls = "status-thinking";
+        break;
+      case "executing":
+        label = "Bekerja";
+        cls = "status-executing";
+        agentStatus.classList.add("working"); // backward compat
+        break;
+      case "completed":
+      case "done":
+        label = "Selesai";
+        cls = "status-completed";
+        statusResetTimer = setTimeout(() => {
+          if (!isAgentRunning) setAgentStatus("ready");
+        }, 3500);
+        break;
+      case "failed":
+      case "error":
+        label = "Gagal";
+        cls = "status-failed";
+        statusResetTimer = setTimeout(() => {
+          if (!isAgentRunning) setAgentStatus("ready");
+        }, 5000);
+        break;
+      case "ready":
+      default:
+        label = "Siap";
+        cls = "status-ready";
+        break;
+    }
+
+    agentStatus.textContent = labelOverride || label;
+    agentStatus.classList.add(cls);
+  }
+
+  // Expose to window for external integration & test suites
+  window.setAgentStatus = setAgentStatus;
+
   function showStatusIndicator(text = "Sedang mengerjakan...") {
     if (agentStatusIndicator && statusIndicatorText) {
       const raw = String(text || "").toLowerCase();
@@ -561,31 +622,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     session.messages.forEach((msg, idx) => {
-      if (!msg.taskCard && !msg.multiAgent) renderMessageBubble(msg, idx);
+      if (!msg.multiAgent) renderMessageBubble(msg, idx);
     });
     chatArea.scrollTop = chatArea.scrollHeight;
     updateQuickChipsVisibility();
   }
 
+  // Expose session helpers for integration & test suites
+  window.getCurrentSession = getCurrentSession;
+  window.renderCurrentSession = renderCurrentSession;
+
   function renderWelcomeMessage() {
     chatArea.innerHTML = `
       <div id="welcomeView">
         <section class="hero-section">
-          <svg class="hero-wave-svg" viewBox="0 0 400 160" fill="none" preserveAspectRatio="none">
-            <path d="M-20 40 C 80 110, 240 120, 420 20 L 420 85 C 250 155, 90 140, -20 90 Z" fill="url(#pesatWaveGrad)" opacity="0.22"/>
-            <path d="M-20 75 C 110 130, 270 110, 420 55 L 420 110 C 260 160, 100 155, -20 115 Z" fill="url(#pesatWaveGrad)" opacity="0.12"/>
-            <defs>
-              <linearGradient id="pesatWaveGrad" x1="0" y1="0" x2="400" y2="0" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stop-color="#D91B24"/>
-                <stop offset="50%" stop-color="#FB7185"/>
-                <stop offset="100%" stop-color="#D91B24"/>
-              </linearGradient>
-            </defs>
-          </svg>
-
+          <!-- Maskot Avatar Asli Pesat AI (68px sesuai UI/UX Spec § 4.3) -->
           <div class="mascot-container">
             <div class="mascot-badge-float">
-              <svg width="96" height="96" viewBox="0 0 120 120" fill="none">
+              <svg width="68" height="68" viewBox="0 0 120 120" fill="none">
                 <circle cx="60" cy="64" r="46" fill="#FFF1F2"/>
                 <path d="M26 62C14 52 12 38 22 34C28 32 35 42 38 52" fill="#FFFFFF" stroke="#D91B24" stroke-width="3" stroke-linecap="round"/>
                 <path d="M94 62C106 52 108 38 98 34C92 32 85 42 82 52" fill="#FFFFFF" stroke="#D91B24" stroke-width="3" stroke-linecap="round"/>
@@ -608,39 +662,41 @@ document.addEventListener("DOMContentLoaded", async () => {
           </div>
 
           <h1 class="hero-title">
-            Halo! 👋<br>
-            Ada yang bisa <span class="highlight">Pesat Agent</span> bantu?
+            Halo! Ada yang bisa saya bantu?
           </h1>
           <p class="hero-subtitle">
-            Asisten AI serba bisa untuk menjelajah, memahami, merangkum, dan menyelesaikan tugas di web.
+            Asisten AI untuk aktivitas web Anda.
           </p>
         </section>
 
+        <!-- 2-Column Standard Quick Action Grid (UI/UX Spec § 4.3 & 4.5) -->
         <section class="quick-grid">
-          <button type="button" class="action-card card-red" data-prompt="Rangkum poin-poin utama halaman web ini secara ringkas dan terstruktur.">
+          <button type="button" class="action-card" data-prompt="Rangkum poin-poin utama halaman web ini secara ringkas dan terstruktur.">
             <div class="action-card__icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="4" y="3" width="16" height="18" rx="3"/>
                 <line x1="8" y1="8" x2="16" y2="8"/>
                 <line x1="8" y1="12" x2="16" y2="12"/>
                 <line x1="8" y1="16" x2="12" y2="16"/>
               </svg>
             </div>
-            <span class="action-card__label">Rangkum halaman ini</span>
+            <span class="action-card__label">Rangkum halaman</span>
           </button>
 
-          <button type="button" class="action-card card-amber" data-prompt="Jelaskan isi halaman ini dengan bahasa yang sederhana, jelas, dan mudah dipahami.">
+          <button type="button" class="action-card" data-prompt="Jelaskan isi halaman ini dengan bahasa yang sederhana, jelas, dan mudah dipahami.">
             <div class="action-card__icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z"/>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
               </svg>
             </div>
-            <span class="action-card__label">Jelaskan halaman ini</span>
+            <span class="action-card__label">Jelaskan halaman</span>
           </button>
 
-          <button type="button" class="action-card card-purple" data-prompt="Ekstrak seluruh data penting atau tabel di halaman ini ke format tabel Markdown yang rapi.">
+          <button type="button" class="action-card" data-prompt="Ekstrak seluruh data penting atau tabel di halaman ini ke format tabel Markdown yang rapi.">
             <div class="action-card__icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="12 2 2 7 12 12 22 7 12 2"/>
                 <polyline points="2 17 12 22 22 17"/>
                 <polyline points="2 12 12 17 22 12"/>
@@ -649,9 +705,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             <span class="action-card__label">Ekstrak data</span>
           </button>
 
-          <button type="button" class="action-card card-blue" data-prompt="Terjemahkan isi utama halaman web ini ke Bahasa Indonesia yang alami dan baku.">
+          <button type="button" class="action-card" data-prompt="Terjemahkan isi utama halaman web ini ke Bahasa Indonesia yang alami dan baku.">
             <div class="action-card__icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M5 8l6 6"/>
                 <path d="M4 14l6-6 2-3"/>
                 <path d="M2 5h12"/>
@@ -660,26 +716,26 @@ document.addEventListener("DOMContentLoaded", async () => {
                 <path d="M14 18h6"/>
               </svg>
             </div>
-            <span class="action-card__label">Terjemahkan halaman ini</span>
+            <span class="action-card__label">Terjemahkan</span>
           </button>
 
-          <button type="button" class="action-card card-green" data-prompt="Bantu saya menulis atau memperbaiki teks di dokumen yang sedang dibuka.">
+          <button type="button" class="action-card" data-prompt="Bantu saya menulis atau memperbaiki teks di dokumen yang sedang dibuka.">
             <div class="action-card__icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
               </svg>
             </div>
-            <span class="action-card__label">Tulis atau perbaiki teks</span>
+            <span class="action-card__label">Perbaiki teks</span>
           </button>
 
-          <button type="button" class="action-card card-rose" data-prompt="Kerjakan tugas otomatis di tab aktif: periksa formulir dan lengkapi data yang diperlukan.">
+          <button type="button" class="action-card" data-prompt="Kerjakan tugas otomatis di tab aktif: periksa formulir dan lengkapi data yang diperlukan.">
             <div class="action-card__icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="4" y="4" width="16" height="16" rx="3"/>
                 <polyline points="9 12 11 14 15 10"/>
               </svg>
             </div>
-            <span class="action-card__label">Kerjakan tugas untukku</span>
+            <span class="action-card__label">Kerjakan tugas</span>
           </button>
         </section>
       </div>
@@ -1769,7 +1825,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         <div class="message-actions">
           <button class="action-icon-btn btn-edit-prompt" title="Edit prompt & jalankan ulang">✏️ Edit</button>
         </div>
-      ` : (!msg.artifact && !msg.askUser && !msg.confirmation && msgText.trim() ? `
+      ` : (!msg.artifact && !msg.askUser && !msg.confirmation && !msg.taskCard && msgText && String(msgText).trim() ? `
         <div class="assistant-msg-actions">
           <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
             <span>📋</span>
@@ -2058,6 +2114,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
     }
 
+    const btnStopCard = msgDiv.querySelector(".btn-stop-card");
+    if (btnStopCard) {
+      btnStopCard.addEventListener("click", () => {
+        abortAgentExecution("Otomatisasi dihentikan via Execution Card.");
+      });
+    }
+
     return msgDiv;
   }
 
@@ -2066,14 +2129,114 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function renderTaskCardHtml(taskCard) {
-    const label = taskCard.status === "PLANNING" ? "Menganalisis"
-      : taskCard.status === "VALIDATING" ? "Memverifikasi"
-        : taskCard.status === "WAITING_USER" ? "Menunggu konfirmasi"
-          : taskCard.status === "DONE" ? "Selesai"
-            : taskCard.status === "FAILED" ? "Belum selesai"
-              : "Menjalankan tindakan";
-    return `<div class="task-card"><div class="task-card-header">Progress Tugas</div><div class="task-card-goal">${escapeHtml(label)}</div></div>`;
+    const status = String(taskCard.status || "EXECUTING").toUpperCase();
+    const isExecuting = ["PLANNING", "EXECUTING", "RUNNING", "VALIDATING", "WAITING_USER"].includes(status);
+    const isDone = ["DONE", "COMPLETED"].includes(status);
+    const isFailed = ["FAILED", "CANCELLED", "ERROR"].includes(status);
+
+    let stateClass = "state-executing";
+    let badgeClass = "badge-warning";
+    let badgeLabel = "Bekerja";
+
+    if (isDone) {
+      stateClass = "state-completed";
+      badgeClass = "badge-success";
+      badgeLabel = "Selesai";
+    } else if (isFailed) {
+      stateClass = "state-failed";
+      badgeClass = "badge-danger";
+      badgeLabel = status === "CANCELLED" ? "Dibatalkan" : "Gagal";
+    } else if (status === "PLANNING") {
+      badgeClass = "badge-warning";
+      badgeLabel = "Berpikir";
+    }
+
+    const cardTitle = taskCard.goal ? escapeHtml(taskCard.goal) : "Agent sedang bekerja";
+
+    const plan = Array.isArray(taskCard.plan) && taskCard.plan.length > 0 ? taskCard.plan : [];
+    let timelineHtml = "";
+
+    if (plan.length > 0) {
+      timelineHtml = `<div class="execution-timeline">` + plan.map((step) => {
+        const stepTitle = typeof step === "string" ? step : (step.title || step.goal || step.description || "Langkah");
+        const stepStatus = typeof step === "string" ? "pending" : (step.status || "pending").toLowerCase();
+
+        let itemCls = "status-pending";
+        let indicatorHtml = `<span class="timeline-dot-hollow"></span>`;
+
+        if (stepStatus === "done" || stepStatus === "completed") {
+          itemCls = "status-done";
+          indicatorHtml = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+        } else if (stepStatus === "in_progress" || stepStatus === "running" || stepStatus === "executing") {
+          itemCls = "status-in-progress";
+          indicatorHtml = `<span class="timeline-spinner"></span>`;
+        } else if (stepStatus === "failed" || stepStatus === "error") {
+          itemCls = "status-failed";
+          indicatorHtml = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+        }
+
+        return `
+          <div class="timeline-item ${itemCls}">
+            <span class="timeline-indicator indicator-${itemCls.replace("status-", "")}">${indicatorHtml}</span>
+            <span class="timeline-text">${escapeHtml(stepTitle)}</span>
+          </div>
+        `;
+      }).join("") + `</div>`;
+    }
+
+    let actionsHtml = "";
+    if (isExecuting) {
+      actionsHtml = `
+        <div class="agent-status-card-actions">
+          <button class="btn-stop-card" data-agent-action="stop" title="Hentikan tugas otomatisasi">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+            </svg>
+            <span>Hentikan</span>
+          </button>
+        </div>
+      `;
+    }
+
+    let errorBoxHtml = "";
+    if (isFailed && taskCard.failureReason) {
+      errorBoxHtml = `
+        <div class="error-state-footer">
+          <div class="error-reason">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span>${escapeHtml(taskCard.failureReason)}</span>
+          </div>
+          <div class="error-action-hint">Saran: Periksa izin tab atau coba kirim ulang perintah.</div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="agent-status-card task-card ${stateClass}">
+        <div class="agent-status-card-header task-card-header">
+          <div class="agent-status-title-group">
+            <svg class="agent-status-icon-svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+              <circle cx="12" cy="5" r="2"></circle>
+              <path d="M12 7v4"></path>
+              <line x1="8" y1="16" x2="8.01" y2="16"></line>
+              <line x1="16" y1="16" x2="16.01" y2="16"></line>
+            </svg>
+            <div class="agent-status-card-title task-card-goal" title="${cardTitle}">${cardTitle}</div>
+          </div>
+          <span class="agent-status-badge ${badgeClass}">${badgeLabel}</span>
+        </div>
+        ${timelineHtml}
+        ${errorBoxHtml}
+        ${actionsHtml}
+      </div>
+    `;
   }
+
+  // Expose message node builders for test suites
+  window.renderTaskCardHtml = renderTaskCardHtml;
+  window.buildMessageNode = buildMessageNode;
+  window.renderMessageBubble = renderMessageBubble;
 
   function editPromptAt(index) {
     const session = getCurrentSession();
@@ -2117,7 +2280,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   function addMessageToCurrentSession(role, content, extras = {}) {
     const session = getCurrentSession();
     if (!session) return -1;
-    if (extras.taskCard || extras.multiAgent) return -1;
+    if (extras.multiAgent) return -1;
 
     let textContent = content;
     if (typeof content === "object" && content !== null) {
@@ -2331,7 +2494,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       sessionOnly: !!(sessionKey || local.sessionOnly),
       googleClientId: local.googleClientId || "",
       autoPasteDocs: !!local.autoPasteDocs,
-      enableInPageToolbar: false
+      enableInPageToolbar: local.enableInPageToolbar !== undefined ? !!local.enableInPageToolbar : true
     };
 
     // Sinkronisasi ke form Settings
@@ -2340,7 +2503,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (apiKeyInput) apiKeyInput.value = storedSettings.apiKey;
     if (settingsSessionOnly) settingsSessionOnly.checked = storedSettings.sessionOnly;
     if (settingsAutoPasteDocs) settingsAutoPasteDocs.checked = storedSettings.autoPasteDocs;
-    if (settingsEnableInPageToolbar) settingsEnableInPageToolbar.checked = false;
+    if (settingsEnableInPageToolbar) settingsEnableInPageToolbar.checked = storedSettings.enableInPageToolbar;
     if (googleClientIdInput) googleClientIdInput.value = storedSettings.googleClientId;
 
     // Sinkronisasi ke form Wizard
@@ -4775,6 +4938,7 @@ ${topCompStr}
 
     promptInput.value = "";
     promptInput.style.height = "38px";
+    syncSendButtonState();
     shouldStopAgent = false;
 
     // Pastikan state task sebelumnya bersih saat prompt baru dikirim oleh user
@@ -7111,13 +7275,24 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   });
 
   // ═══════════════════════════════════════════════════
-  // QUICK CHIPS
+  // QUICK CHIPS & COMPOSER STATE
   // ═══════════════════════════════════════════════════
+  function syncSendButtonState() {
+    if (!btnSend) return;
+    if (isAgentRunning) {
+      btnSend.classList.remove("disabled");
+      return;
+    }
+    const hasContent = Boolean((promptInput && promptInput.value.trim()) || (attachedContextSources && attachedContextSources.length > 0));
+    btnSend.classList.toggle("disabled", !hasContent);
+  }
+
   function applyPromptToInput(text) {
     promptInput.value = text;
     promptInput.style.height = "auto";
-    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 38), 150) + "px";
+    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 38), 120) + "px";
     promptInput.focus();
+    syncSendButtonState();
   }
 
   function initQuickChipsSlider() {
@@ -7251,6 +7426,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     composerChipsTray.innerHTML = "";
     if (attachedContextSources.length === 0) {
       composerChipsTray.classList.add("hidden");
+      syncSendButtonState();
       return;
     }
     composerChipsTray.classList.remove("hidden");
@@ -7291,6 +7467,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       });
       composerChipsTray.appendChild(chip);
     });
+    syncSendButtonState();
   }
 
   function renderMentionItemIcon(src) {
@@ -7630,7 +7807,8 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
 
   promptInput.addEventListener("input", () => {
     promptInput.style.height = "auto";
-    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 38), 140) + "px";
+    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 38), 120) + "px";
+    syncSendButtonState();
 
     const trigger = findMentionTrigger();
     if (trigger) {
@@ -7708,9 +7886,8 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
 
   function setAgentRunning(running) {
     isAgentRunning = running;
-    agentStatus.textContent = running ? "Bekerja" : "Siap";
     if (running) {
-      agentStatus.classList.add("working");
+      setAgentStatus("executing");
       stopBar.classList.remove("hidden");
 
       if (activeTask?.targetTabId) {
@@ -7749,7 +7926,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
         message: "Tab ini sedang dikontrol oleh Pesat AI Agent... (Halaman dikunci agar AI fokus)"
       }).catch(() => {});
     } else {
-      agentStatus.classList.remove("working");
+      setAgentStatus("ready");
       stopBar.classList.add("hidden");
       updateActiveWorkingTabUI(null);
 
@@ -7762,6 +7939,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
             <polyline points="5 12 12 5 19 12"></polyline>
           </svg>
         `;
+        syncSendButtonState();
       }
       sendToContentScript({ type: "UNLOCK_PAGE" }).catch(() => {});
     }
@@ -7797,6 +7975,10 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     sendToContentScript({ type: "CLEAR_MARKERS" }).catch(() => {});
     appendLog(`🛑 ${reason}`);
   }
+
+  // Expose execution controls for testing and runtime automation
+  window.setAgentRunning = setAgentRunning;
+  window.abortAgentExecution = abortAgentExecution;
 
   btnStopAgent.addEventListener("click", () => {
     abortAgentExecution("Otomatisasi dihentikan via Stop Bar.");
@@ -8239,6 +8421,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   initQuickChipsSlider();
   checkOnboarding();
   await checkPendingPrompt();
+  syncSendButtonState();
   appendLog("Sesi ekstensi v5.2 (Direct PesatRouter BYOK) diaktifkan.", "INFO", { timestamp: Date.now() }, "SESSION_OPEN");
 
   btnSend.addEventListener("click", () => {
