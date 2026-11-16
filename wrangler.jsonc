@@ -7,7 +7,7 @@
     {
       "binding": "DB",
       "database_name": "pesat-agent",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "75252552-c138-4dad-84f1-4d03360b7bfc",
       "migrations_dir": "migrations"
     }
   ],
