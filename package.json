@@ -9,6 +9,8 @@
     "test:backend": "node --test tests/backend/*.test.mjs",
     "test:all": "npm run test:unit && npm run test:backend",
     "sync": "node scripts/sync-extension.mjs",
+    "verify:sync": "node scripts/verify-sync.mjs",
+    "ship": "npm run sync && npm run verify:sync",
     "validate:deploy": "node scripts/validate-deploy-config.mjs"
   },
   "repository": {

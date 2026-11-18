@@ -572,35 +572,55 @@ document.addEventListener("DOMContentLoaded", async () => {
       <div class="message assistant-message" id="welcomeMessage">
         <div class="message-bubble welcome-card">
           <div class="welcome-header">
-            <div class="welcome-logo-circle">⚡</div>
+            <div class="welcome-logo-circle">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 4 13 12 6 20"></polyline><polyline points="12 4 19 12 12 20"></polyline></svg>
+            </div>
             <div class="welcome-header-text">
-              <span class="welcome-title">Pesat Agent</span>
-              <span class="welcome-subtitle">Computer-Use AI Browser Assistant</span>
+              <span class="welcome-title">Halo, ada yang bisa <span style="color: #E11D48;">Pesat Agent</span> bantu?</span>
+              <span class="welcome-subtitle">Pilih tindakan cepat di bawah atau ketik langsung tugas Anda.</span>
             </div>
           </div>
-          <p class="welcome-desc">
-            Beri tahu saya apa yang ingin Anda kerjakan di web ini. Gunakan <strong>@</strong> untuk merujuk tab peramban atau tombol <strong>📎</strong> untuk melampirkan dataset / dokumen.
-          </p>
           <div class="welcome-suggestions">
             <div class="suggestion-item" data-prompt="Tolong buat ringkasan poin-poin penting dari isi konten halaman web ini.">
-              <span class="suggestion-icon">📄</span>
+              <div class="suggestion-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg></div>
               <div class="suggestion-text">
                 <span class="suggestion-title">Rangkum Halaman</span>
                 <span class="suggestion-sub">Ekstraksi intisari artikel aktif</span>
               </div>
             </div>
-            <div class="suggestion-item" data-prompt="Tolong ekstrak data atau tabel penting dari halaman ini dalam format tabel Markdown.">
-              <span class="suggestion-icon">📊</span>
+            <div class="suggestion-item" data-prompt="Jelaskan konteks utama halaman web yang sedang dibuka secara ringkas.">
+              <div class="suggestion-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div>
               <div class="suggestion-text">
-                <span class="suggestion-title">Ekstrak Tabel Data</span>
+                <span class="suggestion-title">Jelaskan Konteks</span>
+                <span class="suggestion-sub">Pahami isi halaman aktif</span>
+              </div>
+            </div>
+            <div class="suggestion-item" data-prompt="Tolong ekstrak data atau tabel penting dari halaman ini dalam format tabel Markdown.">
+              <div class="suggestion-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line></svg></div>
+              <div class="suggestion-text">
+                <span class="suggestion-title">Ekstrak Data</span>
                 <span class="suggestion-sub">Konversi data ke tabel rapi</span>
               </div>
             </div>
-            <div class="suggestion-item" data-prompt="Tuliskan skrip Python sederhana untuk memproses data dari web ini.">
-              <span class="suggestion-icon">💻</span>
+            <div class="suggestion-item" data-prompt="Terjemahkan teks utama di halaman ini ke dalam Bahasa Indonesia yang natural.">
+              <div class="suggestion-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></div>
               <div class="suggestion-text">
-                <span class="suggestion-title">Buat Skrip / Kode</span>
-                <span class="suggestion-sub">Hasilkan artefak kode yang siap diunduh</span>
+                <span class="suggestion-title">Terjemahkan</span>
+                <span class="suggestion-sub">Alih bahasa konten web</span>
+              </div>
+            </div>
+            <div class="suggestion-item" data-prompt="Perbaiki tata bahasa dan ejaan dari teks yang dipilih atau di halaman ini.">
+              <div class="suggestion-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></div>
+              <div class="suggestion-text">
+                <span class="suggestion-title">Perbaiki Teks</span>
+                <span class="suggestion-sub">Koreksi tata bahasa & ejaan</span>
+              </div>
+            </div>
+            <div class="suggestion-item" data-prompt="Bantu saya melakukan otomatisasi tugas di halaman ini.">
+              <div class="suggestion-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
+              <div class="suggestion-text">
+                <span class="suggestion-title">Otomasi Tugas</span>
+                <span class="suggestion-sub">Eksekusi tugas otomatis</span>
               </div>
             </div>
           </div>
@@ -1441,7 +1461,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         attachmentsHtml = `
           <div class="user-attachments-container">
             ${attachmentsList.map(att => {
-              const icon = att.type === "Image" ? "🖼️" : ((att.type === "BrowserTab" || att.type === "tab") ? "📑" : "📄");
+              let icon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+              if (att.type === "Image") icon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>';
+              else if (att.type === "BrowserTab" || att.type === "tab") icon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>';
               const name = (typeof att.name === "string" && att.name && att.name !== "[object Object]")
                 ? att.name
                 : ((typeof att.title === "string" && att.title && att.title !== "[object Object]")
@@ -1471,16 +1493,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       let askHtml = `
         <div class="message-bubble">
           <div class="ask-user-container">
-            <div class="ask-user-question">🤔 ${escapeHtml(question || msgText)}</div>
+            <div class="ask-user-question">${escapeHtml(question || msgText)}</div>
       `;
       if (Array.isArray(options) && options.length > 0 && !msg.answered) {
         askHtml += `<div class="ask-user-options">`;
         options.forEach((opt) => {
-          askHtml += `<button class="ask-user-option-btn" data-answer="${escapeHtml(opt)}">⚡ ${escapeHtml(opt)}</button>`;
+          askHtml += `<button class="ask-user-option-btn" data-answer="${escapeHtml(opt)}">${escapeHtml(opt)}</button>`;
         });
         askHtml += `</div>`;
       } else if (msg.answered) {
-        askHtml += `<div style="font-size:14px;color:var(--text-accent);margin-top:8px;">✔️ Dijawab: ${escapeHtml(msg.answered)}</div>`;
+        askHtml += `<div style="font-size:14px;color:var(--text-accent);margin-top:8px;">Dijawab: ${escapeHtml(msg.answered)}</div>`;
       }
       askHtml += `
           </div>
@@ -1492,7 +1514,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       let confHtml = `
         <div class="confirm-card">
           <div class="confirm-header-row">
-            <div class="confirm-icon-badge">🛡️</div>
+            <div class="confirm-icon-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
             <div class="confirm-title-wrap">
               <div class="confirm-title">Izin Akses — Konfirmasi Tindakan</div>
               <div class="confirm-subtitle">${escapeHtml(c.description || "Agen memerlukan persetujuan untuk melanjutkan tindakan ini:")}</div>
@@ -1569,7 +1591,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           <div class="doc-card-container social-card-theme">
             <div class="doc-card-header">
               <div class="doc-card-title-group">
-                <span class="doc-badge-icon social-badge">📱</span>
+                <span class="doc-badge-icon social-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg></span>
                 <div class="doc-card-meta">
                   <div class="doc-card-title">${escapeHtml(postTitle)}</div>
                   <div class="doc-card-subtitle">Format Thread Twitter/X & Medsos • ${wordCount} kata</div>
@@ -1597,7 +1619,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           <div class="doc-card-container table-card-theme">
             <div class="doc-card-header">
               <div class="doc-card-title-group">
-                <span class="doc-badge-icon table-badge">📊</span>
+                <span class="doc-badge-icon table-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line></svg></span>
                 <div class="doc-card-meta">
                   <div class="doc-card-title">${escapeHtml(tableTitle)}</div>
                   <div class="doc-card-subtitle">Format Spreadsheet Excel (.XLS) & Tabel Data (.CSV)</div>
@@ -1641,7 +1663,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           <div class="doc-card-container">
             <div class="doc-card-header">
               <div class="doc-card-title-group">
-                <span class="doc-badge-icon">📄</span>
+                <span class="doc-badge-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg></span>
                 <div class="doc-card-meta">
                   <div class="doc-card-title">${escapeHtml(docTitle)}</div>
                   <div class="doc-card-subtitle">Format Dokumen Word (.docx) & Docs • ${wordCount} kata</div>
@@ -1685,12 +1707,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       ${contentHtml}
       ${isUser ? `
         <div class="message-actions">
-          <button class="action-icon-btn btn-edit-prompt" title="Edit prompt & jalankan ulang">✏️ Edit</button>
+          <button class="action-icon-btn btn-edit-prompt" title="Edit prompt & jalankan ulang"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg> Edit</button>
         </div>
       ` : (!msg.artifact && !msg.askUser && !msg.confirmation && msgText.trim() ? `
         <div class="assistant-msg-actions">
           <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
-            <span>📋</span>
+            <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span>
             <span class="btn-copy-text">Salin</span>
           </button>
           <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
@@ -2096,8 +2118,8 @@ document.addEventListener("DOMContentLoaded", async () => {
           ${infoHtml}
         </div>
         <div class="model-item-actions">
-          <button type="button" class="btn-model-action btn-edit-model" title="Ubah Nama Model">✏️</button>
-          <button type="button" class="btn-model-action btn-del-model" title="Hapus Model">🗑️</button>
+          <button type="button" class="btn-model-action btn-edit-model" title="Ubah Nama Model"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></button>
+          <button type="button" class="btn-model-action btn-del-model" title="Hapus Model"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
           <label class="toggle-switch small" title="Status Model">
             <input type="checkbox" class="model-item-toggle" ${m.enabled !== false ? "checked" : ""} />
             <span class="toggle-slider"></span>
@@ -7620,7 +7642,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   });
   btnDrawerNewChat.addEventListener("click", () => createNewSession());
 
-  btnHistory.addEventListener("click", () => {
+  btnHistory?.addEventListener("click", () => {
     moreDropdown?.classList.add("hidden");
     const isHidden = historyDrawer.classList.toggle("hidden");
     if (!isHidden) {
@@ -7664,6 +7686,30 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       refreshGoogleStatus();
     }
   });
+
+  // Header toolbar buttons (Memory & Settings) — open same panels as dropdown
+  const btnHeaderMemory = document.getElementById("btnHeaderMemory");
+  const btnHeaderSettings = document.getElementById("btnHeaderSettings");
+  if (btnHeaderMemory) {
+    btnHeaderMemory.addEventListener("click", () => {
+      const isHidden = memoryDrawer.classList.toggle("hidden");
+      if (!isHidden) {
+        historyDrawer?.classList.add("hidden");
+        settingsPanel?.classList.add("hidden");
+        renderMemoryList();
+      }
+    });
+  }
+  if (btnHeaderSettings) {
+    btnHeaderSettings.addEventListener("click", () => {
+      const isHidden = settingsPanel.classList.toggle("hidden");
+      if (!isHidden) {
+        historyDrawer?.classList.add("hidden");
+        memoryDrawer?.classList.add("hidden");
+        refreshGoogleStatus();
+      }
+    });
+  }
 
   // ── Memory Drawer Management (Phase 2) ──
   let activeMemoryCategory = "all";
