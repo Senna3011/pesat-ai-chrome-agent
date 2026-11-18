@@ -152,14 +152,14 @@ html, body {
 }
 
 .logo-badge {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 7px;
-  background: var(--accent-gradient);
+  background: var(--brand-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--accent-glow);
+  box-shadow: 0 1px 3px rgba(225, 29, 72, 0.3);
   flex-shrink: 0;
 }
 
@@ -167,7 +167,6 @@ html, body {
   width: 15px;
   height: 15px;
   color: #FFFFFF;
-  fill: currentColor;
 }
 
 .title-row {
@@ -185,51 +184,61 @@ html, body {
 }
 
 .status-badge {
-  font-size: 14px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  letter-spacing: 0.2px;
-  line-height: 1.25;
+  font-size: 12px;
+  font-weight: 500;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  letter-spacing: 0.1px;
+  line-height: 1.2;
   transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+}
+
+.status-badge::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 /* 6.2 Status System (Ready, Thinking, Executing, Completed, Failed) */
 .status-badge.status-ready,
 .status-badge:not(.status-thinking):not(.status-executing):not(.working):not(.status-completed):not(.status-failed) {
-  background: rgba(22, 163, 74, 0.12);
+  background: var(--bg-surface);
   color: #15803D;
-  border: 1px solid rgba(22, 163, 74, 0.28);
+  border: 1px solid var(--border-subtle);
 }
 
 .status-badge.status-thinking {
-  background: rgba(37, 99, 235, 0.12);
+  background: #EFF6FF;
   color: #1D4ED8;
-  border: 1px solid rgba(37, 99, 235, 0.28);
+  border: 1px solid #BFDBFE;
   animation: pulseThinking 1.8s infinite ease-in-out;
 }
 
 .status-badge.status-executing,
 .status-badge.working {
-  background: rgba(217, 119, 6, 0.12);
+  background: #FFFBEB;
   color: #B45309;
-  border: 1px solid rgba(217, 119, 6, 0.28);
+  border: 1px solid #FDE68A;
   animation: pulseGlow 1.5s infinite ease-in-out;
 }
 
 .status-badge.status-completed {
-  background: rgba(22, 163, 74, 0.12);
+  background: #ECFDF5;
   color: #15803D;
-  border: 1px solid rgba(22, 163, 74, 0.28);
+  border: 1px solid #A7F3D0;
 }
 
 .status-badge.status-failed {
-  background: rgba(220, 38, 38, 0.12);
-  color: #B91C1C;
-  border: 1px solid rgba(220, 38, 38, 0.28);
+  background: #FEF2F2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
 }
 
 @keyframes pulseThinking {
@@ -696,13 +705,16 @@ html, body {
 }
 
 /* ==========================================================================
-   MODERN LIGHT HERO, MASCOT & QUICK GRID SECTION
+   MODERN LIGHT HERO, MASCOT & QUICK GRID SECTION (Editorial Refinement)
    ========================================================================== */
 .hero-section {
   position: relative;
-  padding-top: 8px;
-  margin-bottom: 14px;
-  text-align: center;
+  padding: 16px 14px 14px 14px;
+  margin: 10px 12px 14px 12px;
+  text-align: left;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #FFF1F2 0%, #FFFFFF 100%);
+  border: 1px solid #FFE4E6;
 }
 
 .hero-wave-svg {
@@ -713,35 +725,39 @@ html, body {
   position: relative;
   z-index: 1;
   display: flex;
-  justify-content: center;
-  margin-bottom: 10px;
+  justify-content: flex-start;
+  margin-bottom: 12px;
 }
 
 .mascot-badge-float {
   width: 68px;
   height: 68px;
+  border-radius: 12px;
+  background: var(--brand-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  filter: drop-shadow(0 4px 12px rgba(217, 27, 36, 0.12));
+  box-shadow: 0 6px 16px -4px rgba(225, 29, 72, 0.35);
   transition: transform 0.2s ease;
+  color: #FFFFFF;
 }
 
 .mascot-badge-float svg {
-  width: 68px;
-  height: 68px;
+  width: 32px;
+  height: 32px;
+  color: #FFFFFF;
 }
 
 .mascot-badge-float:hover {
-  transform: scale(1.04);
+  transform: scale(1.05);
 }
 
 .hero-title {
   position: relative;
   z-index: 1;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.3;
   color: var(--text-primary);
   letter-spacing: -0.025em;
   margin-bottom: 6px;
@@ -773,16 +789,16 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 11px 12px;
+  border-radius: 11px;
   border: 1px solid var(--border-subtle);
   background: #FFFFFF;
   cursor: pointer;
   text-align: left;
-  transition: all 0.16s ease;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.04);
   min-height: 68px;
   max-height: 82px;
   box-sizing: border-box;
@@ -790,27 +806,27 @@ html, body {
 
 .action-card:hover {
   border-color: var(--border-strong);
-  background: #FFFFFF;
+  background: var(--bg-surface);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 3px 8px rgba(24, 24, 27, 0.06);
 }
 
 .action-card__icon {
   width: 26px;
   height: 26px;
-  border-radius: 6px;
-  background: #F8FAFC;
-  border: 1px solid #E2E8F0;
+  border-radius: 7px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #334155;
+  color: var(--text-secondary);
   transition: all 0.15s ease;
 }
 
 .action-card:hover .action-card__icon {
   background: var(--brand-soft);
-  border-color: var(--brand-border);
+  border-color: #FECDD3;
   color: var(--brand-primary);
 }
 
@@ -996,8 +1012,8 @@ html, body {
 .assistant-msg-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 6px;
+  gap: 6px;
+  margin-top: 8px;
   padding-left: 2px;
 }
 
@@ -1005,22 +1021,24 @@ html, body {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 7px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 11.5px;
   font-weight: 500;
-  padding: 4px 9px;
-  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  white-space: nowrap;
+  transition: all 0.12s ease;
 }
 
 .assistant-action-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: #FFFFFF;
+  border-color: var(--border-strong);
   color: var(--text-primary);
-  transform: translateY(-1px);
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.04);
 }
 
 .assistant-action-btn:active {
@@ -1037,8 +1055,8 @@ html, body {
   margin: 8px 0;
   border-radius: 8px;
   border: 1px solid var(--border-subtle);
-  background-color: rgba(18, 18, 34, 0.9);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  background-color: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(24, 24, 27, 0.05);
   -webkit-overflow-scrolling: touch;
 }
 
