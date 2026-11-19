@@ -2294,17 +2294,64 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (parsed.text) return parsed.text;
       } catch (e) {}
     }
-    const jsonBlock = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-    if (jsonBlock) {
-      try {
-        const parsed = JSON.parse(jsonBlock[1]);
-        if (parsed.message) return parsed.message;
-        if (parsed.answer) return parsed.answer;
-        if (parsed.text) return parsed.text;
-      } catch (e) {}
+      const jsonBlock = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+      if (jsonBlock) {
+        try {
+          const parsed = JSON.parse(jsonBlock[1]);
+          if (parsed.message) return parsed.message;
+          if (parsed.answer) return parsed.answer;
+          if (parsed.text) return parsed.text;
+        } catch (e) {}
+      }
+      return stripToolCallNoise(text);
     }
-    return text;
-  }
+
+    // Buang teks tool-call mentah (mcp__plugin / tag XML agent) yang pernah bocor ke balasan model.
+    function stripToolCallNoise(text) {
+      if (!text || typeof text !== "string") return text || "";
+      let out = text;
+      // Baris/segmen yang seluruhnya berupa tool-call (mcp__..., <name__tool__..., ```tool_call...```)
+      out = out.replace(/^\s*(?:[-*]\s*)?(?:<|mcp__|tool_call|function_call)[^\n]*$/gim, "");
+      out = out.replace(/(?:^|\n)\s*(?:mcp__[a-z0-9_]+(?:\s|$)|<[a-z]+__[a-z0-9_]+__\w+[^>\n]*>)/g, "\n");
+      out = out.replace(/```(?:tool_call|function_call|xml)[\s\S]*?```/gi, "");
+      out = out.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+      return out;
+    }
+
+    // Sisa JSON tool-call setelah tag dibuang, mis. {"text":"Lewis Hamilton"} — bukan jawaban manusiawi.
+    function isToolCallPayloadJson(s) {
+      const t = String(s || "").trim();
+      if (!(t.startsWith("{") && t.endsWith("}"))) return false;
+      try {
+        const o = JSON.parse(t);
+        if (!o || typeof o !== "object" || Array.isArray(o)) return false;
+        const keys = Object.keys(o);
+        const allowed = new Set(["text", "value", "input", "elementId", "key", "targetText", "url", "action", "args", "parameters"]);
+        if (!keys.length) return true;
+        return keys.every(k => allowed.has(k));
+      } catch (e) {
+        return false;
+      }
+    }
+
+    // True bila isi teks didominasi tool-call mentah (tidak layak ditampilkan ke user).
+    function isToolCallNoise(text) {
+      if (!text || typeof text !== "string") return true;
+      const stripped = stripToolCallNoise(text);
+      if (!stripped.trim()) return true;
+      const noiseMatches = (String(text).match(/mcp__|<[a-z]+__[a-z0-9_]+__|tool_call|function_call/gi) || []).length;
+      if (noiseMatches > 0) return true;
+      // Sisa payload JSON tool-call murni (bukan jawaban Markdown manusiawi)
+      if (isToolCallPayloadJson(stripped)) return true;
+      return false;
+    }
+
+    const FRIENDLY_RETRY_MSG = "Maaf, saya belum bisa menyelesaikan perintah ini. Aktifkan Tab Aktif atau tulis perintahnya lebih spesifik.";
+
+    function sanitizeAssistantReply(text) {
+      const cleaned = stripToolCallNoise(String(text || ""));
+      return isToolCallNoise(cleaned) ? FRIENDLY_RETRY_MSG : cleaned;
+    }
 
   function addMessageToCurrentSession(role, content, extras = {}) {
     const session = getCurrentSession();
@@ -2316,7 +2363,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       textContent = content.text || content.message || content.content || content.reply || JSON.stringify(content);
     }
 
-    const cleanContent = role === "assistant" && !extras.skipClean ? cleanAssistantReply(textContent) : textContent;
+      const cleanContent = role === "assistant" && !extras.skipClean
+        ? cleanAssistantReply(textContent)
+        : (role === "assistant" ? stripToolCallNoise(textContent) : textContent);
     const msgObj = { role, content: cleanContent, timestamp: Date.now(), ...extras };
     session.messages.push(msgObj);
 
@@ -3326,10 +3375,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const session = getCurrentSession();
-    const history = (session?.messages || []).slice(-6).map(m => ({
-      role: m.role,
-      content: String(m.content || "").substring(0, 2000)
-    }));
+    // Buang teks tool-call mentah dari history agar sampah lama tidak memancing model menghasilkan sampah baru.
+    const history = (session?.messages || []).slice(-6)
+      .map(m => {
+        let content = stripToolCallNoise(String(m.content || ""));
+        if (isToolCallNoise(content)) return null;
+        return { role: m.role, content: content.substring(0, 2000) };
+      })
+      .filter(Boolean);
 
     activeAbortController = new AbortController();
 
@@ -5305,6 +5358,13 @@ ${topCompStr}
 	          pageTitle = activeTabInfo?.title || scanFallback?.data?.title || pageTitle;
 	          pageUrl = activeTabInfo?.url || scanFallback?.data?.url || pageUrl;
 	        }
+	      } else if (!cleanText && !fileContextBlock && activeTabInfo) {
+	        // Toggle Tab Aktif OFF: tanpa baca content script, tetap beri metadata ringan
+	        // agar model tahu di mana ia bekerja (mencegah balasan ngawur karena konteks kosong).
+	        cleanText = `[INFO TAB AKTIF]\nJudul: ${activeTabInfo.title || pageTitle || ""}\nURL: ${activeTabInfo.url || pageUrl || ""}`.trim();
+	        pageTitle = activeTabInfo.title || pageTitle;
+	        pageUrl = activeTabInfo.url || pageUrl;
+	        appendLog(`ℹ️ Tab Aktif OFF — menggunakan metadata ringan (judul + URL) tanpa membaca isi halaman.`);
 	      }
 
       if (fileContextBlock) {
@@ -5754,7 +5814,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
           }
         } catch (_) {}
       }
-      aiReply = cleanAiReply || String(aiReply || "");
+      aiReply = sanitizeAssistantReply(cleanAiReply || String(aiReply || ""));
 
       const isDocsOutput = !isExplicitExcelOrCsv && (isDocsTableTask || isDocsArticleTask || (isDocsTarget && !isSpreadsheetTask));
       const artType = (isExplicitExcelOrCsv || isSpreadsheetTask || isGeneralTableTask || isProductResearch) ? "table" : (isSocialThread ? "social" : ((isArticle || isDocsOutput) ? "doc" : "text"));
@@ -6514,6 +6574,7 @@ ATURAN KETAT:
       activeTask.stepsUsed++;
       const stepNum = activeTask.stepsUsed;
       const sub = currentSubtaskObj();
+      activeTask._parseRetried = false; // Reset flag retry parse setiap langkah/subtask baru
 
       // Semua subtask selesai → validasi akhir → selesai
       if (!sub) {
@@ -6571,6 +6632,7 @@ ${sub.description}
   * Gunakan open_new_tab({ url: "https://..." }) saat pengguna meminta membuka tab baru atau menjelajah tautan baru.
   * Gunakan switch_to_tab({ matchTitle: "...", matchUrl: "..." }) saat perlu beralih ke tab yang sudah terbuka (seperti Google Docs atau spreadsheet).
 - Jika instruksi selesai sepenuhnya, sajikan teks jawaban akhir atau panggil finish_task.
+- FORMAT BALASAN WAJIB (anti-sampah): Jangan pernah mengeluarkan teks tool-call, XML, atau tag mcp__ dalam bahasa balasan. Balas HANYA JSON valid {"action":"..."} atau teks jawaban manusiawi. Jika konteks halaman kurang/tidak yakin, balas JSON {"action":"ask_user","question":"..."} untuk bertanya, jangan mengarang aksi.
 `.trim();
 
       showStatusIndicator();
@@ -6682,6 +6744,22 @@ ${sub.description}
         }
         if (!resObj || (!resObj.action && !resObj.actions && !resObj.message && !resObj.question)) {
           resObj = tryParseNaturalLanguageActions(reply, activeTask.goal);
+        }
+
+        // Auto-recovery: bila parse & fallback NL gagal, minta model membalas ulang HANYA JSON valid (1x).
+        if (!resObj && !shouldStopAgent && !activeTask._parseRetried) {
+          activeTask._parseRetried = true;
+          appendLog("🔁 Respons model tidak valid — mencoba ulang dengan instruksi JSON ketat...", "WARN");
+          try {
+            reply = await callLLM("act", `${actPrompt}\n\nCATATAN PENTING: Balas HANYA dengan satu objek JSON valid seperti {"action":"finish_task","message":"..."} atau {"action":"ask_user","question":"..."} atau {"action":"click_element","elementId":"..."}. JANGAN sertakan teks lain, tool-call, XML, atau tag mcp__ di luar JSON.`, {
+              image: activeTask._pendingScreenshot || null
+            });
+            resObj = parseActionJSON(reply);
+            if (!resObj) resObj = tryParseNaturalLanguageActions(reply, activeTask.goal);
+          } catch (retryErr) {
+            if (retryErr.name === "AbortError" || shouldStopAgent) throw retryErr;
+            appendLog(`Retry parse gagal: ${retryErr.message}`, "WARN");
+          }
         }
       }
 
@@ -6833,6 +6911,8 @@ ${sub.description}
             sendNow: /(?:langsung posting|langsung tweet|auto post|publish)/i.test(activeTask.goal)
           };
         } else if (reply && (reply.length > 100 || isContentTask)) {
+          // Sanitasi dulu: buang teks tool-call mentah sebelum menjadi artefak/bubble.
+          reply = sanitizeAssistantReply(String(reply));
           const isTable = /\|.*\|[\r\n]+\|[-:\s|]+\|/i.test(reply) || /(?:riset|tabel|laptop|produk|komparasi|harga|spesifikasi|csv|penjualan)/i.test(activeTask.goal || sub.description);
           const artType = isTable ? "table" : "text";
           const artTitle = isTable
@@ -6847,6 +6927,7 @@ ${sub.description}
           };
           activeTask.artifacts.push(artifact);
 
+          // skipClean dipertahankan karena teks sudah disanitasi eksplisit di atas
           addMessageToCurrentSession("assistant", `${isTable ? "### 📊 Tabel Data Berhasil Dibuat (.CSV)" : "### 📝 Draf Copywriting Berhasil Dibuat"}\n\n${reply}`, {
             skipClean: true,
             artifact
@@ -6880,11 +6961,26 @@ ${sub.description}
         // Zero Text Suppression (Pilar 2 Rencana Arsitektur):
         // Jika Navigator menghasilkan respon penjelasan/panduan/jawaban tekstual tanpa aksi DOM,
         // tampilkan langsung ke obrolan pengguna dan selesaikan tugas tanpa membungkam teks tersebut.
-        addMessageToCurrentSession("assistant", reply);
+        const cleanReply = sanitizeAssistantReply(String(reply || ""));
+        if (isToolCallNoise(String(reply || "")) || cleanReply === FRIENDLY_RETRY_MSG) {
+          // Model mengembalikan teks tool-call mentah / konteks hilang → JANGAN tampilkan sampah ke user.
+          appendLog("⚠️ Respons model tidak valid (teks tool-call mentah). Meminta klarifikasi pengguna...", "WARN");
+          const answer = await requestAskUser(
+            "Saya kehilangan konteks halaman. Aktifkan Tab Aktif, atau sebutkan target yang ingin dikerjakan?",
+            ["Aktifkan Tab Aktif & ulangi", "Batalkan"]
+          );
+          if (shouldStopAgent || !answer || /batalkan/i.test(answer)) {
+            await finalizeTask("cancelled", "Tugas dibatalkan karena konteks halaman tidak tersedia.");
+          } else {
+            await finalizeTask("done", "Silakan aktifkan Tab Aktif lalu kirim ulang perintah Anda.");
+          }
+          return;
+        }
+        addMessageToCurrentSession("assistant", cleanReply);
         (activeTask.plan || []).forEach(s => { s.status = "done"; });
         refreshTaskCard();
         await persistTask();
-        await finalizeTask("done", reply || "AI telah memberikan jawaban secara lengkap.");
+        await finalizeTask("done", cleanReply || "AI telah memberikan jawaban secara lengkap.");
         return;
       }
 
@@ -7225,7 +7321,9 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     const isSuccess = activeTask.status === "DONE";
     const isCancelled = activeTask.status === "CANCELLED";
     const heading = isSuccess ? "✅ **Selesai**" : (isCancelled ? "⏹️ **Dihentikan**" : "⚠️ **Belum selesai**");
-    const resultText = String(message || (isSuccess ? "Tugas selesai." : "Tugas belum dapat diselesaikan.")).trim();
+    // Bersihkan teks mentah model (mcp__/tool-call) sebelum tampil di bubble final.
+    let resultText = String(message || (isSuccess ? "Tugas selesai." : "Tugas belum dapat diselesaikan.")).trim();
+    if (isToolCallNoise(resultText)) resultText = FRIENDLY_RETRY_MSG;
 
     const curSession = getCurrentSession();
     const lastMsg = curSession?.messages?.[curSession.messages.length - 1];
