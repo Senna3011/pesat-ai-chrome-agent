@@ -636,33 +636,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     chatArea.innerHTML = `
       <div id="welcomeView">
         <section class="hero-section">
-          <!-- Maskot Avatar Asli Pesat AI (68px sesuai UI/UX Spec § 4.3) -->
+          <!-- Maskot Emblem Asli Pesat AI (Refined Product Twin-Chevron) -->
           <div class="mascot-container">
             <div class="mascot-badge-float">
-              <svg width="68" height="68" viewBox="0 0 120 120" fill="none">
-                <circle cx="60" cy="64" r="46" fill="#FFF1F2"/>
-                <path d="M26 62C14 52 12 38 22 34C28 32 35 42 38 52" fill="#FFFFFF" stroke="#D91B24" stroke-width="3" stroke-linecap="round"/>
-                <path d="M94 62C106 52 108 38 98 34C92 32 85 42 82 52" fill="#FFFFFF" stroke="#D91B24" stroke-width="3" stroke-linecap="round"/>
-                <ellipse cx="60" cy="66" rx="28" ry="30" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2"/>
-                <path d="M52 36C52 26 62 22 66 30C70 25 76 30 72 38" fill="#D91B24"/>
-                <rect x="36" y="37" width="48" height="10" rx="5" fill="#D91B24"/>
-                <rect x="43" y="39" width="34" height="5" rx="2.5" fill="#FECDD3"/>
-                <circle cx="88" cy="54" r="6" fill="#1E293B"/>
-                <circle cx="49" cy="56" r="4.5" fill="#0F172A"/>
-                <circle cx="47.5" cy="54.5" r="1.5" fill="#FFFFFF"/>
-                <path d="M67 56C69 53 73 53 75 56" stroke="#0F172A" stroke-width="2.8" stroke-linecap="round"/>
-                <ellipse cx="43" cy="63" rx="4" ry="2.5" fill="#FDA4AF"/>
-                <ellipse cx="77" cy="63" rx="4" ry="2.5" fill="#FDA4AF"/>
-                <path d="M55 61C55 59 65 59 65 61C65 65 60 69 60 69C60 69 55 65 55 61Z" fill="#F59E0B"/>
-                <path d="M40 78C48 83 72 83 80 78L83 86C72 91 48 91 37 86L40 78Z" fill="#D91B24"/>
-                <rect x="63" y="82" width="13" height="16" rx="4" transform="rotate(-10 63 82)" fill="#D91B24"/>
-                <path d="M67 88L70 90L67 92M71 88L74 90L71 92" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round"/>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="13 17 18 12 13 7"></polyline>
+                <polyline points="6 17 11 12 6 7"></polyline>
               </svg>
             </div>
           </div>
 
           <h1 class="hero-title">
-            Halo! Ada yang bisa saya bantu?
+            Halo! Ada yang bisa <span class="highlight">Pesat Agent</span> bantu?
           </h1>
           <p class="hero-subtitle">
             Asisten AI untuk aktivitas web Anda.
@@ -1819,25 +1804,69 @@ document.addEventListener("DOMContentLoaded", async () => {
       contentHtml = `<div class="message-bubble markdown-body">${parseMarkdown(msgText)}</div>`;
     }
 
-    msgDiv.innerHTML = `
-      ${contentHtml}
-      ${isUser ? `
-        <div class="message-actions">
-          <button class="action-icon-btn btn-edit-prompt" title="Edit prompt & jalankan ulang">✏️ Edit</button>
-        </div>
-      ` : (!msg.artifact && !msg.askUser && !msg.confirmation && !msg.taskCard && msgText && String(msgText).trim() ? `
-        <div class="assistant-msg-actions">
-          <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
-            <span>📋</span>
-            <span class="btn-copy-text">Salin</span>
-          </button>
-          <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
-            <span>⤴️</span>
-            <span class="btn-paste-text">Tempel ke Tab</span>
-          </button>
-        </div>
-      ` : '')}
+    const isPlainAssistant = !isUser && !msg.artifact && !msg.askUser && !msg.confirmation && !msg.taskCard
+      && msgText && String(msgText).trim();
+
+    const assistantAvatarHtml = `
+      <div class="assistant-avatar" aria-hidden="true">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="13 17 18 12 13 7"></polyline>
+          <polyline points="6 17 11 12 6 7"></polyline>
+        </svg>
+      </div>
     `;
+
+    if (isPlainAssistant) {
+      msgDiv.classList.add("has-avatar");
+      msgDiv.innerHTML = `
+        ${assistantAvatarHtml}
+        <div class="assistant-body">
+          ${contentHtml}
+          <div class="assistant-msg-actions">
+            <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span class="btn-copy-text">Salin</span>
+            </button>
+            <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
+              <span class="btn-paste-text">Tempel ke Tab</span>
+            </button>
+          </div>
+        </div>
+      `;
+    } else {
+      msgDiv.innerHTML = `
+        ${contentHtml}
+        ${isUser ? `
+          <div class="message-actions">
+            <button class="action-icon-btn btn-edit-prompt" title="Edit prompt & jalankan ulang">✏️ Edit</button>
+          </div>
+        ` : (!msg.artifact && !msg.askUser && !msg.confirmation && !msg.taskCard && msgText && String(msgText).trim() ? `
+          <div class="assistant-msg-actions">
+            <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span class="btn-copy-text">Salin</span>
+            </button>
+            <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
+              <span class="btn-paste-text">Tempel ke Tab</span>
+            </button>
+          </div>
+        ` : '')}
+      `;
+    }
 
     // Event listener untuk tombol Salin & Tempel respons AI
     const btnCopy = msgDiv.querySelector(".btn-copy-response");
