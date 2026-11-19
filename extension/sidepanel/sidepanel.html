@@ -499,24 +499,25 @@
       <details class="advanced-google-details">
         <summary class="advanced-summary">⚙️ Pengaturan Client ID (Khusus Developer / Pro)</summary>
         <div class="advanced-body">
-          <div class="form-group" style="margin-top:8px;">
-            <label for="googleClientIdInput">Custom OAuth Client ID:</label>
+          <div class="form-group">
+            <label for="googleClientIdInput">Custom OAuth Client ID</label>
             <input type="text" id="googleClientIdInput" placeholder="xxxx.apps.googleusercontent.com" />
             <span class="field-hint">Otomatis disimpan saat klik tombol login di atas</span>
           </div>
 
-          <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size:14px;color:var(--text-secondary);font-weight:600;">Panduan Google Cloud Console:</span>
+          <div class="guide-header-row">
+            <span class="guide-header-label">Panduan Google Cloud Console</span>
             <button type="button" class="btn-guide-toggle" id="btnToggleGoogleGuide">📖 Panduan</button>
           </div>
 
-          <div class="google-guide-box hidden" id="googleGuideBox" style="margin-top:8px;">
-            <div class="guide-box-header">📋 Cara Membuat di Google Cloud Console:</div>
+          <div class="google-guide-box hidden" id="googleGuideBox">
+            <div class="guide-box-header">📋 Cara Membuat di Google Cloud Console</div>
             <ol class="guide-steps-list">
               <li>Buka <a href="https://console.cloud.google.com" target="_blank" class="link-external">Google Cloud Console</a> & buat project baru.</li>
               <li>Aktifkan <strong>Google Sheets API</strong>, <strong>Google Docs API</strong>, dan <strong>Google Drive API</strong>.</li>
               <li>Di <em>OAuth consent screen</em>: pilih External, isi email, dan tambahkan email Anda di <em>Test users</em>.</li>
-              <li>Di <em>Credentials → Create Credentials → OAuth client ID</em>: pilih Web application, tambahkan Authorized redirect URI:
+              <li>Di <em>Credentials → Create Credentials → OAuth client ID</em>: pilih Web application, lalu tambahkan Authorized redirect URI:</li>
+              <li class="guide-uri-item">
                 <div class="redirect-uri-row">
                   <code id="displayRedirectUri">Memuat URI...</code>
                   <button type="button" class="btn-copy-uri" id="btnCopyRedirectUri">📋 Salin</button>
