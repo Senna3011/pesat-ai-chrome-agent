@@ -7604,9 +7604,9 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     }
     const favUrl = src.metadata?.favIconUrl || src.icon;
     if (favUrl && typeof favUrl === "string" && !favUrl.startsWith("chrome://") && favUrl !== "🌐") {
-      return `<div class="mention-item-icon-wrap"><img src="${escapeHtml(favUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';" /><span class="mention-icon-fallback" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
+      return `<div class="mention-item-icon-wrap"><img src="${escapeHtml(favUrl)}" alt="" /><span class="mention-icon-fallback" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
     }
-    return `<div class="mention-item-icon-wrap"><span class="mention-icon-fallback"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
+    return `<div class="mention-item-icon-wrap"><span class="mention-icon-fallback"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
   }
 
   function renderMentionPickerDOM(groups) {
@@ -7648,6 +7648,14 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
             <span class="mention-item-sub">${escapeHtml(subText)}</span>
           </div>
         `;
+
+        // CSP-safe: attach error handler via addEventListener instead of inline onerror attribute
+        item.querySelector("img")?.addEventListener("error", (e) => {
+          const img = e.currentTarget;
+          img.style.display = "none";
+          const fallback = img.nextElementSibling;
+          if (fallback) fallback.style.display = "inline-flex";
+        });
 
         item.addEventListener("click", () => selectMentionSource(src));
         mentionPickerList.appendChild(item);
