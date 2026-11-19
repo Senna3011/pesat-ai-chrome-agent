@@ -184,9 +184,9 @@ html, body {
 }
 
 .status-badge {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
-  height: 22px;
+  height: 24px;
   padding: 0 8px;
   border-radius: 6px;
   letter-spacing: 0.1px;
