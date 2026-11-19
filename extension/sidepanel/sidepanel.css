@@ -135,7 +135,7 @@ html, body {
   max-height: 52px;
   box-sizing: border-box;
   padding: 0 14px;
-  background: rgba(255, 255, 255, 0.98);
+  background: #FFFFFF;
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
@@ -359,12 +359,16 @@ html, body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden !important;
-  padding: 12px;
+  padding: 14px 12px 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   width: 100%;
   z-index: 1;
+  background-color: #F1F5F9;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(100, 116, 139, 0.10) 1px, transparent 0);
+  background-size: 22px 22px;
 }
 
 .message {
@@ -390,6 +394,7 @@ html, body {
   flex-direction: row;
   align-items: flex-start;
   gap: 10px;
+  max-width: 96%;
 }
 
 .assistant-avatar {
@@ -434,12 +439,12 @@ html, body {
 }
 
 .assistant-message .message-bubble {
-  background: transparent;
+  background: #FFFFFF;
   color: var(--text-primary);
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 2px 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 14px rgba(15, 23, 42, 0.05);
+  padding: 12px 14px;
 }
 
 .user-message .message-bubble {
@@ -884,9 +889,9 @@ html, body {
   background: #F8FAFC;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  padding: 7px 12px;
+  padding: 8px 12px;
   margin-bottom: 10px;
-  font-size: 11.5px;
+  font-size: 14px;
   color: var(--text-primary);
   font-weight: 500;
   animation: fadeIn 0.2s ease;
@@ -1046,8 +1051,9 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 8px;
-  padding-left: 2px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .assistant-action-btn {
@@ -1221,14 +1227,14 @@ html, body {
 .agent-status-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  margin: 0 12px 6px 12px;
-  background: var(--bg-surface-elevated);
-  border: 1px solid var(--border-strong);
-  border-radius: 9999px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(16px);
+  gap: 10px;
+  padding: 8px 14px;
+  margin: 0 12px 8px 12px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--brand-primary);
+  border-radius: 12px;
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.12);
   animation: slideUpFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   flex-shrink: 0;
   z-index: 15;
@@ -1244,17 +1250,17 @@ html, body {
 }
 
 .status-spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid rgba(59, 130, 246, 0.2);
-  border-top-color: var(--accent-primary);
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid rgba(180, 35, 24, 0.15);
+  border-top-color: var(--brand-primary);
   border-radius: 50%;
-  animation: spin 0.65s linear infinite;
+  animation: spin 0.7s linear infinite;
   flex-shrink: 0;
 }
 
 .status-indicator-text {
-  font-size: 11.5px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
   letter-spacing: 0.1px;
@@ -1400,7 +1406,7 @@ html, body {
 textarea {
   flex: 1;
   padding: 14px 16px;
-  background-color: rgba(255, 255, 255, 0.06);
+  background-color: #FFFFFF;
   border: 1.5px solid var(--border-strong);
   border-radius: 16px;
   color: var(--text-primary);
@@ -1511,7 +1517,7 @@ textarea::placeholder {
 
 .drawer-header {
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   justify-content: space-between;
@@ -1644,16 +1650,44 @@ textarea::placeholder {
   bottom: 0;
   left: 0;
   right: 0;
-  background: #FFFFFF;
+  background: var(--bg-surface);
   border-top: 1px solid var(--border-subtle);
-  padding: 14px 16px;
+  padding: 0;
   z-index: 40;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   animation: fadeIn 0.2s ease;
+}
+
+.settings-panel > .settings-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #FFFFFF;
+  border-bottom: 1px solid var(--border-subtle);
+  margin: 0;
+  padding: 12px 16px;
+}
+
+.settings-panel > .settings-actions {
+  position: sticky;
+  bottom: 0;
+  background: #FFFFFF;
+  border-top: 1px solid var(--border-subtle);
+  margin: 0;
+  padding: 10px 16px;
+  justify-content: flex-end;
+}
+
+.settings-panel > .provider-config-card {
+  margin: 14px 16px 0;
+}
+
+.settings-panel > .settings-section-title {
+  margin: 16px 16px 8px;
 }
 
 @keyframes fadeIn {
@@ -1693,7 +1727,7 @@ textarea::placeholder {
 .form-group input {
   width: 100%;
   padding: 8px 10px;
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: #FFFFFF;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   color: var(--text-primary);
@@ -1733,7 +1767,7 @@ textarea::placeholder {
 }
 
 .btn-secondary-pill {
-  background: rgba(255, 255, 255, 0.06);
+  background: #FFFFFF;
   color: var(--text-secondary);
   border: 1px solid var(--border-subtle);
   padding: 8px 16px;
@@ -1745,7 +1779,7 @@ textarea::placeholder {
 }
 
 	.btn-secondary-pill:hover {
-	  background: rgba(255, 255, 255, 0.12);
+	  background: var(--bg-surface-hover);
 	  color: var(--text-primary);
 	}
 
@@ -1913,7 +1947,7 @@ textarea::placeholder {
 		  left: 0;
 		  right: 0;
 		  bottom: 0;
-		  background-color: rgba(255, 255, 255, 0.2);
+		  background-color: #CBD5E1;
 		  transition: 0.3s;
 		  border-radius: 34px;
 		}
@@ -1931,7 +1965,7 @@ textarea::placeholder {
 		}
 
 		.toggle-switch input:checked + .toggle-slider {
-		  background-color: #10b981;
+		  background-color: var(--success, #16A34A);
 		}
 
 		.toggle-switch input:checked + .toggle-slider:before {
@@ -1951,7 +1985,7 @@ textarea::placeholder {
 
 		.btn-icon-ghost:hover {
 		  color: var(--text-primary);
-		  background: rgba(255, 255, 255, 0.1);
+		  background: var(--bg-surface-hover);
 		}
 
 		.config-field-group {
@@ -1995,7 +2029,7 @@ textarea::placeholder {
 			  border: 1px solid var(--border-subtle);
 			  border-radius: 8px;
 			  color: var(--text-primary);
-			  font-size: 13px;
+			  font-size: 14px;
 			  outline: none;
 			  box-sizing: border-box;
 			  transition: border-color 0.2s, box-shadow 0.2s;
@@ -2017,7 +2051,7 @@ textarea::placeholder {
 			  border: 1px solid var(--border-subtle);
 			  border-radius: 8px;
 			  color: var(--text-primary);
-			  font-size: 13px;
+			  font-size: 14px;
 			  outline: none;
 			  box-sizing: border-box;
 			  transition: border-color 0.2s;
@@ -2080,10 +2114,10 @@ textarea::placeholder {
 		  display: flex;
 		  align-items: center;
 		  justify-content: space-between;
-		  background: rgba(255, 255, 255, 0.04);
-		  border: 1px solid rgba(255, 255, 255, 0.08);
+		  background: #FFFFFF;
+		  border: 1px solid var(--border-subtle);
 		  border-radius: 8px;
-		  padding: 6px 10px;
+		  padding: 7px 10px;
 		}
 
 		.model-item-name {
@@ -2129,18 +2163,24 @@ textarea::placeholder {
 		}
 
 		.btn-test-conn {
-		  background: rgba(255, 255, 255, 0.08);
+		  display: inline-flex;
+		  align-items: center;
+		  gap: 6px;
+		  background: #FFFFFF;
 		  color: var(--text-primary);
-		  border: 1px solid var(--border-subtle);
+		  border: 1px solid var(--border-strong);
 		  border-radius: 8px;
 		  padding: 7px 12px;
 		  font-size: 14px;
 		  font-weight: 600;
 		  cursor: pointer;
+		  transition: all 0.15s ease;
 		}
 
 		.btn-test-conn:hover {
-		  background: rgba(255, 255, 255, 0.14);
+		  background: var(--bg-surface-hover);
+		  border-color: var(--brand-primary);
+		  color: var(--brand-primary);
 		}
 
 		.session-only-label {
@@ -2185,9 +2225,9 @@ textarea::placeholder {
 		}
 
 		.usage-stats-card {
-		  background: rgba(255, 255, 255, 0.03);
-		  border: 1px solid rgba(255, 255, 255, 0.07);
-		  border-radius: 8px;
+		  background: #FFFFFF;
+		  border: 1px solid var(--border-subtle);
+		  border-radius: 10px;
 		  padding: 10px 12px;
 		  margin-top: 8px;
 		}
@@ -2242,7 +2282,7 @@ textarea::placeholder {
 		  display: flex;
 		  align-items: center;
 		  justify-content: space-between;
-		  background: rgba(255, 255, 255, 0.04);
+		  background: #FFFFFF;
 		  border: 1px solid var(--border-subtle);
 		  border-radius: 10px;
 		  padding: 10px 12px;
@@ -2253,7 +2293,7 @@ textarea::placeholder {
 		  display: flex;
 		  align-items: center;
 		  gap: 8px;
-		  background: rgba(255, 255, 255, 0.08);
+		  background: #FFFFFF;
 		  border: 1px solid var(--border-strong);
 		  color: var(--text-primary);
 		  border-radius: 6px;
@@ -2265,7 +2305,7 @@ textarea::placeholder {
 		}
 
 		.btn-google-signin:hover {
-		  background: rgba(255, 255, 255, 0.14);
+		  background: var(--bg-surface-hover);
 		}
 	  border: none;
 	  border-radius: 6px;
@@ -2282,8 +2322,8 @@ textarea::placeholder {
 
 	.advanced-google-details {
 	  margin-top: 10px;
-	  background: rgba(255, 255, 255, 0.02);
-	  border: 1px solid rgba(255, 255, 255, 0.06);
+	  background: #FFFFFF;
+	  border: 1px solid var(--border-subtle);
 	  border-radius: 8px;
 	  padding: 8px 10px;
 	}
@@ -2307,13 +2347,19 @@ textarea::placeholder {
 	}
 
 	.btn-copy-uri, .btn-guide-toggle {
-	  background: rgba(255, 255, 255, 0.1);
-	  color: #fff;
-	  border: none;
+	  background: var(--bg-surface-hover);
+	  color: var(--text-secondary);
+	  border: 1px solid var(--border-subtle);
 	  border-radius: 4px;
 	  padding: 3px 8px;
 	  font-size: 14px;
 	  cursor: pointer;
+	}
+
+	.btn-copy-uri:hover, .btn-guide-toggle:hover {
+	  background: var(--brand-primary);
+	  color: #FFFFFF;
+	  border-color: var(--brand-primary);
 	}
 
 	/* ==========================================================================
@@ -2357,8 +2403,8 @@ textarea::placeholder {
 	  display: flex;
 	  align-items: center;
 	  padding: 6px 12px;
-	  background: rgba(255, 255, 255, 0.02);
-	  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+	  background: transparent;
+	  border-bottom: 1px solid var(--border-subtle);
 	}
 
 	.quick-chips-container {
@@ -2377,7 +2423,7 @@ textarea::placeholder {
 	}
 
 	.slide-nav-btn {
-	  background: rgba(255, 255, 255, 0.1);
+	  background: #FFFFFF;
 	  border: 1px solid var(--border-subtle);
 	  border-radius: 50%;
 	  width: 22px;
@@ -2399,8 +2445,8 @@ textarea::placeholder {
 	  display: inline-flex;
 	  align-items: center;
 	  gap: 5px;
-	  background: rgba(255, 255, 255, 0.06);
-	  border: 1px solid rgba(255, 255, 255, 0.1);
+	  background: #FFFFFF;
+	  border: 1px solid var(--border-subtle);
 	  color: var(--text-primary);
 	  padding: 6px 12px;
 	  border-radius: 9999px;
@@ -2413,7 +2459,7 @@ textarea::placeholder {
 	}
 
 	.chip-btn:hover {
-	  background: rgba(255, 255, 255, 0.12);
+	  background: var(--bg-surface-hover);
 	  border-color: var(--accent-primary);
 	  transform: translateY(-1px);
 	}
@@ -2508,7 +2554,7 @@ textarea::placeholder {
 			}
 
 			.composer-chip .chip-remove {
-			  background: rgba(255, 255, 255, 0.08);
+			  background: var(--bg-surface-hover);
 			  border: none;
 			  color: var(--text-secondary);
 			  cursor: pointer;
@@ -2718,7 +2764,7 @@ textarea::placeholder {
 				  font-size: 10px;
 				  padding: 1px 5px;
 				  border-radius: 4px;
-				  background: rgba(255, 255, 255, 0.08);
+				  background: var(--bg-surface-hover);
 				  color: var(--text-secondary);
 				  font-weight: 600;
 				}
