@@ -98,7 +98,7 @@ test.describe('Phase 4 — Supporting Interface Verification (UI/UX Spec v1.0 §
     // Check Heading text & font-size
     const heroTitle = page.locator('.hero-title');
     await expect(heroTitle).toBeVisible();
-    await expect(heroTitle).toContainText('Halo! Ada yang bisa saya bantu?');
+    await expect(heroTitle).toContainText('Halo! Ada yang bisa Pesat Agent bantu?');
 
     // Check Description
     const heroSubtitle = page.locator('.hero-subtitle');
