@@ -49,6 +49,20 @@ build/
 .cache/
 .zcode/
 
+# Agent & Audit Internal (jangan ikut ke GitHub)
+.kilo/
+.mimosa/
+.zcode/
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Artefak Uji & Laporan
+gui-test-screenshots/
+test-connection-screenshots/
+.playwright-artifacts/
+
 # Internal Roadmaps, Docs & Notes
 ROADMAP_AITOPIA_BENCHMARK.md
 To-do-list.md

@@ -3,12 +3,59 @@
   const DEFAULT_CF_WORKER = "https://pesat-ai-chrome-agent.senna-947.workers.dev";
   const DEFAULT_PESATROUTER = "https://api.pesatrouter.com/v1";
 
-  function resolveChatEndpoint(value) {
+  function resolveEndpoint(value, path) {
     const baseUrl = String(value || "").trim() || DEFAULT_PESATROUTER;
     let parsed;
     try { parsed = new URL(baseUrl); } catch (_) { throw new Error("Base URL API tidak valid."); }
     if (parsed.protocol !== "https:") throw new Error("Base URL API wajib menggunakan HTTPS agar API key tidak bocor.");
-    return baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+    const stripped = baseUrl.replace(/\/+$/, "").replace(/\/chat\/completions$/i, "");
+    return `${stripped}${path}`;
+  }
+
+  function resolveChatEndpoint(value) {
+    // Kompatibilitas: user boleh menempel URL lengkap .../chat/completions
+    const raw = String(value || "").trim();
+    if (/\/chat\/completions\/?$/i.test(raw)) return raw.replace(/\/+$/, "");
+    return resolveEndpoint(value, "/chat/completions");
+  }
+
+  function resolveModelsEndpoint(value) {
+    return resolveEndpoint(value, "/models");
+  }
+
+  // ── Test Connection helpers: timeout + pesan error yang memandu user ──
+  async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } catch (err) {
+      if (err && err.name === "AbortError") {
+        throw Object.assign(new Error(`Waktu koneksi habis (${Math.round(timeoutMs / 1000)} detik tanpa respons). Kemungkinan jaringan memblokir koneksi atau server sedang tidak aktif.`), { name: "TimeoutError" });
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function describeHttpError(status, host, model, bodySnippet = "") {
+    const detail = bodySnippet ? ` Detail: ${bodySnippet}` : "";
+    if (status === 401 || status === 403) return `API key tidak valid atau tidak punya akses (HTTP ${status}). Periksa ulang key Anda di pesatrouter.com.${detail}`;
+    if (status === 404) return `Endpoint tidak ditemukan (HTTP 404). Pastikan Base URL diakhiri "/v1" — contoh: https://api.pesatrouter.com/v1 — tanpa menambahkan /chat/completions manual.${detail}`;
+    if (status === 429) return `Batas rate limit tercapai (HTTP 429). Tunggu beberapa saat lalu coba lagi.${detail}`;
+    if (status === 400) return `Permintaan ditolak (HTTP 400) — kemungkinan model "${model}" tidak tersedia di endpoint ini.${detail}`;
+    if (status >= 500) return `Server${host ? ` ${host}` : ""} sedang bermasalah (HTTP ${status}). Coba lagi nanti.${detail}`;
+    return `HTTP ${status}:${detail || " respons tidak terduga dari server"}`;
+  }
+
+  function describeConnectionFailure(err) {
+    if (err && err.name === "TimeoutError") return err.message;
+    if (err && (err instanceof TypeError || /failed to fetch/i.test(err.message || ""))) {
+      const cause = (err.cause && err.cause.message) ? ` Detail teknis: ${err.cause.message}` : ` Detail teknis: ${err.message}`;
+      return `Koneksi gagal di level jaringan (server tidak merespons sama sekali — API key belum dievaluasi). Periksa: (1) internet aktif, (2) VPN/proxy/antivirus tidak memblokir, (3) Base URL benar. Jika jaringan IPv6 bermasalah, coba nonaktifkan IPv6 atau ganti jaringan, lalu ulangi.${cause}`;
+    }
+    return err.message || "Gagal menghubungi server endpoint";
   }
 
   const canonicalBackendUrl = () => String(globalThis.PESAT_CONFIG?.CANONICAL_BACKEND_URL || DEFAULT_CF_WORKER).replace(/\/+$/, "");
@@ -101,12 +148,28 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
     async testConnection(cfg = {}) {
       const apiKey = (cfg.apiKey || "").trim();
       const model = (cfg.modelName || "").trim() || "pesat-flash";
+      const timeoutMs = Number(cfg.timeoutMs) > 0 ? Number(cfg.timeoutMs) : 15000;
 
       try {
         if (apiKey) {
           const endpoint = resolveChatEndpoint(cfg.apiBaseUrl);
-          
-          const res = await fetch(endpoint, {
+          let host = "";
+          try { host = new URL(endpoint).host; } catch (_) {}
+
+          // Probe 1 (murah, tanpa token): GET /models — memisahkan "key salah" (401/403)
+          // dari "server tidak terjangkau" sebelum memakan biaya ping chat.
+          // 404/405 (gateway tanpa endpoint /models) → lanjut ke ping chat.
+          const probe = await fetchWithTimeout(resolveModelsEndpoint(cfg.apiBaseUrl), {
+            method: "GET",
+            headers: { "Authorization": `Bearer ${apiKey}` }
+          }, timeoutMs);
+          if (probe.status === 401 || probe.status === 403) {
+            const probeBody = await probe.text().catch(() => "");
+            throw Object.assign(new Error(describeHttpError(probe.status, host, model, probeBody.substring(0, 180))), { httpStatus: probe.status });
+          }
+
+          // Probe 2: ping chat 5 token — memverifikasi model benar-benar bisa dipakai end-to-end.
+          const res = await fetchWithTimeout(endpoint, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -118,11 +181,11 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
               max_tokens: 5,
               temperature: 0.1
             })
-          });
+          }, timeoutMs);
 
           if (!res.ok) {
-            const errBody = await res.text();
-            throw new Error(`HTTP ${res.status}: ${errBody.substring(0, 180)}`);
+            const errBody = await res.text().catch(() => "");
+            throw Object.assign(new Error(describeHttpError(res.status, host, model, errBody.substring(0, 180))), { httpStatus: res.status });
           }
 
           return {
@@ -132,11 +195,11 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
           };
         } else {
           const backendToken = await getBackendSessionToken();
-          const res = await fetch(`${canonicalBackendUrl()}/api/chat`, {
+          const res = await fetchWithTimeout(`${canonicalBackendUrl()}/api/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${backendToken}` },
             body: JSON.stringify({ prompt: "ping", phase: "plan" })
-          });
+          }, timeoutMs);
 
           if (!res.ok && res.status !== 200) {
             throw new Error(`Cloudflare status ${res.status}`);
@@ -151,7 +214,7 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
       } catch (err) {
         return {
           success: false,
-          error: err.message || "Gagal menghubungi server endpoint"
+          error: describeConnectionFailure(err)
         };
       }
     },
@@ -398,4 +461,5 @@ Gunakan hanya tool yang tersedia. Maksimal 10 langkah. Langkah act wajib memilik
     globalThis.PesatAIEngine = PesatAIEngine;
     globalThis.PesatAiEngine = PesatAIEngine;
   }
+  if (typeof module !== "undefined" && module.exports) module.exports = PesatAIEngine;
 })();
