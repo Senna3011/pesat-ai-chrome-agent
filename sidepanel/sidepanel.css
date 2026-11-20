@@ -2000,11 +2000,17 @@ textarea::placeholder {
 		  color: var(--text-secondary);
 		}
 
-		.config-label-row {
-		  display: flex;
-		  justify-content: space-between;
-		  align-items: center;
-		}
+.config-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.config-field-hint {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted, var(--text-tertiary, #94a3b8));
+}
 
 		.link-get-key {
 		  font-size: 14px;
@@ -2020,6 +2026,13 @@ textarea::placeholder {
 		.config-input-wrapper {
 		  position: relative;
 		  width: 100%;
+		}
+
+		.config-field-hint {
+		  margin: 6px 2px 0 2px;
+		  font-size: 11px;
+		  line-height: 1.45;
+		  color: #94A3B8;
 		}
 
 			.config-input {

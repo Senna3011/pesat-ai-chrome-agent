@@ -12,6 +12,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const pairs = [
   ['manifest.json', 'extension/manifest.json'],
+  ['ai-engine.js', 'extension/ai-engine.js'],
   ['sidepanel/sidepanel.css', 'extension/sidepanel/sidepanel.css'],
   ['sidepanel/sidepanel.html', 'extension/sidepanel/sidepanel.html'],
   ['sidepanel/sidepanel.js', 'extension/sidepanel/sidepanel.js'],
