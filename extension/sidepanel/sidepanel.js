@@ -625,13 +625,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function renderCurrentSession() {
-    chatArea.innerHTML = "";
+    chatArea.querySelectorAll('.message, .message-row, .task-card, .agent-status-card').forEach(el => el.remove());
+
     const session = getCurrentSession();
     if (!session || session.messages.length === 0) {
       renderWelcomeMessage();
       updateQuickChipsVisibility();
       return;
     }
+
+    const welcomeView = document.getElementById('welcomeView');
+    if (welcomeView) welcomeView.classList.add('hidden');
 
     session.messages.forEach((msg, idx) => {
       if (!msg.multiAgent) renderMessageBubble(msg, idx);
@@ -645,13 +649,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   window.renderCurrentSession = renderCurrentSession;
 
   function renderWelcomeMessage() {
-    // Hanya pastikan welcome-view yang sudah ada di HTML tampil;
-    // jangan overwrite chatArea.innerHTML dengan HTML lama (berbarengan dengan app-shell baru).
     const welcomeView = document.getElementById('welcomeView');
     if (welcomeView) welcomeView.classList.remove('hidden');
-    // Bersihkan bubble pesan lama jika ada (selain welcome-view dan working bar)
-    chatArea.querySelectorAll('.message-bubble, .user-msg, .assistant-msg').forEach(b => b.remove());
-    attachSuggestionListeners();
+    // Listener starter-card sudah dipasang sekali saat init; jangan pasang ulang.
   }
 
   function attachSuggestionListeners() {
@@ -1727,8 +1727,23 @@ document.addEventListener("DOMContentLoaded", async () => {
       contentHtml = `<div class="agent-pipeline-container"><div class="agent-card"><div class="agent-card-header">Progress</div><div class="agent-card-body">${escapeHtml(progress)}</div></div></div>`;
       if (finalAnswer) contentHtml += `<div class="message-bubble markdown-body" style="margin-top:8px;">${parseMarkdown(finalAnswer)}</div>`;
     } else {
-      contentHtml = `<div class="message-bubble markdown-body">${parseMarkdown(msgText)}</div>`;
+      const modelLabel = escapeHtml(activeModelId || CFG.DEFAULT_MODEL);
+      contentHtml = `
+        <div class="message-bubble markdown-body">
+          <div class="msg-ai-top">
+            <span class="ai-badge-label">
+              <span class="online-dot"></span>
+              Pesat AI · ${modelLabel}
+            </span>
+          </div>
+          <div class="msg-ai-body">${parseMarkdown(msgText)}</div>
+        </div>`;
     }
+
+    // Catatan status "Selesai" untuk jawaban AI yang sudah final
+    const finishedNoteHtml = (!isUser && !msg.artifact && !msg.askUser && !msg.confirmation && !msg.taskCard && msgText && String(msgText).trim())
+      ? `<span class="subtle-meta-note">Selesai</span>`
+      : '';
 
     msgDiv.innerHTML = `
       ${contentHtml}
@@ -1738,14 +1753,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         </div>
       ` : (!msg.artifact && !msg.askUser && !msg.confirmation && !msg.taskCard && msgText && String(msgText).trim() ? `
         <div class="assistant-msg-actions">
-          <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
-            <span>📋</span>
-            <span class="btn-copy-text">Salin</span>
-          </button>
-          <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
-            <span>⤴️</span>
-            <span class="btn-paste-text">Tempel ke Tab</span>
-          </button>
+          <div class="action-btn-group">
+            <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
+              <span>📋</span>
+              <span class="btn-copy-text">Salin</span>
+            </button>
+            <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
+              <span>⤴️</span>
+              <span class="btn-paste-text">Tempel ke Tab</span>
+            </button>
+          </div>
+          ${finishedNoteHtml}
         </div>
       ` : '')}
     `;
@@ -1892,7 +1910,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 		                  if (!isAlreadySocial) {
 		                    const isThreads = /threads/i.test(a.name || "") || /threads/i.test(contentStr);
 		                    const destUrl = isThreads ? "https://www.threads.net" : "https://x.com/compose/post";
-		                    await sendToBackground({ action: "NAVIGATE_TAB", url: destUrl, newTab: true });
+		                    await sendToBackground({ action: "NAVIGATE_TAB", url: destUrl });
 		                    await new Promise(r => setTimeout(r, 4000));
 		                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
 		                  }
@@ -4888,9 +4906,12 @@ ${topCompStr}
   // ═══════════════════════════════════════════════════
   // MAIN: TASK EXECUTION LOOP (BYOK Gate Checked)
   // ═══════════════════════════════════════════════════
+  let _handleSendBusy = false;
   async function handleSend() {
     const userPrompt = promptInput.value.trim();
-    if (!userPrompt || isAgentRunning) return;
+    if (!userPrompt || isAgentRunning || _handleSendBusy) return;
+    _handleSendBusy = true;
+    try {
 
     // GERBANG BYOK (PLAN Phase A.3): Cek apakah API key sudah ada
     if (!isConfigured()) {
@@ -5123,6 +5144,11 @@ ${topCompStr}
     }
 
     await startTask(userPrompt, contextSourcesToSend);
+    } catch (err) {
+      appendLog(`Error handleSend: ${err.message}`, "ERROR");
+    } finally {
+      _handleSendBusy = false;
+    }
   }
 
   function parseMarkdownTable(markdown = "") {
@@ -5245,7 +5271,7 @@ ${topCompStr}
         if (activeTabInfo?.url?.includes("docs.google.com/document")) {
           appendLog(`🌐 Membuka tautan sumber di tab baru: ${detectedSourceUrl}...`);
           showStatusIndicator("Membuka sumber...");
-          await sendToBackground({ action: "NAVIGATE_TAB", url: detectedSourceUrl, newTab: true });
+          await sendToBackground({ action: "NAVIGATE_TAB", url: detectedSourceUrl });
         } else {
           appendLog(`🌐 Membuka tautan sumber target: ${detectedSourceUrl}...`);
           showStatusIndicator("Membuka sumber...");
@@ -8635,40 +8661,6 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
         await globalThis.PesatMemoryEngine?.clear?.();
         renderMemoryList();
       }
-    });
-  }
-
-  // ── Starter cards (welcome-view) ──
-  document.querySelectorAll('.starter-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const prompt = card.getAttribute('data-prompt');
-      if (prompt) {
-        applyPromptToInput(prompt);
-        handleSend();
-      }
-    });
-  });
-
-  // ── Segmented model pill ──
-  const modelSegmentedEl = document.getElementById('modelSegmented');
-  const modelHelperCaptionEl = document.getElementById('modelHelperCaption');
-  const modelLabels = {
-    'pesat-flash': 'Pesat Flash · Seimbang & cepat untuk tugas harian',
-    'pesat-pro': 'Pesat Pro · Cerdas untuk tugas kompleks',
-    'pesat-lite': 'Pesat Lite · Hemat kuota untuk tugas ringan',
-    'pesat-free': 'Pesat Free · Gratis tanpa biaya'
-  };
-  if (modelSegmentedEl) {
-    modelSegmentedEl.querySelectorAll('.seg-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        modelSegmentedEl.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const modelId = btn.getAttribute('data-model');
-        activeModelId = modelId;
-        if (modelHelperCaptionEl) modelHelperCaptionEl.textContent = modelLabels[modelId] || '';
-        try { await chrome.storage.local.set({ modelName: modelId }); } catch (_) {}
-        showToast(`Model diubah ke ${btn.textContent.trim()}`, 'info', 2000);
-      });
     });
   }
 

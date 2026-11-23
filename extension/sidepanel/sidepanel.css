@@ -24,6 +24,7 @@
   --bg-surface-hover: #F1F5F9;
   --bg-card: #FFFFFF;
   --bg-base: #FFFFFF;
+  --bg-subtle: #F3F4F6;
 
   --border-subtle: #E2E8F0;
   --border-strong: #CBD5E1;
@@ -100,6 +101,7 @@ html[data-theme="dark"] {
   --bg-surface: #1E293B;
   --bg-surface-elevated: #1E293B;
   --bg-base: #0F172A;
+  --bg-subtle: #334155;
   --border-subtle: #334155;
   --border-strong: #475569;
   --border-light: #334155;
@@ -461,6 +463,108 @@ html, body {
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(180, 35, 24, 0.05);
   border: 1px solid var(--brand-border);
+}
+
+/* ── Kartu Jawaban AI (gaya mengikuti Konsep Desain Pesat AI) ── */
+.assistant-message .message-bubble.markdown-body {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-xs);
+}
+
+.ai-badge-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.msg-ai-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.msg-ai-body {
+  font-size: 13.5px;
+  line-height: 1.62;
+  color: var(--text-primary);
+}
+
+.assistant-msg-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-light);
+}
+
+.action-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.subtle-meta-note {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* ── Bubble Streaming (jawaban sedang ditulis) ── */
+.message-row.assistant.streaming-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-row.assistant.streaming-bubble .message-bubble {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 15px;
+  box-shadow: var(--shadow-xs);
+}
+
+/* ── Progress bar kartu proses (gaya mengikuti konsep) ── */
+.progress-bar-bg {
+  height: 6px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--brand-blue), var(--status-green));
+  border-radius: var(--radius-full);
+  transition: width 0.4s ease;
+}
+
+.soft-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.2px solid var(--brand-blue-border);
+  border-top-color: var(--brand-blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.thinking-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .user-attachments-container {
@@ -4387,57 +4491,6 @@ button.destructive:focus-visible,
   color: var(--text-secondary);
   max-width: 300px;
   line-height: 1.5;
-}
-
-/* Model segmented pill */
-.model-pill-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  max-width: 340px;
-}
-
-.model-segmented {
-  display: inline-flex;
-  background: var(--bg-surface-hover);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-full);
-  padding: 3px;
-  gap: 2px;
-  width: 100%;
-}
-
-.seg-btn {
-  flex: 1;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 8px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: all 0.16s ease;
-  white-space: nowrap;
-}
-
-.seg-btn:hover {
-  color: var(--text-primary);
-}
-
-.seg-btn.active {
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-xs);
-}
-
-.model-helper-caption {
-  font-size: 11.5px;
-  color: var(--text-muted);
-  text-align: center;
 }
 
 /* Starter cards */
