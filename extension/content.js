@@ -1746,15 +1746,15 @@ ${tabText}`;
         showReadingHUD(`✓ Selesai membaca artikel (${resultText.length} karakter)`, true);
       }
 
-      return maskSensitiveDLP(resultText.substring(0, 7000).trim());
+      return maskSensitiveDLP(resultText.substring(0, 20000).trim());
     } catch (err) {
       console.warn("[Pesat] Gagal mengambil readable content:", err);
-      return maskSensitiveDLP(document.body ? (document.body.innerText || "").substring(0, 5000) : "");
+      return maskSensitiveDLP(document.body ? (document.body.innerText || "").substring(0, 20000) : "");
     }
   }
 
   function extractReadablePageText() {
-    return getReadableContent(false).substring(0, 4500);
+    return getReadableContent(false).substring(0, 15000);
   }
 
   // ─────────────────────────────────────────────────────
