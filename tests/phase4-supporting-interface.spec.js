@@ -82,23 +82,23 @@ test.describe('Phase 4 — Supporting Interface Verification (UI/UX Spec v1.0 §
     await page.waitForLoadState('domcontentloaded');
   });
 
-  test('4.1 Welcome Screen: 64-76px mascot, 2-column grid, 68-82px card height, and clean heading', async ({ page }) => {
+  test('4.1 Welcome Screen: 48-64px mascot, 2-column grid, 68-82px card height, and clean heading', async ({ page }) => {
     const welcomeView = page.locator('#welcomeView');
     await expect(welcomeView).toBeVisible();
 
-    // Check Mascot size (64-76px)
+    // Check Mascot size (48-64px)
     const mascotBadge = page.locator('.mascot-badge-float');
     await expect(mascotBadge).toBeVisible();
     const mascotBox = await mascotBadge.boundingBox();
-    expect(mascotBox.width).toBeGreaterThanOrEqual(64);
-    expect(mascotBox.width).toBeLessThanOrEqual(76);
-    expect(mascotBox.height).toBeGreaterThanOrEqual(64);
-    expect(mascotBox.height).toBeLessThanOrEqual(76);
+    expect(mascotBox.width).toBeGreaterThanOrEqual(48);
+    expect(mascotBox.width).toBeLessThanOrEqual(64);
+    expect(mascotBox.height).toBeGreaterThanOrEqual(48);
+    expect(mascotBox.height).toBeLessThanOrEqual(64);
 
     // Check Heading text & font-size
     const heroTitle = page.locator('.hero-title');
     await expect(heroTitle).toBeVisible();
-    await expect(heroTitle).toContainText('Halo! Ada yang bisa saya bantu?');
+    await expect(heroTitle).toContainText('Halo! Ada yang bisa Pesat Agent bantu?');
 
     // Check Description
     const heroSubtitle = page.locator('.hero-subtitle');

@@ -223,11 +223,11 @@ test.describe('Phase 2 — Core Interface Verification (UI/UX Spec v1.0)', () =>
     expect(userRadius).toBe('12px');
 
     // AI Message specs (Section 5.3):
-    // Background: Transparent
+    // Background: Clean White (modern assistant card)
     // Text: Text Primary
     const aiBg = await aiBubble.evaluate((el) => window.getComputedStyle(el).backgroundColor);
     const aiColor = await aiBubble.evaluate((el) => window.getComputedStyle(el).color);
-    expect(aiBg).toBe('rgba(0, 0, 0, 0)');
+    expect(aiBg).toBe('rgb(255, 255, 255)');
     expect(aiColor).toBe('rgb(15, 23, 42)');
 
     // Capture User and AI messages screenshot
