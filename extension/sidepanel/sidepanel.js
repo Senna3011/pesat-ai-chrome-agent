@@ -24,6 +24,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   const clearChatModal = document.getElementById("clearChatModal");
   const btnCancelClearChat = document.getElementById("btnCancelClearChat");
   const btnConfirmClearChat = document.getElementById("btnConfirmClearChat");
+
+  // Generic modal dialog (replaces alert/confirm/prompt)
+  const genericModal = document.getElementById("genericModal");
+  const genericModalIcon = document.getElementById("genericModalIcon");
+  const genericModalTitle = document.getElementById("genericModalTitle");
+  const genericModalDesc = document.getElementById("genericModalDesc");
+  const genericModalInput = document.getElementById("genericModalInput");
+  const genericModalInputValue = document.getElementById("genericModalInputValue");
+  const genericModalCancel = document.getElementById("genericModalCancel");
+  const genericModalOk = document.getElementById("genericModalOk");
   const btnNewChat = document.getElementById("btnNewChat");
   const btnHistory = document.getElementById("btnHistory");
   const btnMemory = document.getElementById("btnMemory");
@@ -76,6 +86,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const wizardApiFormat = document.getElementById("wizardApiFormat");
   const wizardApiKey = document.getElementById("wizardApiKey");
   const wizardSessionOnly = document.getElementById("wizardSessionOnly");
+  const wizardProvider = document.getElementById("wizardProvider");
+  const settingsProviderSelect = document.getElementById("settingsProviderSelect");
   const btnWizardTest = document.getElementById("btnWizardTest");
   const wizardTestResult = document.getElementById("wizardTestResult");
   const btnWizardSave = document.getElementById("btnWizardSave");
@@ -555,7 +567,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Reset Token Tracker UI & background loop tracker
     try {
-      chrome.runtime.sendMessage({ action: "RESET_LOOP_TRACKER" });
+      sendToBackground({ action: "RESET_LOOP_TRACKER" }).catch(() => {});
       updateTokenTrackerUI({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
     } catch (_) {}
 
@@ -613,13 +625,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function renderCurrentSession() {
-    chatArea.innerHTML = "";
+    chatArea.querySelectorAll('.message, .message-row, .task-card, .agent-status-card').forEach(el => el.remove());
+
     const session = getCurrentSession();
     if (!session || session.messages.length === 0) {
       renderWelcomeMessage();
       updateQuickChipsVisibility();
       return;
     }
+
+    const welcomeView = document.getElementById('welcomeView');
+    if (welcomeView) welcomeView.classList.add('hidden');
 
     session.messages.forEach((msg, idx) => {
       if (!msg.multiAgent) renderMessageBubble(msg, idx);
@@ -633,103 +649,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   window.renderCurrentSession = renderCurrentSession;
 
   function renderWelcomeMessage() {
-    chatArea.innerHTML = `
-      <div id="welcomeView">
-        <section class="hero-section">
-          <!-- Maskot Emblem Asli Pesat AI (Refined Product Twin-Chevron) -->
-          <div class="mascot-container">
-            <div class="mascot-badge-float">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="13 17 18 12 13 7"></polyline>
-                <polyline points="6 17 11 12 6 7"></polyline>
-              </svg>
-            </div>
-          </div>
-
-          <h1 class="hero-title">
-            Halo! Ada yang bisa <span class="highlight">Pesat Agent</span> bantu?
-          </h1>
-          <p class="hero-subtitle">
-            Asisten AI untuk aktivitas web Anda.
-          </p>
-        </section>
-
-        <!-- 2-Column Standard Quick Action Grid (UI/UX Spec § 4.3 & 4.5) -->
-        <section class="quick-grid">
-          <button type="button" class="action-card" data-prompt="Rangkum poin-poin utama halaman web ini secara ringkas dan terstruktur.">
-            <div class="action-card__icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="4" y="3" width="16" height="18" rx="3"/>
-                <line x1="8" y1="8" x2="16" y2="8"/>
-                <line x1="8" y1="12" x2="16" y2="12"/>
-                <line x1="8" y1="16" x2="12" y2="16"/>
-              </svg>
-            </div>
-            <span class="action-card__label">Rangkum halaman</span>
-          </button>
-
-          <button type="button" class="action-card" data-prompt="Jelaskan isi halaman ini dengan bahasa yang sederhana, jelas, dan mudah dipahami.">
-            <div class="action-card__icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                <line x1="12" y1="17" x2="12.01" y2="17"></line>
-              </svg>
-            </div>
-            <span class="action-card__label">Jelaskan halaman</span>
-          </button>
-
-          <button type="button" class="action-card" data-prompt="Ekstrak seluruh data penting atau tabel di halaman ini ke format tabel Markdown yang rapi.">
-            <div class="action-card__icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="12 2 2 7 12 12 22 7 12 2"/>
-                <polyline points="2 17 12 22 22 17"/>
-                <polyline points="2 12 12 17 22 12"/>
-              </svg>
-            </div>
-            <span class="action-card__label">Ekstrak data</span>
-          </button>
-
-          <button type="button" class="action-card" data-prompt="Terjemahkan isi utama halaman web ini ke Bahasa Indonesia yang alami dan baku.">
-            <div class="action-card__icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M5 8l6 6"/>
-                <path d="M4 14l6-6 2-3"/>
-                <path d="M2 5h12"/>
-                <path d="M7 2h1"/>
-                <path d="M22 22l-5-10-5 10"/>
-                <path d="M14 18h6"/>
-              </svg>
-            </div>
-            <span class="action-card__label">Terjemahkan</span>
-          </button>
-
-          <button type="button" class="action-card" data-prompt="Bantu saya menulis atau memperbaiki teks di dokumen yang sedang dibuka.">
-            <div class="action-card__icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
-              </svg>
-            </div>
-            <span class="action-card__label">Perbaiki teks</span>
-          </button>
-
-          <button type="button" class="action-card" data-prompt="Kerjakan tugas otomatis di tab aktif: periksa formulir dan lengkapi data yang diperlukan.">
-            <div class="action-card__icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="4" y="4" width="16" height="16" rx="3"/>
-                <polyline points="9 12 11 14 15 10"/>
-              </svg>
-            </div>
-            <span class="action-card__label">Kerjakan tugas</span>
-          </button>
-        </section>
-      </div>
-    `;
-    attachSuggestionListeners();
+    const welcomeView = document.getElementById('welcomeView');
+    if (welcomeView) welcomeView.classList.remove('hidden');
+    // Listener starter-card sudah dipasang sekali saat init; jangan pasang ulang.
   }
 
   function attachSuggestionListeners() {
-    document.querySelectorAll(".suggestion-item, .suggestion-tag, .action-card").forEach(tag => {
+    document.querySelectorAll(".suggestion-item, .suggestion-tag, .action-card, .starter-card").forEach(tag => {
       tag.addEventListener("click", () => {
         const prompt = tag.getAttribute("data-prompt");
         if (prompt) {
@@ -1801,19 +1727,45 @@ document.addEventListener("DOMContentLoaded", async () => {
       contentHtml = `<div class="agent-pipeline-container"><div class="agent-card"><div class="agent-card-header">Progress</div><div class="agent-card-body">${escapeHtml(progress)}</div></div></div>`;
       if (finalAnswer) contentHtml += `<div class="message-bubble markdown-body" style="margin-top:8px;">${parseMarkdown(finalAnswer)}</div>`;
     } else {
-      contentHtml = `<div class="message-bubble markdown-body">${parseMarkdown(msgText)}</div>`;
+      const modelLabel = escapeHtml(activeModelId || CFG.DEFAULT_MODEL);
+      contentHtml = `
+        <div class="message-bubble markdown-body">
+          <div class="msg-ai-top">
+            <span class="ai-badge-label">
+              <span class="online-dot"></span>
+              Pesat AI · ${modelLabel}
+            </span>
+          </div>
+          <div class="msg-ai-body">${parseMarkdown(msgText)}</div>
+        </div>`;
     }
 
-    const isPlainAssistant = !isUser && !msg.artifact && !msg.askUser && !msg.confirmation && !msg.taskCard
-      && msgText && String(msgText).trim();
+    // Catatan status "Selesai" untuk jawaban AI yang sudah final
+    const finishedNoteHtml = (!isUser && !msg.artifact && !msg.askUser && !msg.confirmation && !msg.taskCard && msgText && String(msgText).trim())
+      ? `<span class="subtle-meta-note">Selesai</span>`
+      : '';
 
-    const assistantAvatarHtml = `
-      <div class="assistant-avatar" aria-hidden="true">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="13 17 18 12 13 7"></polyline>
-          <polyline points="6 17 11 12 6 7"></polyline>
-        </svg>
-      </div>
+    msgDiv.innerHTML = `
+      ${contentHtml}
+      ${isUser ? `
+        <div class="message-actions">
+          <button class="action-icon-btn btn-edit-prompt" title="Edit prompt & jalankan ulang">✏️ Edit</button>
+        </div>
+      ` : (!msg.artifact && !msg.askUser && !msg.confirmation && !msg.taskCard && msgText && String(msgText).trim() ? `
+        <div class="assistant-msg-actions">
+          <div class="action-btn-group">
+            <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
+              <span>📋</span>
+              <span class="btn-copy-text">Salin</span>
+            </button>
+            <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
+              <span>⤴️</span>
+              <span class="btn-paste-text">Tempel ke Tab</span>
+            </button>
+          </div>
+          ${finishedNoteHtml}
+        </div>
+      ` : '')}
     `;
 
     if (isPlainAssistant) {
@@ -2010,7 +1962,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 		                  if (!isAlreadySocial) {
 		                    const isThreads = /threads/i.test(a.name || "") || /threads/i.test(contentStr);
 		                    const destUrl = isThreads ? "https://www.threads.net" : "https://x.com/compose/post";
-		                    await sendToBackground({ action: "NAVIGATE_TAB", url: destUrl, newTab: true });
+		                    await sendToBackground({ action: "NAVIGATE_TAB", url: destUrl });
 		                    await new Promise(r => setTimeout(r, 4000));
 		                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
 		                  }
@@ -2449,9 +2401,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
 
       // Edit model
-      row.querySelector(".btn-edit-model")?.addEventListener("click", (e) => {
+      row.querySelector(".btn-edit-model")?.addEventListener("click", async (e) => {
         e.stopPropagation();
-        const newName = prompt("Ubah nama model PesatRouter:", m.name);
+        const newName = await showPrompt("Ubah nama model PesatRouter:", "Ubah Nama Model", m.name);
         if (newName && newName.trim()) {
           m.name = newName.trim();
           m.id = newName.trim();
@@ -2461,10 +2413,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
 
       // Hapus model
-      row.querySelector(".btn-del-model")?.addEventListener("click", (e) => {
+      row.querySelector(".btn-del-model")?.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (modelsList.length <= 1) {
-          alert("Minimal harus ada 1 model di daftar.");
+          await showAlert("Minimal harus ada 1 model di daftar.");
           return;
         }
         modelsList = modelsList.filter(x => x.id !== m.id);
@@ -2499,12 +2451,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderModelItems(settingsModelItemsList, false);
   }
 
-  function handleAddModel() {
-    const name = prompt("Tambahkan model PesatRouter (contoh: pesat-lite, pesat-pro, pesat-flash, pesat-vision):");
+  async function handleAddModel() {
+    const name = await showPrompt("Tambahkan model PesatRouter (contoh: pesat-lite, pesat-pro, pesat-flash, pesat-vision):", "Tambah Model");
     if (!name || !name.trim()) return;
     const trimmed = name.trim();
     if (modelsList.some(m => m.id.toLowerCase() === trimmed.toLowerCase())) {
-      alert(`Model "${trimmed}" sudah ada di daftar.`);
+      await showAlert(`Model "${trimmed}" sudah ada di daftar.`);
       return;
     }
     modelsList.push({
@@ -2545,6 +2497,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       "apiBaseUrl",
       "apiFormat",
       "apiKey",
+      "apiProvider",
       "modelName",
       "sessionOnly",
       "googleClientId",
@@ -2589,6 +2542,32 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (wizardApiFormat) wizardApiFormat.value = storedSettings.apiFormat;
     if (wizardApiKey) wizardApiKey.value = storedSettings.apiKey;
     if (wizardSessionOnly) wizardSessionOnly.checked = storedSettings.sessionOnly;
+
+    // Provider selection: restore saved provider, apply default base URL when none saved
+    const savedProvider = storedSettings.apiProvider || "pesatrouter";
+    if (wizardProvider) wizardProvider.value = savedProvider;
+    if (settingsProviderSelect) settingsProviderSelect.value = savedProvider;
+    const providerDefaults = {
+      pesatrouter: "https://api.pesatrouter.com/v1",
+      openrouter: "https://openrouter.ai/api/v1",
+      openai: "https://api.openai.com/v1",
+      google: "https://generativelanguage.googleapis.com/v1beta/openai/",
+      custom: ""
+    };
+    const defaultBase = providerDefaults[savedProvider] || providerDefaults.pesatrouter;
+    if (wizardBaseUrl && (!storedSettings.apiBaseUrl || storedSettings.apiBaseUrl === providerDefaults.pesatrouter)) {
+      wizardBaseUrl.value = storedSettings.apiBaseUrl || defaultBase;
+    }
+
+    // Provider selection: ubah Base URL otomatis saat provider dipilih (kecuali Custom)
+    const applyProviderBase = (selectEl, inputEl) => {
+      const p = selectEl?.value;
+      if (!p || p === "custom") return;
+      const d = providerDefaults[p];
+      if (d && inputEl) inputEl.value = d;
+    };
+    if (wizardProvider) wizardProvider.addEventListener("change", () => applyProviderBase(wizardProvider, wizardBaseUrl));
+    if (settingsProviderSelect) settingsProviderSelect.addEventListener("change", () => applyProviderBase(settingsProviderSelect, document.getElementById("apiUrlInput")));
 
     // Sinkronisasi ke model indicator pill di composer
     if (composerModelName) composerModelName.textContent = activeModelId;
@@ -2680,11 +2659,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (statTodayTokens) statTodayTokens.textContent = `${toks.toLocaleString("id-ID")}`;
 
       // Ambil token usage akumulatif task dari background
-      chrome.runtime.sendMessage({ action: "GET_TOKEN_USAGE" }, (res) => {
-        if (res && res.taskTokenUsage) {
-          updateTokenTrackerUI(res.taskTokenUsage);
-        }
-      });
+      const resUsage = await sendToBackground({ action: "GET_TOKEN_USAGE" }).catch(() => ({}));
+      if (resUsage && resUsage.taskTokenUsage) {
+        updateTokenTrackerUI(resUsage.taskTokenUsage);
+      }
     } catch (e) {}
   }
 
@@ -2707,7 +2685,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       refreshUsageDisplay();
 
       // Rekam juga ke background tracker
-      chrome.runtime.sendMessage({ action: "RECORD_TOKEN_USAGE", usage });
+      await sendToBackground({ action: "RECORD_TOKEN_USAGE", usage }).catch(() => {});
     } catch (e) {}
   }
 
@@ -2726,6 +2704,91 @@ document.addEventListener("DOMContentLoaded", async () => {
   function closeBugReportModal() {
     if (!bugReportModal) return;
     bugReportModal.classList.add("hidden");
+  }
+
+  // ── Generic Modal Dialog (replaces alert/confirm/prompt) ──
+  let genericModalResolve = null;
+
+  function closeGenericModal(result) {
+    if (genericModal) genericModal.classList.add("hidden");
+    if (genericModalResolve) {
+      genericModalResolve(result);
+      genericModalResolve = null;
+    }
+  }
+
+  // Bind overlay click once (closing by clicking outside resolves null)
+  if (genericModal) {
+    genericModal.addEventListener("click", (e) => {
+      if (e.target === genericModal) closeGenericModal(null);
+    });
+  }
+
+  /**
+   * Show a generic modal dialog and return a Promise that resolves:
+   * - alert: true on OK, null on dismiss (outside click)
+   * - confirm: true on OK, null on Cancel/outside
+   * - prompt: input string on OK, null on Cancel/outside
+   */
+  function showModal({
+    type = "alert",
+    title = "Perhatian",
+    message = "",
+    defaultValue = "",
+    okLabel = "OK",
+    cancelLabel = "Batal",
+    destructive = false
+  } = {}) {
+    return new Promise((resolve) => {
+      if (!genericModal) { resolve(null); return; }
+      genericModalResolve = resolve;
+
+      genericModalTitle.textContent = title;
+      genericModalDesc.textContent = message;
+      genericModalInputValue.value = defaultValue || "";
+
+      // Icon by type
+      if (type === "confirm" || destructive) {
+        genericModalIcon.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+        genericModalIcon.style.color = destructive ? "#ef4444" : "var(--brand-primary)";
+        genericModalIcon.style.background = destructive ? "#fee2e2" : "var(--brand-soft)";
+      } else {
+        genericModalIcon.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 22s4-4 9-4 9 4 9 4"/><path d="M16 16.2A6.2 6.2 0 0 1 12.8 18c-1.7 0-3.2-.8-4-2"/></svg>`;
+        genericModalIcon.style.color = "var(--brand-primary)";
+        genericModalIcon.style.background = "var(--brand-soft)";
+      }
+
+      if (type === "prompt") {
+        genericModalInput.style.display = "block";
+        setTimeout(() => genericModalInputValue.focus(), 50);
+      } else {
+        genericModalInput.style.display = "none";
+      }
+
+      genericModalCancel.style.display = (type === "confirm" || type === "prompt") ? "inline-flex" : "none";
+      genericModalOk.textContent = okLabel;
+      genericModalOk.className = `btn ${destructive ? "btn-danger-pill" : "btn-primary-pill"}`;
+      genericModalCancel.textContent = cancelLabel;
+
+      genericModal.classList.remove("hidden");
+
+      genericModalOk.addEventListener("click", () => {
+        closeGenericModal(type === "prompt" ? genericModalInputValue.value : true);
+      });
+      genericModalCancel.addEventListener("click", () => {
+        closeGenericModal(null);
+      });
+    });
+  }
+
+  function showAlert(message, title = "Perhatian") {
+    return showModal({ type: "alert", title, message });
+  }
+  function showConfirm(message, title = "Konfirmasi") {
+    return showModal({ type: "confirm", title, message });
+  }
+  function showPrompt(message, title = "Input", defaultValue = "") {
+    return showModal({ type: "prompt", title, message, defaultValue });
   }
 
   async function submitBugReport() {
@@ -2757,7 +2820,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const actionLogs = activeTask?.scratchpad || [];
     const lastErr = activeTask?.scratchpad?.slice(-1)?.[0]?.observation || null;
 
-    chrome.runtime.sendMessage({
+    const bugRes = await sendToBackground({
       action: "SUBMIT_BUG_REPORT",
       userDescription: desc,
       includeLogs: !!bugIncludeLogs?.checked,
@@ -2765,19 +2828,21 @@ document.addEventListener("DOMContentLoaded", async () => {
       domSnapshot: domSnap,
       actionLogs: bugIncludeLogs?.checked ? actionLogs : [],
       lastError: lastErr
-    }, (response) => {
-      if (btnSubmitBugReport) {
-        btnSubmitBugReport.disabled = false;
-        btnSubmitBugReport.innerHTML = `
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-          </svg>
-          <span>Kirim Laporan</span>
-        `;
-      }
+    }).catch(() => ({ success: false }));
 
-      if (response && response.success) {
+    if (btnSubmitBugReport) {
+      btnSubmitBugReport.disabled = false;
+      btnSubmitBugReport.innerHTML = `
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+        <span>Kirim Laporan</span>
+      `;
+    }
+
+    const response = bugRes;
+    if (response && response.success) {
         if (bugReportAlert) {
           bugReportAlert.className = "";
           bugReportAlert.style.background = "rgba(16, 185, 129, 0.2)";
@@ -2797,7 +2862,6 @@ document.addEventListener("DOMContentLoaded", async () => {
           bugReportAlert.textContent = response?.error || "Gagal mengirim laporan. Coba lagi.";
         }
       }
-    });
   }
 
   if (btnBugReport) btnBugReport.addEventListener("click", openBugReportModal);
@@ -2843,6 +2907,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           apiBaseUrl: wizardBaseUrl?.value,
           apiFormat: wizardApiFormat?.value,
           apiKey: wizardApiKey?.value,
+          apiProvider: wizardProvider?.value || "pesatrouter",
           modelName: getModelName()
         },
         wizardTestResult,
@@ -2855,7 +2920,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     btnWizardSave.addEventListener("click", async () => {
       const rawKey = (wizardApiKey?.value || "").trim();
       if (!rawKey) {
-        alert("API Key wajib diisi untuk menggunakan Pesat Agent. Dapatkan API Key di pesatrouter.com.");
+        await showAlert("API Key wajib diisi untuk menggunakan Pesat Agent. Dapatkan API Key di pesatrouter.com.");
         wizardApiKey?.focus();
         return;
       }
@@ -2868,6 +2933,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         apiBaseUrl: base,
         apiFormat: fmt,
         apiKey: rawKey,
+        apiProvider: wizardProvider?.value || "pesatrouter",
         modelName: activeModelId,
         sessionOnly,
         googleClientId: storedSettings.googleClientId || ""
@@ -2878,6 +2944,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         await chrome.storage.local.set({
           apiBaseUrl: base,
           apiFormat: fmt,
+          apiProvider: wizardProvider?.value || "pesatrouter",
           modelName: activeModelId,
           pesat_models: modelsList,
           sessionOnly: true
@@ -2887,6 +2954,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         await chrome.storage.local.set({
           apiBaseUrl: base,
           apiFormat: fmt,
+          apiProvider: wizardProvider?.value || "pesatrouter",
           apiKey: rawKey,
           modelName: activeModelId,
           pesat_models: modelsList,
@@ -3099,6 +3167,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     displayRedirectUri.textContent = currentRedirectUri;
   }
 
+  const linkRedirectUri = document.getElementById("linkRedirectUri");
+  if (linkRedirectUri) {
+    linkRedirectUri.addEventListener("click", (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: currentRedirectUri });
+    });
+  }
+
   if (btnCopyRedirectUri) {
     btnCopyRedirectUri.addEventListener("click", async () => {
       try {
@@ -3192,8 +3268,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Navigasi URL tab browser secara andal (langsung via chrome.tabs API atau background)
+  // Guard navigasi ganda untuk mencegah bug "buka web" membuka 2 tab
+  let _lastNavigatedUrl = "";
+  let _lastNavigatedTime = 0;
+
   async function navigateToUrl(destUrl) {
     if (!destUrl) return { success: false, error: "URL tidak valid" };
+    const now = Date.now();
+    const norm = String(destUrl).trim();
+    if (norm === _lastNavigatedUrl && now - _lastNavigatedTime < 2000) {
+      appendLog(`⚠️ navigateToUrl diabaikan (duplikat dalam 2s): ${norm}`);
+      return { success: true, url: norm, skipped: true, message: `Sudah navigasi ke ${norm}` };
+    }
+    _lastNavigatedUrl = norm;
+    _lastNavigatedTime = now;
     let dest = String(destUrl).trim();
     if (!/^https?:\/\//i.test(dest)) {
       dest = "https://" + dest;
@@ -3275,19 +3363,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
       // Jangan persist screenshot base64 (besar) — hanya runtime in-memory
       const { _pendingScreenshot, ...persistable } = activeTask;
-      await chrome.storage.session.set({ [TASK_STORAGE_KEY]: persistable });
-    } catch (e) { /* storage.session tidak tersedia — abaikan */ }
+      await chrome.storage.local.set({ [TASK_STORAGE_KEY]: persistable });
+    } catch (e) { /* storage.local tidak tersedia — abaikan */ }
   }
 
   async function clearPersistedTask() {
     try {
-      await chrome.storage.session.remove(TASK_STORAGE_KEY);
+      await chrome.storage.local.remove(TASK_STORAGE_KEY);
     } catch (e) {}
   }
 
   async function loadResumableTask() {
     try {
-      const data = await chrome.storage.session.get([TASK_STORAGE_KEY]);
+      const data = await chrome.storage.local.get([TASK_STORAGE_KEY]);
       const task = data?.[TASK_STORAGE_KEY];
       if (task && ["PLANNING", "EXECUTING", "WAITING_USER", "PAUSED"].includes(task.status)) {
         appendResumeBanner(task);
@@ -3622,6 +3710,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ═══════════════════════════════════════════════════
   const WRITE_SKILLS = ["gworkspace_append_sheet_data", "gworkspace_update_sheet_data", "gworkspace_write_doc", "autofill_form_batch", "paste_text", "fill_spreadsheet_grid"];
   const HIGH_RISK_ACTIONS = new Set(["send_email", "post_social", "post_twitter", "post_x", "tweet", "social_post", "post_threads", "delete_knowledge_source"]);
+  // Aksi destruktif krusial: TIDAK BOLEH dilewati oleh confirmAllGranted, selalu butuh konfirmasi individual per pemanggilan.
+  const CRITICAL_DESTRUCTIVE_ACTIONS = new Set(["send_email", "post_social", "post_twitter", "post_x", "tweet", "social_post", "post_threads", "delete_knowledge_source"]);
   const RISKY_TEXT_RE = /(kirim|send|bayar|pay|pembayaran|hapus|delete|post|publish|checkout|order|beli\s|transfer|password|sandi|passwd)/i;
 
   function actionRiskLevel(resObj) {
@@ -3660,6 +3750,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   async function ensureActionApproval(resObj) {
     if (resObj?._approvalGranted || !isRiskyAction(resObj)) return { approved: true };
+    const act = resObj.action || "";
+    // Aksi destruktif krusial selalu butuh konfirmasi individual, tidak boleh dilewati oleh confirmAllGranted.
+    if (CRITICAL_DESTRUCTIVE_ACTIONS.has(act)) {
+      const verdict = await requestConfirmation(resObj);
+      if (!verdict || verdict.cancelled) return { approved: false, cancelled: true };
+      if (!verdict.approved) return { approved: false, cancelled: false };
+      resObj._approvalGranted = true;
+      if (activeTask?.status === "WAITING_USER") activeTask.status = "EXECUTING";
+      return { approved: true };
+    }
     if (activeTask?.confirmAllGranted) return { approved: true };
     const verdict = await requestConfirmation(resObj);
     if (!verdict || verdict.cancelled) return { approved: false, cancelled: true };
@@ -4331,14 +4431,15 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         : { verdict: "RETRY", subtaskComplete: false, reason: "Verifikasi deterministik gagal.", verification: deterministic.checks, errorType: deterministic.errorType };
     }
 
-    // Jika eksekusi aksi gagal, validator langsung kembalikan RETRY tanpa meloloskan ke DONE
-    if (lastResult !== "success") {
-      return {
-        verdict: "RETRY",
-        subtaskComplete: false,
-        reason: `Aksi '${safeActionType}' mengalami kegagalan eksekusi: ${lastAction?.message || "Error interaksi DOM"}`
-      };
-    }
+    // Inconclusive (tidak ada bukti verifikasi deterministik): jangan dipercayai sebagai sukses — fail closed.
+    // Tidak ada fallback ke LLM untuk kasus inconclusive sehingga tidak ada subtask yang ditandai selesai
+    // tanpa verifikasi deterministik yang konkret.
+    return {
+      verdict: "RETRY",
+      subtaskComplete: false,
+      reason: "Verifikasi deterministik tidak konklusif — tidak cukup bukti bahwa aksi berhasil.",
+      errorType: "VERIFICATION_INCONCLUSIVE"
+    };
 
     const isNavOrMenu = /(?:buka|klik|pilih|masuk|tampilkan|kunjungi|navigate|open|click)\s+(?:ke\s+)?(?:menu|sidebar|halaman|tab)?/i.test(sub?.description || activeTask?.goal || "");
     const isSingleStepGoal = (activeTask?.plan?.length || 0) <= 1;
@@ -4804,24 +4905,25 @@ ${topCompStr}
   async function runNewTabFlow(userPrompt, params) {
     const destUrl = params?.url || "https://www.google.com";
     setAgentRunning(true);
-    showStatusIndicator(`Membuka tab baru: ${destUrl}...`);
-    appendLog(`🌐 Membuka tab baru menuju: ${destUrl}...`);
+    showStatusIndicator(`Membuka di tab aktif: ${destUrl}...`);
+    appendLog(`🌐 Membuka di tab aktif menuju: ${destUrl}...`);
 
     try {
-      const res = await sendToBackground({ action: "NEW_TAB", url: destUrl });
+      // Navigasi di tab aktif (tab pertama), bukan tab baru — sesuai preferensi pengguna
+      const res = await sendToBackground({ action: "NAVIGATE_TAB", url: destUrl });
       if (res && res.success !== false) {
-        appendLog(`✅ Tab baru berhasil dibuka: ${destUrl}`);
-        const reply = `### 🌐 Tab Baru Berhasil Dibuka\n\n` +
+        appendLog(`✅ Berhasil membuka di tab aktif: ${destUrl}`);
+        const reply = `### 🌐 Berhasil Dibuka di Tab Aktif\n\n` +
           `- **URL Tujuan:** [${destUrl}](${destUrl})\n` +
-          `- **Status:** Tab baru telah dibuka dan diarahkan ke tautan yang diperintahkan.`;
+          `- **Status:** Halaman telah dibuka di tab aktif (tab pertama), bukan tab baru.`;
         addMessageToCurrentSession("assistant", reply, { skipClean: true });
       } else {
-        appendLog(`⚠️ Gagal membuka tab baru: ${res?.error || "Gagal membuka tab"}`, "WARN");
-        addMessageToCurrentSession("assistant", `⚠️ **Gagal membuka tab baru:**\n${res?.error || "Peramban menolak pembuatan tab baru."}`);
+        appendLog(`⚠️ Gagal membuka di tab aktif: ${res?.error || "Gagal membuka tab"}`, "WARN");
+        addMessageToCurrentSession("assistant", `⚠️ **Gagal membuka halaman:**\n${res?.error || "Peramban menolak navigasi."}`);
       }
     } catch (err) {
-      appendLog(`Error buka tab baru: ${err.message}`, "ERROR");
-      addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat membuka tab baru: ${err.message}`);
+      appendLog(`Error buka halaman di tab aktif: ${err.message}`, "ERROR");
+      addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat membuka halaman: ${err.message}`);
     } finally {
       setAgentRunning(false);
       hideStatusIndicator();
@@ -4909,9 +5011,12 @@ ${topCompStr}
   // ═══════════════════════════════════════════════════
   // MAIN: TASK EXECUTION LOOP (BYOK Gate Checked)
   // ═══════════════════════════════════════════════════
+  let _handleSendBusy = false;
   async function handleSend() {
     const userPrompt = promptInput.value.trim();
-    if (!userPrompt || isAgentRunning) return;
+    if (!userPrompt || isAgentRunning || _handleSendBusy) return;
+    _handleSendBusy = true;
+    try {
 
     // GERBANG BYOK (PLAN Phase A.3): Cek apakah API key sudah ada
     if (!isConfigured()) {
@@ -5029,9 +5134,7 @@ ${topCompStr}
       clearPersistedTask();
     }
 
-    chrome.runtime.sendMessage({ action: "RESET_LOOP_TRACKER" }, () => {
-      if (chrome.runtime.lastError) {}
-    });
+    await sendToBackground({ action: "RESET_LOOP_TRACKER" }).catch(() => {});
 
     let displayPrompt = userPrompt;
     const attachedFilesToDisplay = (contextSourcesToSend || []).filter(s => s && (s.type === "File" || s.type === "Image" || s.type === "BrowserTab"));
@@ -5146,6 +5249,11 @@ ${topCompStr}
     }
 
     await startTask(userPrompt, contextSourcesToSend);
+    } catch (err) {
+      appendLog(`Error handleSend: ${err.message}`, "ERROR");
+    } finally {
+      _handleSendBusy = false;
+    }
   }
 
   function parseMarkdownTable(markdown = "") {
@@ -5268,7 +5376,7 @@ ${topCompStr}
         if (activeTabInfo?.url?.includes("docs.google.com/document")) {
           appendLog(`🌐 Membuka tautan sumber di tab baru: ${detectedSourceUrl}...`);
           showStatusIndicator("Membuka sumber...");
-          await sendToBackground({ action: "NAVIGATE_TAB", url: detectedSourceUrl, newTab: true });
+          await sendToBackground({ action: "NAVIGATE_TAB", url: detectedSourceUrl });
         } else {
           appendLog(`🌐 Membuka tautan sumber target: ${detectedSourceUrl}...`);
           showStatusIndicator("Membuka sumber...");
@@ -7888,10 +7996,11 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   window.addEventListener("dragover", (e) => {
     e.preventDefault();
   });
-  window.addEventListener("dragleave", (e) => {
-    if (e.relatedTarget === null && dropOverlay) {
-      dropOverlay.classList.add("hidden");
-    }
+  window.addEventListener("dragleave", () => {
+    if (dropOverlay) dropOverlay.classList.add("hidden");
+  });
+  window.addEventListener("dragend", () => {
+    if (dropOverlay) dropOverlay.classList.add("hidden");
   });
   window.addEventListener("drop", (e) => {
     e.preventDefault();
@@ -8010,9 +8119,9 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       bar.classList.remove("hidden");
       if (titleEl) titleEl.textContent = title || `Tab #${tabId}`;
       if (btnFocus) {
-        btnFocus.onclick = () => {
+        btnFocus.addEventListener("click", () => {
           try { chrome.tabs.update(Number(tabId), { active: true }); } catch (_) {}
-        };
+        });
       }
     } else {
       bar.classList.add("hidden");
@@ -8202,28 +8311,14 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     historyDrawer.classList.add("hidden");
   });
   btnClearHistory.addEventListener("click", async () => {
-    if (confirm("Hapus semua riwayat percakapan?")) {
+    if (await showConfirm("Hapus semua riwayat percakapan?")) {
       sessions = [];
       createNewSession();
     }
   });
 
-  if (btnMoreMenu && moreDropdown) {
-    btnMoreMenu.addEventListener("click", (e) => {
-      e.stopPropagation();
-      moreDropdown.classList.toggle("hidden");
-    });
-
-    document.addEventListener("click", (e) => {
-      if (!moreDropdown.classList.contains("hidden") && !btnMoreMenu.contains(e.target) && !moreDropdown.contains(e.target)) {
-        moreDropdown.classList.add("hidden");
-      }
-    });
-
-    moreDropdown.addEventListener("click", () => {
-      moreDropdown.classList.add("hidden");
-    });
-  }
+  // btnMoreMenu dibuka via Unified Menu Drawer (lihat bagian akhir file).
+  // Blok dropdown lama dihapus agar tidak dobel membuka menu saat diklik.
 
   btnSettings.addEventListener("click", () => {
     moreDropdown?.classList.add("hidden");
@@ -8281,14 +8376,14 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     `).join("");
 
     memoryList.querySelectorAll(".memory-del-btn").forEach(btn => {
-      btn.onclick = async (e) => {
+      btn.addEventListener("click", async (e) => {
         e.stopPropagation();
         const id = btn.getAttribute("data-id");
         if (id) {
           await globalThis.PesatMemoryEngine?.remove?.(id);
           renderMemoryList();
         }
-      };
+      });
     });
   }
 
@@ -8385,7 +8480,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
 
   if (btnClearMemory) {
     btnClearMemory.addEventListener("click", async () => {
-      if (confirm("Hapus semua memori dan aturan tersimpan?")) {
+      if (await showConfirm("Hapus semua memori dan aturan tersimpan?")) {
         await globalThis.PesatMemoryEngine?.clear?.();
         renderMemoryList();
       }
@@ -8544,21 +8639,208 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     });
   }
 
+
+  // ══════════════════════════════════════════════════════════════════════
+  // TOAST SYSTEM + UNIFIED MENU DRAWER WIRING (UI Redesign v3)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  function ensureToastContainer() {
+    let tc = document.getElementById('toastContainer');
+    if (!tc) {
+      tc = document.createElement('div');
+      tc.id = 'toastContainer';
+      tc.className = 'toast-pill';
+      tc.style.position = 'fixed';
+      tc.style.top = '16px';
+      tc.style.right = '16px';
+      tc.style.zIndex = '9999';
+      tc.style.display = 'flex';
+      tc.style.flexDirection = 'column';
+      tc.style.gap = '8px';
+      tc.style.pointerEvents = 'none';
+      document.body.appendChild(tc);
+    }
+    return tc;
+  }
+
+  function showToast(message, type = 'info', duration = 4000) {
+    const tc = ensureToastContainer();
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.style.padding = '10px 14px';
+    el.style.borderRadius = '10px';
+    el.style.color = '#FFFFFF';
+    el.style.fontSize = '13px';
+    el.style.fontWeight = '600';
+    el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.gap = '8px';
+    el.style.animation = 'toastSlideIn 0.3s ease forwards';
+    el.textContent = message;
+    if (type === 'success') el.style.background = 'var(--brand-blue)';
+    else if (type === 'error') el.style.background = 'var(--brand-primary)';
+    else el.style.background = 'var(--text-primary)';
+    tc.appendChild(el);
+    setTimeout(() => {
+      el.style.animation = 'toastSlideOut 0.3s ease forwards';
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+  }
+
+  function hideToast() {
+    const tc = document.getElementById('toastContainer');
+    if (tc) tc.innerHTML = '';
+  }
+
+  // ── Unified Menu Drawer: tab switching ──
+  const drawerTabs = document.querySelectorAll('.d-tab-btn');
+  const drawerPanels = document.querySelectorAll('.drawer-tab-panel');
+  const btnDrawerTabNext = document.getElementById('btnDrawerTabNext');
+  const menuDrawer = document.getElementById('menuDrawer');
+  const btnCloseMenuDrawer = document.getElementById('btnCloseMenuDrawer');
+  const btnMenuDrawerClose = document.getElementById('btnMenuDrawerClose');
+  // btnMoreMenu sudah dideklarasikan di bagian DOM ELEMENTS (baris ~41)
+
+  function openDrawer() {
+    if (menuDrawer) menuDrawer.hidden = false;
+    showDrawerTab('drawerTabAccount');
+  }
+
+  function closeDrawer() {
+    if (menuDrawer) menuDrawer.hidden = true;
+  }
+
+  function showDrawerTab(tabId) {
+    drawerTabs.forEach(t => {
+      t.classList.remove('active');
+      t.setAttribute('aria-pressed', 'false');
+    });
+    drawerPanels.forEach(p => { p.hidden = true; });
+    const activeTab = document.querySelector(`.d-tab-btn[data-tab="${tabId}"]`);
+    const activePanel = document.getElementById(tabId);
+    if (activeTab) {
+      activeTab.classList.add('active');
+      activeTab.setAttribute('aria-pressed', 'true');
+    }
+    if (activePanel) activePanel.hidden = false;
+  }
+
+  drawerTabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabId = btn.getAttribute('data-tab');
+      if (tabId) showDrawerTab(tabId);
+    });
+  });
+
+  if (btnDrawerTabNext) {
+    btnDrawerTabNext.addEventListener('click', () => {
+      const tabsOrder = ['drawerTabAccount', 'drawerTabSkills', 'drawerTabUtilitas'];
+      const current = Array.from(drawerTabs).findIndex(t => t.classList.contains('active'));
+      const nextIndex = (current + 1) % tabsOrder.length;
+      showDrawerTab(tabsOrder[nextIndex]);
+    });
+  }
+
+  if (btnCloseMenuDrawer) btnCloseMenuDrawer.addEventListener('click', closeDrawer);
+  if (btnMenuDrawerClose) btnMenuDrawerClose.addEventListener('click', closeDrawer);
+
+  // Drawer navigation items
+  const btnOpenSettingsFromDrawer = document.getElementById('btnOpenSettingsFromDrawer');
+  const btnOpenWizardFromDrawer = document.getElementById('btnOpenWizardFromDrawer');
+  const btnOpenGoogleFromDrawer = document.getElementById('btnOpenGoogleFromDrawer');
+  const btnOpenMemoryFromDrawer = document.getElementById('btnOpenMemoryFromDrawer');
+  const btnOpenHistoryFromDrawer = document.getElementById('btnOpenHistoryFromDrawer');
+  const btnOpenBugFromDrawer = document.getElementById('btnOpenBugFromDrawer');
+  const btnOpenShortcutsFromDrawer = document.getElementById('btnOpenShortcutsFromDrawer');
+  const btnClearHistoryFromDrawer = document.getElementById('btnClearHistoryFromDrawer');
+  const btnClearMemoryFromDrawer = document.getElementById('btnClearMemoryFromDrawer');
+
+  if (btnOpenSettingsFromDrawer) {
+    btnOpenSettingsFromDrawer.addEventListener('click', () => {
+      closeDrawer();
+      const sp = document.getElementById('settingsPanel');
+      if (sp) sp.classList.remove('hidden');
+    });
+  }
+  if (btnOpenWizardFromDrawer) {
+    btnOpenWizardFromDrawer.addEventListener('click', () => {
+      closeDrawer();
+      const om = document.getElementById('onboardingModal');
+      if (om) om.classList.remove('hidden');
+    });
+  }
+  if (btnOpenGoogleFromDrawer) {
+    btnOpenGoogleFromDrawer.addEventListener('click', () => {
+      closeDrawer();
+      const sp = document.getElementById('settingsPanel');
+      if (sp) sp.classList.remove('hidden');
+    });
+  }
+  if (btnOpenMemoryFromDrawer) {
+    btnOpenMemoryFromDrawer.addEventListener('click', () => {
+      closeDrawer();
+      const md = document.getElementById('memoryDrawer');
+      if (md) md.classList.toggle('hidden');
+    });
+  }
+  if (btnOpenHistoryFromDrawer) {
+    btnOpenHistoryFromDrawer.addEventListener('click', () => {
+      closeDrawer();
+      const hd = document.getElementById('historyDrawer');
+      if (hd) hd.classList.toggle('hidden');
+    });
+  }
+  if (btnOpenBugFromDrawer) {
+    btnOpenBugFromDrawer.addEventListener('click', () => {
+      closeDrawer();
+      openBugReportModal();
+    });
+  }
+  if (btnOpenShortcutsFromDrawer) {
+    btnOpenShortcutsFromDrawer.addEventListener('click', () => {
+      closeDrawer();
+      showToast('Pintasan: Ctrl+Shift+Y buka side panel.', 'info', 2500);
+    });
+  }
+  if (btnClearHistoryFromDrawer) {
+    btnClearHistoryFromDrawer.addEventListener('click', async () => {
+      closeDrawer();
+      if (await showConfirm('Hapus semua riwayat percakapan?')) {
+        sessions = [];
+        createNewSession();
+      }
+    });
+  }
+  if (btnClearMemoryFromDrawer) {
+    btnClearMemoryFromDrawer.addEventListener('click', async () => {
+      closeDrawer();
+      if (await showConfirm('Hapus semua memori dan aturan?')) {
+        await globalThis.PesatMemoryEngine?.clear?.();
+        renderMemoryList();
+      }
+    });
+  }
+
+  // Buka drawer melalui tombol More Menu di header
+  if (btnMoreMenu) {
+    btnMoreMenu.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDrawer();
+    });
+  }
+
   // ═══════════════════════════════════════════════════
   // INITIALIZATION (Runs after all variables & functions are declared)
   // ═══════════════════════════════════════════════════
-  await loadSettings();
-  await loadSessions();
-  await refreshGoogleStatus();
-  await loadResumableTask();
-  await refreshUsageDisplay();
-  attachSuggestionListeners();
-  initQuickChipsSlider();
-  checkOnboarding();
-  await checkPendingPrompt();
-  syncSendButtonState();
-  appendLog("Sesi ekstensi v5.2 (Direct PesatRouter BYOK) diaktifkan.", "INFO", { timestamp: Date.now() }, "SESSION_OPEN");
 
+  // Safety net: pastikan semua overlay tertutup saat halaman dimuat
+  // JANGAN set hidden=true pada menuDrawer karena itu menggunakan hidden attribute untuk toggle
+  document.querySelectorAll('.modal-overlay, .drop-overlay, .composer-model-dropdown, .more-dropdown, .history-drawer, .settings-panel').forEach(el => {
+    el.classList.add('hidden');
+  });
+
+  // Pasang event listener SEBELUM await untuk memastikan tombol responsif
   btnSend.addEventListener("click", () => {
     if (isAgentRunning) {
       abortAgentExecution("Pengguna menghentikan proses via tombol Stop.");
@@ -8566,4 +8848,17 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       handleSend();
     }
   });
+
+  // Async initialization dengan try-catch untuk mencegah blocking
+  try { await loadSettings(); } catch (_) {}
+  try { await loadSessions(); } catch (_) {}
+  try { await refreshGoogleStatus(); } catch (_) {}
+  try { await loadResumableTask(); } catch (_) {}
+  try { await refreshUsageDisplay(); } catch (_) {}
+  attachSuggestionListeners();
+  initQuickChipsSlider();
+  checkOnboarding();
+  try { await checkPendingPrompt(); } catch (_) {}
+  syncSendButtonState();
+  appendLog("Sesi ekstensi v5.2 (Direct PesatRouter BYOK) diaktifkan.", "INFO", { timestamp: Date.now() }, "SESSION_OPEN");
 });

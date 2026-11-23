@@ -1054,7 +1054,8 @@ ATURAN KETAT:
           url = "https://www.google.com/search?q=" + encodeURIComponent(rawUrl);
         }
 
-        if (request.action === "CREATE_TAB" || request.action === "OPEN_TAB" || request.action === "OPEN_NEW_TAB" || request.action === "open_new_tab" || request.action === "NEW_TAB" || request.newTab) {
+        const forceNewTab = ["CREATE_TAB", "OPEN_TAB", "OPEN_NEW_TAB", "open_new_tab", "NEW_TAB"].includes(request.action);
+        if (forceNewTab) {
           // Tab deduplication: jika membuka URL layanan penting (Gmail, Docs, Sheets), cek apakah sudah ada tab terbuka
           if (tabs && tabs.length > 0 && /mail\.google\.com|docs\.google\.com\/(?:document|spreadsheets)/i.test(url)) {
             try {
