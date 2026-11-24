@@ -3550,8 +3550,13 @@ ${tabText}`;
       }
 
       // 3. Fallback Universal Clipboard Injection
+      // writeText butuh fokus dokumen; jika tab tidak aktif/focused, browser menolak.
+      // Selalu catch agar tidak memunculkan Uncaught NotAllowedError di console.
       try {
-        navigator.clipboard?.writeText?.(text);
+        const writePromise = navigator.clipboard?.writeText?.(text);
+        if (writePromise && typeof writePromise.catch === "function") {
+          writePromise.catch(() => {});
+        }
         inserted = true;
       } catch (e) {}
 
@@ -5047,6 +5052,9 @@ ${tabText}`;
           navigator.clipboard.writeText(res.reply).then(() => {
             copyBtn.textContent = "✓ Tersalin";
             setTimeout(() => { copyBtn.textContent = "📋 Salin"; }, 2000);
+          }).catch(() => {
+            copyBtn.textContent = "⚠️ Gagal";
+            setTimeout(() => { copyBtn.textContent = "📋 Salin"; }, 2000);
           });
         };
 
@@ -5286,6 +5294,9 @@ ${tabText}`;
         copyBtn.onclick = () => {
           navigator.clipboard.writeText(res.reply).then(() => {
             copyBtn.textContent = "✓ Tersalin";
+            setTimeout(() => { copyBtn.textContent = "📋 Salin"; }, 2000);
+          }).catch(() => {
+            copyBtn.textContent = "⚠️ Gagal";
             setTimeout(() => { copyBtn.textContent = "📋 Salin"; }, 2000);
           });
         };
