@@ -35,6 +35,39 @@ const actionHistoryPerTab = new Map();
 // Tab aktif yang sedang menjalankan otomasi agen (terproteksi dari pembersihan marker saat tab switch)
 const activeAgentTabs = new Set();
 
+// Tandai satu tab sebagai "sedang dikerjakan agent": Tab Group merah + border glow ala Comet.
+function markAgentTabActive(tid) {
+  if (!tid) return;
+  activeAgentTabs.add(tid);
+  if (chrome.tabs?.group && chrome.tabGroups) {
+    try {
+      chrome.tabs.group({ tabIds: [tid] }, (groupId) => {
+        if (!chrome.runtime.lastError && typeof groupId === "number") {
+          chrome.tabGroups.update(groupId, {
+            title: "⚡ Pesat Agent",
+            color: "red"
+          }, () => { if (chrome.runtime.lastError) {} });
+        }
+      });
+    } catch (_) {}
+  }
+  try {
+    chrome.tabs.sendMessage(tid, { type: "PESAT_SET_WORKING_BORDER", active: true });
+  } catch (_) {}
+}
+
+// Lepas indikator "sedang dikerjakan agent" dari satu tab.
+function clearAgentTabActive(tid) {
+  if (!tid) return;
+  activeAgentTabs.delete(tid);
+  if (chrome.tabs?.ungroup) {
+    try { chrome.tabs.ungroup([tid], () => { if (chrome.runtime.lastError) {} }); } catch (_) {}
+  }
+  try {
+    chrome.tabs.sendMessage(tid, { type: "PESAT_SET_WORKING_BORDER", active: false });
+  } catch (_) {}
+}
+
 // Task Token Usage Accumulator Tracker
 let taskTokenUsage = {
   prompt_tokens: 0,
@@ -491,27 +524,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "SET_ACTIVE_AGENT_TAB") {
-    const tid = Number(request.tabId);
+    let tid = Number(request.tabId);
     if (tid) {
-      activeAgentTabs.add(tid);
-      // Comet Browser Experience: Chrome Tab Group berwarna Merah Pesat
-      if (chrome.tabs?.group && chrome.tabGroups) {
-        try {
-          chrome.tabs.group({ tabIds: [tid] }, (groupId) => {
-            if (!chrome.runtime.lastError && typeof groupId === "number") {
-              chrome.tabGroups.update(groupId, {
-                title: "⚡ Pesat Agent",
-                color: "red"
-              }, () => {
-                if (chrome.runtime.lastError) {}
-              });
-            }
-          });
-        } catch (_) {}
-      }
-      // Kirim sinyal border ambient glow ke content script tab tersebut
+      markAgentTabActive(tid);
+    } else {
+      // Fallback: tandai tab aktif saat ini jika tabId tidak dikirim
       try {
-        chrome.tabs.sendMessage(tid, { type: "PESAT_SET_WORKING_BORDER", active: true });
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs && tabs[0] && tabs[0].id) markAgentTabActive(tabs[0].id);
+        });
       } catch (_) {}
     }
     sendResponse({ success: true });
@@ -521,19 +542,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "CLEAR_ACTIVE_AGENT_TAB") {
     const tid = Number(request.tabId);
     if (tid) {
-      activeAgentTabs.delete(tid);
-      // Lepas tab dari Tab Group saat tugas selesai
-      if (chrome.tabs?.ungroup) {
-        try {
-          chrome.tabs.ungroup([tid], () => {
-            if (chrome.runtime.lastError) {}
-          });
-        } catch (_) {}
-      }
-      // Matikan border ambient glow di tab
-      try {
-        chrome.tabs.sendMessage(tid, { type: "PESAT_SET_WORKING_BORDER", active: false });
-      } catch (_) {}
+      clearAgentTabActive(tid);
+    } else {
+      // Bersihkan seluruh tab agent yang ditandai
+      for (const id of Array.from(activeAgentTabs)) clearAgentTabActive(id);
     }
     sendResponse({ success: true });
     return true;

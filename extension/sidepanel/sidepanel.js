@@ -2225,15 +2225,34 @@ document.addEventListener("DOMContentLoaded", async () => {
     return Math.round(val);
   }
 
+  // Ubah jumlah token numerik menjadi label singkat ramah (mis. 1048576 → "1M", 131072 → "128K").
+  function formatContextShort(num) {
+    const n = Number(num) || 0;
+    if (n >= 1024 * 1024) {
+      const m = n / (1024 * 1024);
+      return (Number.isInteger(m) ? m : m.toFixed(1)) + "M";
+    }
+    if (n >= 1024) {
+      const k = Math.round(n / 1024);
+      return k + "K";
+    }
+    return String(n);
+  }
+
   function updateTokenTrackerUI(usage = {}) {
     if (!tokenTrackerText) return;
     const promptToks = Number(usage.prompt_tokens) || 0;
     const compToks = Number(usage.completion_tokens) || 0;
     const totalToks = Number(usage.total_tokens) || (promptToks + compToks);
     const activeModel = modelsList.find(m => m.id === activeModelId);
-    const maxToks = Number(storedSettings.maxTokens) || parseContextWindow(activeModel?.context) || 4096;
+    // Tampilkan label konteks ramah: pakai string model jika ada ("1M", "128K"), else format dari angka.
+    const rawContext = activeModel?.context;
+    const maxToks = Number(storedSettings.maxTokens) || parseContextWindow(rawContext) || 4096;
+    const contextLabel = (rawContext && /^[\d.]+\s*[KMkm]?$/.test(String(rawContext).trim()))
+      ? String(rawContext).trim().toUpperCase().replace(/\s+/g, "")
+      : formatContextShort(maxToks);
 
-    tokenTrackerText.innerHTML = `Tokens: <strong>${totalToks.toLocaleString("id-ID")}</strong> (Prompt: ${promptToks.toLocaleString("id-ID")}, Output: ${compToks.toLocaleString("id-ID")}) | Context: ${maxToks.toLocaleString("id-ID")}`;
+    tokenTrackerText.innerHTML = `Tokens: <strong>${totalToks.toLocaleString("id-ID")}</strong> (Prompt: ${promptToks.toLocaleString("id-ID")}, Output: ${compToks.toLocaleString("id-ID")}) | Context: ${contextLabel}`;
   }
 
   async function refreshUsageDisplay() {
@@ -4579,8 +4598,13 @@ ${topCompStr}
     }
 
     // Deteksi pembuatan draf konten murni (revisi/ganti draft tanpa aksi fisik)
+    // Kecualikan niat navigasi+pencarian nyata seperti "buka cnn dan cari berita tentang gibran".
+    const isBrowseAndSearchIntent = /(?:buka|kunjungi|open|go\s*to|akses|ke)\s+.+\s+(?:dan|lalu|kemudian|setelah\s+itu)\s+(?:cari|search|temukan|carikan|riset)/i.test(userPrompt) ||
+      /(?:cari|search|temukan|carikan|riset)\s+.+\s+(?:di|pada|ke)\s+[a-zA-Z0-9.-]+/i.test(userPrompt) ||
+      /(?:cari|search|temukan|carikan|riset)\s+(?:berita|info|informasi|artikel|tentang)\s+.+/i.test(userPrompt);
     const isContentDraftingIntent = /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan|ulasan|ringkasan|makalah|esai)/i.test(userPrompt) &&
-      !/(?:posting\s+ke|post\s+ke|kirim\s+ke|upload|unggah\s+ke|buka\s+komposer|isi\s+form|autofill|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos)|tempel.*(?:threads|x|twitter))/i.test(userPrompt);
+      !/(?:posting\s+ke|post\s+ke|kirim\s+ke|upload|unggah\s+ke|buka\s+komposer|isi\s+form|autofill|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos)|tempel.*(?:threads|x|twitter))/i.test(userPrompt) &&
+      !isBrowseAndSearchIntent;
 
     // Deteksi aksi otomasi browser fisik (klik, login, isi form, navigasi direct, posting medsos)
     const isPhysicalAutomation = !isContentDraftingIntent && (
@@ -4592,8 +4616,9 @@ ${topCompStr}
       /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt) && /(?:kirim|tulis|compose|buat|send)/i.test(userPrompt) ||
       /(?:^(?:klik|click|select|pilih|centang|check|uncheck|tekan|press|scroll|gulir|download|unduh|checkout|pesan sekarang|beli sekarang)\b)/i.test(userPrompt.trim()) ||
       /(?:(?:tolong\s+|mohon\s+)?(?:klik|click|pilih|centang|tekan|scroll)\s+(?:tombol|button|link|tautan|menu|tab|kolom|elemen))/i.test(userPrompt) ||
-      /^(?:tolong\s+|mohon\s+)?(?:cari|search|carikan|temukan)\s+.+\s+(?:di|pada|ke)\s+[a-zA-Z0-9.-]+/i.test(userPrompt)
-    ) && (!/(?:rangkum|ringkas|summarize|ringkasan|rangkuman|intisari|jelaskan|analisa|analisis|apa\s+isi|baca\s+tab)/i.test(userPrompt) || /(?:komposer|twitter|x\.com|threads|medsos|isi\s+(?:seluruh\s+|semua\s+)?(?:form|formulir)|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(userPrompt));
+      /^(?:tolong\s+|mohon\s+)?(?:cari|search|carikan|temukan)\s+.+\s+(?:di|pada|ke)\s+[a-zA-Z0-9.-]+/i.test(userPrompt) ||
+      isBrowseAndSearchIntent
+    ) && (!/(?:rangkum|ringkas|summarize|ringkasan|rangkuman|intisari|jelaskan|analisa|analisis|apa\s+isi|baca\s+tab)/i.test(userPrompt) || /(?:komposer|twitter|x\.com|threads|medsos|isi\s+(?:seluruh\s+|semua\s+)?(?:form|formulir)|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(userPrompt) || isBrowseAndSearchIntent);
 
     const isMultiStepGoal = /(?:lalu|kemudian|setelah\s+itu|\bthen\b|setelahnya|dan\s+(?:buka|paste|tempel|masukkan|kirim)|(?:buka|kunjungi).*(?:lalu|kemudian|setelah|paste|tempel))/i.test(userPrompt);
 
@@ -5432,6 +5457,15 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
     showStatusIndicator();
     appendLog(`Memulai task: "${goal}" (${contextSources.length} konteks terlampir)`);
 
+    // Tandai tab aktif sebagai "sedang dikerjakan agent" (indikator visual ala Comet)
+    try {
+      const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const activeTabId = activeTabs && activeTabs[0] ? activeTabs[0].id : null;
+      sendToBackground({ action: "SET_ACTIVE_AGENT_TAB", tabId: activeTabId }).catch(() => {});
+    } catch (_) {
+      sendToBackground({ action: "SET_ACTIVE_AGENT_TAB" }).catch(() => {});
+    }
+
     activeTask = newTask(goal, contextSources);
     taskCardMsgIndex = -1;
     await persistTask();
@@ -5466,13 +5500,17 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
 	      }
 
 	      // 1.5. Cek apakah ini instruksi analisis, penjelasan, pembuatan draf, atau perangkuman (tanpa aksi manipulasi fisik)
+      const isBrowseAndSearchGoal = /(?:buka|kunjungi|open|go\s*to|akses|ke)\s+.+\s+(?:dan|lalu|kemudian|setelah\s+itu)\s+(?:cari|search|temukan|carikan|riset)/i.test(goal) ||
+        /(?:cari|search|temukan|carikan|riset)\s+.+\s+(?:di|pada|ke)\s+[a-zA-Z0-9.-]+/i.test(goal) ||
+        /(?:cari|search|temukan|carikan|riset)\s+(?:berita|info|informasi|artikel|tentang)\s+.+/i.test(goal);
       const isSocialActionInGoal = /(?:posting|post|tweet|unggah|publikasikan|komposer|tempelkan.*(?:twitter|x|threads|medsos)|buka\s+komposer|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(goal);
       const isFormFillingActionInGoal = /(?:isi\s+(?:seluruh\s+|semua\s+)?(?:form|formulir|field|kolom|data)|autofill)/i.test(goal);
       const isDraftingOrRewritingGoal = /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan)\b/i.test(goal) &&
         !/(?:posting\s+ke|post\s+ke|kirim\s+ke|upload|unggah\s+ke|buka\s+komposer|isi\s+form|autofill|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(goal) &&
-        !((/(?:cari|search|riset)/i.test(goal)) && /[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i.test(goal));
+        !((/(?:cari|search|riset)/i.test(goal)) && /[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i.test(goal)) &&
+        !isBrowseAndSearchGoal;
 
-      const isAnalysisOrSummaryGoal = isDraftingOrRewritingGoal || (!isSocialActionInGoal && !isFormFillingActionInGoal && (
+      const isAnalysisOrSummaryGoal = (isDraftingOrRewritingGoal && !isBrowseAndSearchGoal) || (!isSocialActionInGoal && !isFormFillingActionInGoal && !isBrowseAndSearchGoal && (
         /(?:rangkum|ringkas|summarize|ringkasan|rangkuman|intisari|poin\s+penting)\b/i.test(goal) ||
         /(?:^|\b)(?:analisa|analisis|analyze|analysis|audit|review|tinjau|bedah|evaluasi|periksa|cek|riset)\b/i.test(goal) ||
         /(?:^|\b)(?:gimana|gmn|bagaimana|bgm|apa|apakah|kenapa|mengapa|siapa|dimana|kapan|berapa|how|what|why|where|when|which|fix|cara|solusi|perbaiki|remediasi|mengatasi|jelaskan|terangkan|bahas|ulas|kode|contoh|panduan|langkah|rekomendasi)\b/i.test(goal) ||
@@ -6080,8 +6118,8 @@ ${sub.description}
 
       // 1. Cek Native Tool Calls (OpenAI standard format)
       if (reply && reply.tool_calls && Array.isArray(reply.tool_calls) && reply.tool_calls.length > 0) {
-        if (reply.tool_calls.length !== 1) {
-          throw Object.assign(new Error(`Respons berisi ${reply.tool_calls.length} tool calls; hanya satu tool call per browser step diizinkan.`), { code: "INVALID_INPUT" });
+        if (reply.tool_calls.length > 1) {
+          appendLog(`⚠️ Model mengembalikan ${reply.tool_calls.length} tool calls sekaligus. Menjalankan hanya yang pertama per step (protokol satu-aksi).`, "WARN");
         }
         const tc = reply.tool_calls[0];
         const fnName = tc.function?.name;
@@ -6704,6 +6742,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     await clearPersistedTask();
     setAgentRunning(false);
     hideStatusIndicator();
+    sendToBackground({ action: "CLEAR_ACTIVE_AGENT_TAB" }).catch(() => {});
     sendToContentScript({ type: "UNLOCK_PAGE" }).catch(() => {});
   }
 
