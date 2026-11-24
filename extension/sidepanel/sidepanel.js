@@ -2140,6 +2140,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (Array.isArray(local.pesat_models) && local.pesat_models.length > 0) {
       modelsList = local.pesat_models;
+      // Migrasi: paksa context pesat-flash ke "1M" bila masih tersimpan "32K" lama.
+      let migrated = false;
+      modelsList = modelsList.map(m => {
+        if (m && m.id === "pesat-flash" && m.context && String(m.context).toUpperCase() === "32K") {
+          migrated = true;
+          return { ...m, context: "1M" };
+        }
+        return m;
+      });
+      if (migrated) {
+        try { chrome.storage.local.set({ pesat_models: modelsList }); } catch (_) {}
+      }
     } else if (Array.isArray(CFG.DEFAULT_MODELS)) {
       modelsList = [...CFG.DEFAULT_MODELS];
     }

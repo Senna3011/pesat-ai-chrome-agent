@@ -219,6 +219,25 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
       }
     },
 
+    // Estimasi kasar token (~4 karakter/token) dari total karakter seluruh content pesan.
+    // Lebih akurat dari JSON.stringify yang menghitung struktur JSON sebagai "token".
+    _estimateUsage(promptText, payloadMessages, replyText) {
+      let promptChars = String(promptText || "").length;
+      for (const m of (payloadMessages || [])) {
+        const c = m?.content;
+        if (typeof c === "string") promptChars += c.length;
+        else if (Array.isArray(c)) {
+          for (const part of c) {
+            if (part && typeof part.text === "string") promptChars += part.text.length;
+          }
+        }
+      }
+      const replyChars = String(replyText || "").length;
+      const p = Math.ceil(promptChars / 4);
+      const c = Math.ceil(replyChars / 4);
+      return { prompt_tokens: p, completion_tokens: c, total_tokens: p + c };
+    },
+
     async callLLMDirect({ phase, prompt, messages = [], taskState = null, domTree = "", config = {}, signal, useTools = true, isSummarize = false, onChunk = null, image = null }) {
       const promptText = prompt || "";
       const apiKey = (config.apiKey || "").trim();
@@ -340,12 +359,9 @@ Gunakan hanya tool yang tersedia. Maksimal 10 langkah. Langkah act wajib memilik
             onChunk
           );
           const finalReply = streamRes.reply || "";
-          // Pakai usage asli dari stream bila tersedia; jika tidak, estimasi kasar.
-          const usage = streamRes.usage || {
-            prompt_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length) / 4),
-            completion_tokens: Math.ceil(finalReply.length / 4),
-            total_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length + finalReply.length) / 4)
-          };
+          // Pakai usage asli dari stream bila tersedia; jika tidak, estimasi kasar
+          // berdasarkan total karakter seluruh pesan (bukan JSON.stringify yang termasuk struktur).
+          const usage = streamRes.usage || this._estimateUsage(promptText, payloadMessages, finalReply);
           try {
             if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
               chrome.runtime.sendMessage({ action: "RECORD_TOKEN_USAGE", usage }).catch(() => {});
@@ -388,11 +404,7 @@ Gunakan hanya tool yang tersedia. Maksimal 10 langkah. Langkah act wajib memilik
         const replyText = (choice.message?.content !== undefined && choice.message?.content !== null && choice.message?.content !== "")
           ? choice.message.content
           : (choice.message?.reasoning_content || data.reply || "");
-        const usage = data.usage || {
-          prompt_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length) / 4),
-          completion_tokens: Math.ceil(replyText.length / 4),
-          total_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length + replyText.length) / 4)
-        };
+        const usage = data.usage || this._estimateUsage(promptText, payloadMessages, replyText);
 
         try {
           if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
@@ -441,11 +453,7 @@ Gunakan hanya tool yang tersedia. Maksimal 10 langkah. Langkah act wajib memilik
         const data = (typeof res === "object" && res !== null && !(res instanceof Response)) ? res : await res.json();
         const choice = data?.choices?.[0] || {};
         const replyText = choice.message?.content || data?.reply || data?.response || "";
-        const usage = data.usage || {
-          prompt_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length) / 4),
-          completion_tokens: Math.ceil(replyText.length / 4),
-          total_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length + replyText.length) / 4)
-        };
+        const usage = data.usage || this._estimateUsage(promptText, payloadMessages, replyText);
 
         try {
           if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
