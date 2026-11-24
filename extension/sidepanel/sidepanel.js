@@ -1527,7 +1527,9 @@ document.addEventListener("DOMContentLoaded", async () => {
           <div class="doc-card-container table-card-theme">
             <div class="doc-card-header">
               <div class="doc-card-title-group">
-                <span class="doc-badge-icon table-badge">📊</span>
+                <span class="doc-badge-icon table-badge" title="Google Sheets">
+                  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M6 2h8l4 4v16a0 0 0 0 1 0 0H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path fill="#FFFFFF" d="M8 7h8v2H8zm0 4h8v2H8zm0 4h8v2H8z"/><path fill="#FFFFFF" d="M8 11h2v8H8zm4 0h2v8h-2z" opacity="0.85"/></svg>
+                </span>
                 <div class="doc-card-meta">
                   <div class="doc-card-title">${escapeHtml(tableTitle)}</div>
                   <div class="doc-card-subtitle">Format Spreadsheet Excel (.XLS) & Tabel Data (.CSV)</div>
@@ -1553,7 +1555,9 @@ document.addEventListener("DOMContentLoaded", async () => {
           <div class="doc-card-container">
             <div class="doc-card-header">
               <div class="doc-card-title-group">
-                <span class="doc-badge-icon">📄</span>
+                <span class="doc-badge-icon docs-badge" title="Google Docs">
+                  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A1C2FA" d="M14 2v6h6z"/><path fill="#FFFFFF" d="M8 12h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>
+                </span>
                 <div class="doc-card-meta">
                   <div class="doc-card-title">${escapeHtml(docTitle)}</div>
                   <div class="doc-card-subtitle">Format Dokumen Word (.docx) & Docs • ${wordCount} kata</div>
@@ -5334,6 +5338,35 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         if (streamContainer && streamContainer.parentNode) {
           streamContainer.parentNode.removeChild(streamContainer);
         }
+      }
+
+      // ── Bersihkan kebocoran tool-call mentah (mis. <tool_call><function=web_fetch>...)
+      // agar user tidak kebingungan melihat XML/dump. Bila model hanya mengeluarkan
+      // tool-call tanpa jawaban, minta jawaban langsung sekali lagi.
+      {
+        const noise = globalThis.PesatToolCallNoise;
+        const friendly = noise ? noise.FRIENDLY_RETRY_MSG : "Maaf, saya belum bisa menyelesaikan perintah ini.";
+        let safe = noise ? noise.sanitizeAssistantReply(aiReply) : aiReply;
+        if (safe === friendly && !shouldStopAgent) {
+          try {
+            appendLog("ℹ️ Model mengeluarkan tool-call mentah; meminta jawaban langsung sekali lagi...", "WARN");
+            const retryRaw = await callLLM(
+              "chat",
+              promptPayload + "\n\nPENTING: Jawab LANGSUNG dalam teks biasa (Markdown) berdasarkan konten yang diberikan. JANGAN keluarkan tool call, XML, <function=...>, atau JSON. Tulis hanya jawaban/analisis akhir.",
+              { image: primaryImage, isSummarize: isSummarize }
+            );
+            const retrySafe = noise ? noise.sanitizeAssistantReply(retryRaw) : retryRaw;
+            if (retrySafe && retrySafe !== friendly) {
+              aiReply = retrySafe;
+              safe = retrySafe;
+            } else {
+              safe = "Maaf, layanan AI mengembalikan respons tidak valid (berupa tool-call). Coba lagi atau perjelas perintah Anda.";
+            }
+          } catch (e) {
+            safe = "Maaf, layanan AI mengembalikan respons tidak valid. Coba lagi.";
+          }
+        }
+        aiReply = safe;
       }
 
       const isDocsOutput = !isExplicitExcelOrCsv && (isDocsTableTask || isDocsArticleTask || (isDocsTarget && !isSpreadsheetTask));
