@@ -24,8 +24,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   const clearChatModal = document.getElementById("clearChatModal");
   const btnCancelClearChat = document.getElementById("btnCancelClearChat");
   const btnConfirmClearChat = document.getElementById("btnConfirmClearChat");
+  const btnNewChat = document.getElementById("btnNewChat");
+  const btnHistory = document.getElementById("btnHistory");
+  const btnMemory = document.getElementById("btnMemory");
+  const btnSettings = document.getElementById("btnSettings");
+  const btnMoreMenu = document.getElementById("btnMoreMenu");
+  const moreDropdown = document.getElementById("moreDropdown");
+  const welcomeView = document.getElementById("welcomeView");
 
-  // Generic modal dialog (replaces alert/confirm/prompt)
+  // Generic modal dialog (menggantikan alert/confirm/prompt bawaan)
   const genericModal = document.getElementById("genericModal");
   const genericModalIcon = document.getElementById("genericModalIcon");
   const genericModalTitle = document.getElementById("genericModalTitle");
@@ -34,12 +41,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const genericModalInputValue = document.getElementById("genericModalInputValue");
   const genericModalCancel = document.getElementById("genericModalCancel");
   const genericModalOk = document.getElementById("genericModalOk");
-  const btnNewChat = document.getElementById("btnNewChat");
-  const btnHistory = document.getElementById("btnHistory");
-  const btnMemory = document.getElementById("btnMemory");
-  const btnSettings = document.getElementById("btnSettings");
-  const btnMoreMenu = document.getElementById("btnMoreMenu");
-  const moreDropdown = document.getElementById("moreDropdown");
 
   const historyDrawer = document.getElementById("historyDrawer");
   const btnCloseHistory = document.getElementById("btnCloseHistory");
@@ -86,8 +87,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const wizardApiFormat = document.getElementById("wizardApiFormat");
   const wizardApiKey = document.getElementById("wizardApiKey");
   const wizardSessionOnly = document.getElementById("wizardSessionOnly");
-  const wizardProvider = document.getElementById("wizardProvider");
-  const settingsProviderSelect = document.getElementById("settingsProviderSelect");
   const btnWizardTest = document.getElementById("btnWizardTest");
   const wizardTestResult = document.getElementById("wizardTestResult");
   const btnWizardSave = document.getElementById("btnWizardSave");
@@ -214,12 +213,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!btnAgentMode) return;
     if (currentAgentMode === "planning") {
       btnAgentMode.className = "composer-mode-pill mode-planning";
-      if (agentModeIcon) agentModeIcon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>';
+      if (agentModeIcon) agentModeIcon.textContent = "📋";
       if (agentModeText) agentModeText.textContent = "Plan";
       btnAgentMode.title = "Mode: Planning (Wajib persetujuan user setelah rencana dibuat). Klik untuk beralih ke Full Mode.";
     } else {
       btnAgentMode.className = "composer-mode-pill";
-      if (agentModeIcon) agentModeIcon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>';
+      if (agentModeIcon) agentModeIcon.textContent = "⚡";
       if (agentModeText) agentModeText.textContent = "Full";
       btnAgentMode.title = "Mode: Full (Eksekusi otomatis sampai selesai). Klik untuk beralih ke Planning Mode.";
     }
@@ -394,69 +393,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   window.parseIncrementalMarkdown = parseIncrementalMarkdown;
 
   // ═══════════════════════════════════════════════════
-  // STATUS INDICATOR & AGENT STATUS (Phase 3 — UI/UX Spec § 6.2)
+  // STATUS INDICATOR
   // ═══════════════════════════════════════════════════
-  let statusResetTimer = null;
-
-  function setAgentStatus(state = "ready", labelOverride = null) {
-    if (!agentStatus) return;
-    if (statusResetTimer) {
-      clearTimeout(statusResetTimer);
-      statusResetTimer = null;
-    }
-
-    agentStatus.classList.remove(
-      "status-ready",
-      "status-thinking",
-      "status-executing",
-      "status-completed",
-      "status-failed",
-      "working"
-    );
-
-    let label = "Siap";
-    let cls = "status-ready";
-
-    switch (String(state || "ready").toLowerCase()) {
-      case "thinking":
-        label = "Berpikir";
-        cls = "status-thinking";
-        break;
-      case "executing":
-        label = "Bekerja";
-        cls = "status-executing";
-        agentStatus.classList.add("working"); // backward compat
-        break;
-      case "completed":
-      case "done":
-        label = "Selesai";
-        cls = "status-completed";
-        statusResetTimer = setTimeout(() => {
-          if (!isAgentRunning) setAgentStatus("ready");
-        }, 3500);
-        break;
-      case "failed":
-      case "error":
-        label = "Gagal";
-        cls = "status-failed";
-        statusResetTimer = setTimeout(() => {
-          if (!isAgentRunning) setAgentStatus("ready");
-        }, 5000);
-        break;
-      case "ready":
-      default:
-        label = "Siap";
-        cls = "status-ready";
-        break;
-    }
-
-    agentStatus.textContent = labelOverride || label;
-    agentStatus.classList.add(cls);
-  }
-
-  // Expose to window for external integration & test suites
-  window.setAgentStatus = setAgentStatus;
-
   function showStatusIndicator(text = "Sedang mengerjakan...") {
     if (agentStatusIndicator && statusIndicatorText) {
       const raw = String(text || "").toLowerCase();
@@ -493,39 +431,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function saveSessions() {
-    if (sessions.length > 25) {
-      sessions = sessions.slice(0, 25);
+    if (sessions.length > 30) {
+      sessions = sessions.slice(0, 30);
     }
-    // Prune excessively large messages in non-active sessions to protect Chrome storage quota
-    for (let i = 0; i < sessions.length; i++) {
-      const s = sessions[i];
-      if (s.messages && s.messages.length > 60) {
-        s.messages = [s.messages[0], ...s.messages.slice(-50)];
-      }
-    }
-
-    try {
-      await chrome.storage.local.set({
-        agent_sessions: sessions,
-        current_session_id: currentSessionId
-      });
-    } catch (err) {
-      console.warn("[Pesat Storage] Gagal menyimpan sesi ke storage.local (kuota penuh?), melakukan emergency prune:", err);
-      if (sessions.length > 10) {
-        sessions = sessions.slice(0, 10);
-      }
-      for (const s of sessions) {
-        if (s.messages && s.messages.length > 25) {
-          s.messages = s.messages.slice(-25);
-        }
-      }
-      try {
-        await chrome.storage.local.set({
-          agent_sessions: sessions,
-          current_session_id: currentSessionId
-        });
-      } catch (_) {}
-    }
+    await chrome.storage.local.set({
+      agent_sessions: sessions,
+      current_session_id: currentSessionId
+    });
     renderSessionList();
   }
 
@@ -567,7 +479,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Reset Token Tracker UI & background loop tracker
     try {
-      sendToBackground({ action: "RESET_LOOP_TRACKER" }).catch(() => {});
+      chrome.runtime.sendMessage({ action: "RESET_LOOP_TRACKER" });
       updateTokenTrackerUI({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
     } catch (_) {}
 
@@ -612,46 +524,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     return sessions.find(s => s.id === currentSessionId) || null;
   }
 
-  function updateQuickChipsVisibility() {
-    const wrapper = document.querySelector(".quick-chips-slider-wrapper");
-    if (!wrapper) return;
-    const session = getCurrentSession();
-    const isEmpty = !session || !session.messages || session.messages.length === 0;
-    if (isEmpty) {
-      wrapper.classList.remove("hidden");
-    } else {
-      wrapper.classList.add("hidden");
-    }
-  }
-
   function renderCurrentSession() {
-    chatArea.querySelectorAll('.message, .message-row, .task-card, .agent-status-card').forEach(el => el.remove());
-
+    chatArea.querySelectorAll(".message, .message-row, .task-card, .agent-status-card").forEach(el => el.remove());
     const session = getCurrentSession();
     if (!session || session.messages.length === 0) {
       renderWelcomeMessage();
-      updateQuickChipsVisibility();
       return;
     }
 
-    const welcomeView = document.getElementById('welcomeView');
-    if (welcomeView) welcomeView.classList.add('hidden');
-
+    if (welcomeView) welcomeView.classList.add("hidden");
     session.messages.forEach((msg, idx) => {
-      if (!msg.multiAgent) renderMessageBubble(msg, idx);
+      if (!msg.taskCard && !msg.multiAgent) renderMessageBubble(msg, idx);
     });
     chatArea.scrollTop = chatArea.scrollHeight;
-    updateQuickChipsVisibility();
   }
 
-  // Expose session helpers for integration & test suites
-  window.getCurrentSession = getCurrentSession;
-  window.renderCurrentSession = renderCurrentSession;
-
   function renderWelcomeMessage() {
-    const welcomeView = document.getElementById('welcomeView');
-    if (welcomeView) welcomeView.classList.remove('hidden');
-    // Listener starter-card sudah dipasang sekali saat init; jangan pasang ulang.
+    // Welcome view statis sudah ada di HTML (#welcomeView); cukup tampilkan.
+    if (welcomeView) welcomeView.classList.remove("hidden");
+    // Listener starter-card dipasang sekali saat init; jangan pasang ulang.
   }
 
   function attachSuggestionListeners() {
@@ -687,12 +578,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           <div class="session-title">${escapeHtml(sess.title)}</div>
           <div class="session-time">${timeStr} · ${sess.messages.length} pesan</div>
         </div>
-        <button class="session-delete" title="Hapus Sesi" aria-label="Hapus Sesi">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
-        </button>
+        <button class="session-delete" title="Hapus Sesi">🗑️</button>
       `;
 
       item.querySelector(".session-info")?.addEventListener("click", () => {
@@ -1520,16 +1406,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       let askHtml = `
         <div class="message-bubble">
           <div class="ask-user-container">
-            <div class="ask-user-question">${escapeHtml(question || msgText)}</div>
+            <div class="ask-user-question">🤔 ${escapeHtml(question || msgText)}</div>
       `;
       if (Array.isArray(options) && options.length > 0 && !msg.answered) {
         askHtml += `<div class="ask-user-options">`;
         options.forEach((opt) => {
-          askHtml += `<button class="ask-user-option-btn" data-answer="${escapeHtml(opt)}">${escapeHtml(opt)}</button>`;
+          askHtml += `<button class="ask-user-option-btn" data-answer="${escapeHtml(opt)}">⚡ ${escapeHtml(opt)}</button>`;
         });
         askHtml += `</div>`;
       } else if (msg.answered) {
-        askHtml += `<div style="font-size:13px;color:var(--brand-primary);margin-top:8px;font-weight:500;">✓ Dijawab: ${escapeHtml(msg.answered)}</div>`;
+        askHtml += `<div style="font-size:14px;color:var(--text-accent);margin-top:8px;">✔️ Dijawab: ${escapeHtml(msg.answered)}</div>`;
       }
       askHtml += `
           </div>
@@ -1625,14 +1511,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
               </div>
               <div class="doc-card-actions">
-                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi thread">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                  <span>Salin Thread</span>
-                </button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke kotak postingan X / medsos aktif">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
-                  <span>Tempel ke Medsos</span>
-                </button>
+                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi thread">📋 Salin Thread</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke kotak postingan X / medsos aktif">⤴️ Tempel ke X / Medsos</button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -1653,30 +1533,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
               </div>
               <div class="doc-card-actions">
-                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh penjelasan dan teks jawaban biasa">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                  <span>Salin</span>
-                </button>
-                <button class="doc-action-btn" data-artifact-act="copy_tsv" title="Salin data tabel dalam format baris & kolom untuk Spreadsheet / Excel">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
-                  <span>Data Sheet</span>
-                </button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_excel" title="Unduh spreadsheet Excel .xls">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  <span>Excel</span>
-                </button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_csv" title="Unduh file tabel .CSV">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  <span>.CSV</span>
-                </button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Sheets baru di tab terpisah">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
-                  <span>Sheet Baru</span>
-                </button>
-                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Isikan langsung ke spreadsheet aktif saat ini">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
-                  <span>Di Sheet Ini</span>
-                </button>
+                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh penjelasan dan teks jawaban biasa">📋 Salin Teks</button>
+                <button class="doc-action-btn" data-artifact-act="copy_tsv" title="Salin data tabel dalam format baris & kolom untuk Spreadsheet / Excel">📊 Salin Data Sheet</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_excel" title="Unduh spreadsheet Excel dengan format tabel visual rapi">⬇️ Unduh Excel (.xls)</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_csv" title="Unduh file tabel dalam format data murni .CSV">⬇️ .CSV</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Sheets baru di tab terpisah dan tempelkan rapi">⤴️ Tempel ke Sheet (Tab Baru)</button>
+                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Isikan langsung ke lembar kerja spreadsheet aktif saat ini">⤴️ Di Sheet Ini</button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -1697,22 +1559,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
               </div>
               <div class="doc-card-actions">
-                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi artikel">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                  <span>Salin Teks</span>
-                </button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Unduh file dokumen resmi Microsoft Word .docx">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  <span>Word (.docx)</span>
-                </button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Docs baru di tab terpisah dan tempelkan rapi">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
-                  <span>Docs Baru</span>
-                </button>
-                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Tempelkan langsung di posisi kursor dokumen aktif saat ini">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
-                  <span>Di Kursor Ini</span>
-                </button>
+                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi artikel">📋 Salin Teks</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Unduh file dokumen resmi Microsoft Word .docx">⬇️ Unduh Word (.docx)</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Docs baru di tab terpisah dan tempelkan rapi">⤴️ Tempel ke Docs (Tab Baru)</button>
+                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Tempelkan langsung di posisi kursor dokumen aktif saat ini">⤴️ Di Kursor Ini</button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -1727,23 +1577,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       contentHtml = `<div class="agent-pipeline-container"><div class="agent-card"><div class="agent-card-header">Progress</div><div class="agent-card-body">${escapeHtml(progress)}</div></div></div>`;
       if (finalAnswer) contentHtml += `<div class="message-bubble markdown-body" style="margin-top:8px;">${parseMarkdown(finalAnswer)}</div>`;
     } else {
-      const modelLabel = escapeHtml(activeModelId || CFG.DEFAULT_MODEL);
-      contentHtml = `
-        <div class="message-bubble markdown-body">
-          <div class="msg-ai-top">
-            <span class="ai-badge-label">
-              <span class="online-dot"></span>
-              Pesat AI · ${modelLabel}
-            </span>
-          </div>
-          <div class="msg-ai-body">${parseMarkdown(msgText)}</div>
-        </div>`;
+      contentHtml = `<div class="message-bubble markdown-body">${parseMarkdown(msgText)}</div>`;
     }
-
-    // Catatan status "Selesai" untuk jawaban AI yang sudah final
-    const finishedNoteHtml = (!isUser && !msg.artifact && !msg.askUser && !msg.confirmation && !msg.taskCard && msgText && String(msgText).trim())
-      ? `<span class="subtle-meta-note">Selesai</span>`
-      : '';
 
     msgDiv.innerHTML = `
       ${contentHtml}
@@ -1751,74 +1586,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         <div class="message-actions">
           <button class="action-icon-btn btn-edit-prompt" title="Edit prompt & jalankan ulang">✏️ Edit</button>
         </div>
-      ` : (!msg.artifact && !msg.askUser && !msg.confirmation && !msg.taskCard && msgText && String(msgText).trim() ? `
+      ` : (!msg.artifact && !msg.askUser && !msg.confirmation && msgText.trim() ? `
         <div class="assistant-msg-actions">
-          <div class="action-btn-group">
-            <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
-              <span>📋</span>
-              <span class="btn-copy-text">Salin</span>
-            </button>
-            <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
-              <span>⤴️</span>
-              <span class="btn-paste-text">Tempel ke Tab</span>
-            </button>
-          </div>
-          ${finishedNoteHtml}
+          <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
+            <span>📋</span>
+            <span class="btn-copy-text">Salin</span>
+          </button>
+          <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
+            <span>⤴️</span>
+            <span class="btn-paste-text">Tempel ke Tab</span>
+          </button>
         </div>
       ` : '')}
     `;
-
-    if (isPlainAssistant) {
-      msgDiv.classList.add("has-avatar");
-      msgDiv.innerHTML = `
-        ${assistantAvatarHtml}
-        <div class="assistant-body">
-          ${contentHtml}
-          <div class="assistant-msg-actions">
-            <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-              <span class="btn-copy-text">Salin</span>
-            </button>
-            <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <line x1="10" y1="14" x2="21" y2="3"></line>
-              </svg>
-              <span class="btn-paste-text">Tempel ke Tab</span>
-            </button>
-          </div>
-        </div>
-      `;
-    } else {
-      msgDiv.innerHTML = `
-        ${contentHtml}
-        ${isUser ? `
-          <div class="message-actions">
-            <button class="action-icon-btn btn-edit-prompt" title="Edit prompt & jalankan ulang">✏️ Edit</button>
-          </div>
-        ` : (!msg.artifact && !msg.askUser && !msg.confirmation && !msg.taskCard && msgText && String(msgText).trim() ? `
-          <div class="assistant-msg-actions">
-            <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-              <span class="btn-copy-text">Salin</span>
-            </button>
-            <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <line x1="10" y1="14" x2="21" y2="3"></line>
-              </svg>
-              <span class="btn-paste-text">Tempel ke Tab</span>
-            </button>
-          </div>
-        ` : '')}
-      `;
-    }
 
     // Event listener untuk tombol Salin & Tempel respons AI
     const btnCopy = msgDiv.querySelector(".btn-copy-response");
@@ -1962,7 +1742,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 		                  if (!isAlreadySocial) {
 		                    const isThreads = /threads/i.test(a.name || "") || /threads/i.test(contentStr);
 		                    const destUrl = isThreads ? "https://www.threads.net" : "https://x.com/compose/post";
-		                    await sendToBackground({ action: "NAVIGATE_TAB", url: destUrl });
+		                    await sendToBackground({ action: "NAVIGATE_TAB", url: destUrl, newTab: true });
 		                    await new Promise(r => setTimeout(r, 4000));
 		                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
 		                  }
@@ -2095,13 +1875,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
     }
 
-    const btnStopCard = msgDiv.querySelector(".btn-stop-card");
-    if (btnStopCard) {
-      btnStopCard.addEventListener("click", () => {
-        abortAgentExecution("Otomatisasi dihentikan via Execution Card.");
-      });
-    }
-
     return msgDiv;
   }
 
@@ -2110,114 +1883,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function renderTaskCardHtml(taskCard) {
-    const status = String(taskCard.status || "EXECUTING").toUpperCase();
-    const isExecuting = ["PLANNING", "EXECUTING", "RUNNING", "VALIDATING", "WAITING_USER"].includes(status);
-    const isDone = ["DONE", "COMPLETED"].includes(status);
-    const isFailed = ["FAILED", "CANCELLED", "ERROR"].includes(status);
-
-    let stateClass = "state-executing";
-    let badgeClass = "badge-warning";
-    let badgeLabel = "Bekerja";
-
-    if (isDone) {
-      stateClass = "state-completed";
-      badgeClass = "badge-success";
-      badgeLabel = "Selesai";
-    } else if (isFailed) {
-      stateClass = "state-failed";
-      badgeClass = "badge-danger";
-      badgeLabel = status === "CANCELLED" ? "Dibatalkan" : "Gagal";
-    } else if (status === "PLANNING") {
-      badgeClass = "badge-warning";
-      badgeLabel = "Berpikir";
-    }
-
-    const cardTitle = taskCard.goal ? escapeHtml(taskCard.goal) : "Agent sedang bekerja";
-
-    const plan = Array.isArray(taskCard.plan) && taskCard.plan.length > 0 ? taskCard.plan : [];
-    let timelineHtml = "";
-
-    if (plan.length > 0) {
-      timelineHtml = `<div class="execution-timeline">` + plan.map((step) => {
-        const stepTitle = typeof step === "string" ? step : (step.title || step.goal || step.description || "Langkah");
-        const stepStatus = typeof step === "string" ? "pending" : (step.status || "pending").toLowerCase();
-
-        let itemCls = "status-pending";
-        let indicatorHtml = `<span class="timeline-dot-hollow"></span>`;
-
-        if (stepStatus === "done" || stepStatus === "completed") {
-          itemCls = "status-done";
-          indicatorHtml = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-        } else if (stepStatus === "in_progress" || stepStatus === "running" || stepStatus === "executing") {
-          itemCls = "status-in-progress";
-          indicatorHtml = `<span class="timeline-spinner"></span>`;
-        } else if (stepStatus === "failed" || stepStatus === "error") {
-          itemCls = "status-failed";
-          indicatorHtml = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
-        }
-
-        return `
-          <div class="timeline-item ${itemCls}">
-            <span class="timeline-indicator indicator-${itemCls.replace("status-", "")}">${indicatorHtml}</span>
-            <span class="timeline-text">${escapeHtml(stepTitle)}</span>
-          </div>
-        `;
-      }).join("") + `</div>`;
-    }
-
-    let actionsHtml = "";
-    if (isExecuting) {
-      actionsHtml = `
-        <div class="agent-status-card-actions">
-          <button class="btn-stop-card" data-agent-action="stop" title="Hentikan tugas otomatisasi">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="4" y="4" width="16" height="16" rx="2"></rect>
-            </svg>
-            <span>Hentikan</span>
-          </button>
-        </div>
-      `;
-    }
-
-    let errorBoxHtml = "";
-    if (isFailed && taskCard.failureReason) {
-      errorBoxHtml = `
-        <div class="error-state-footer">
-          <div class="error-reason">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-            <span>${escapeHtml(taskCard.failureReason)}</span>
-          </div>
-          <div class="error-action-hint">Saran: Periksa izin tab atau coba kirim ulang perintah.</div>
-        </div>
-      `;
-    }
-
-    return `
-      <div class="agent-status-card task-card ${stateClass}">
-        <div class="agent-status-card-header task-card-header">
-          <div class="agent-status-title-group">
-            <svg class="agent-status-icon-svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="11" width="18" height="10" rx="2"></rect>
-              <circle cx="12" cy="5" r="2"></circle>
-              <path d="M12 7v4"></path>
-              <line x1="8" y1="16" x2="8.01" y2="16"></line>
-              <line x1="16" y1="16" x2="16.01" y2="16"></line>
-            </svg>
-            <div class="agent-status-card-title task-card-goal" title="${cardTitle}">${cardTitle}</div>
-          </div>
-          <span class="agent-status-badge ${badgeClass}">${badgeLabel}</span>
-        </div>
-        ${timelineHtml}
-        ${errorBoxHtml}
-        ${actionsHtml}
-      </div>
-    `;
+    const label = taskCard.status === "PLANNING" ? "Menganalisis"
+      : taskCard.status === "VALIDATING" ? "Memverifikasi"
+        : taskCard.status === "WAITING_USER" ? "Menunggu konfirmasi"
+          : taskCard.status === "DONE" ? "Selesai"
+            : taskCard.status === "FAILED" ? "Belum selesai"
+              : "Menjalankan tindakan";
+    return `<div class="task-card"><div class="task-card-header">Progress Tugas</div><div class="task-card-goal">${escapeHtml(label)}</div></div>`;
   }
-
-  // Expose message node builders for test suites
-  window.renderTaskCardHtml = renderTaskCardHtml;
-  window.buildMessageNode = buildMessageNode;
-  window.renderMessageBubble = renderMessageBubble;
 
   function editPromptAt(index) {
     const session = getCurrentSession();
@@ -2246,85 +1919,35 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (parsed.text) return parsed.text;
       } catch (e) {}
     }
-      const jsonBlock = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-      if (jsonBlock) {
-        try {
-          const parsed = JSON.parse(jsonBlock[1]);
-          if (parsed.message) return parsed.message;
-          if (parsed.answer) return parsed.answer;
-          if (parsed.text) return parsed.text;
-        } catch (e) {}
-      }
-      return stripToolCallNoise(text);
-    }
-
-    // Buang teks tool-call mentah (mcp__plugin / tag XML agent) yang pernah bocor ke balasan model.
-    function stripToolCallNoise(text) {
-      if (!text || typeof text !== "string") return text || "";
-      let out = text;
-      // Baris/segmen yang seluruhnya berupa tool-call (mcp__..., <name__tool__..., ```tool_call...```)
-      out = out.replace(/^\s*(?:[-*]\s*)?(?:<|mcp__|tool_call|function_call)[^\n]*$/gim, "");
-      out = out.replace(/(?:^|\n)\s*(?:mcp__[a-z0-9_]+(?:\s|$)|<[a-z]+__[a-z0-9_]+__\w+[^>\n]*>)/g, "\n");
-      out = out.replace(/```(?:tool_call|function_call|xml)[\s\S]*?```/gi, "");
-      out = out.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-      return out;
-    }
-
-    // Sisa JSON tool-call setelah tag dibuang, mis. {"text":"Lewis Hamilton"} — bukan jawaban manusiawi.
-    function isToolCallPayloadJson(s) {
-      const t = String(s || "").trim();
-      if (!(t.startsWith("{") && t.endsWith("}"))) return false;
+    const jsonBlock = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+    if (jsonBlock) {
       try {
-        const o = JSON.parse(t);
-        if (!o || typeof o !== "object" || Array.isArray(o)) return false;
-        const keys = Object.keys(o);
-        const allowed = new Set(["text", "value", "input", "elementId", "key", "targetText", "url", "action", "args", "parameters"]);
-        if (!keys.length) return true;
-        return keys.every(k => allowed.has(k));
-      } catch (e) {
-        return false;
-      }
+        const parsed = JSON.parse(jsonBlock[1]);
+        if (parsed.message) return parsed.message;
+        if (parsed.answer) return parsed.answer;
+        if (parsed.text) return parsed.text;
+      } catch (e) {}
     }
-
-    // True bila isi teks didominasi tool-call mentah (tidak layak ditampilkan ke user).
-    function isToolCallNoise(text) {
-      if (!text || typeof text !== "string") return true;
-      const stripped = stripToolCallNoise(text);
-      if (!stripped.trim()) return true;
-      const noiseMatches = (String(text).match(/mcp__|<[a-z]+__[a-z0-9_]+__|tool_call|function_call/gi) || []).length;
-      if (noiseMatches > 0) return true;
-      // Sisa payload JSON tool-call murni (bukan jawaban Markdown manusiawi)
-      if (isToolCallPayloadJson(stripped)) return true;
-      return false;
-    }
-
-    const FRIENDLY_RETRY_MSG = "Maaf, saya belum bisa menyelesaikan perintah ini. Aktifkan Tab Aktif atau tulis perintahnya lebih spesifik.";
-
-    function sanitizeAssistantReply(text) {
-      const cleaned = stripToolCallNoise(String(text || ""));
-      return isToolCallNoise(cleaned) ? FRIENDLY_RETRY_MSG : cleaned;
-    }
+    return text;
+  }
 
   function addMessageToCurrentSession(role, content, extras = {}) {
     const session = getCurrentSession();
     if (!session) return -1;
-    if (extras.multiAgent) return -1;
+    if (extras.taskCard || extras.multiAgent) return -1;
 
     let textContent = content;
     if (typeof content === "object" && content !== null) {
       textContent = content.text || content.message || content.content || content.reply || JSON.stringify(content);
     }
 
-      const cleanContent = role === "assistant" && !extras.skipClean
-        ? cleanAssistantReply(textContent)
-        : (role === "assistant" ? stripToolCallNoise(textContent) : textContent);
+    const cleanContent = role === "assistant" && !extras.skipClean ? cleanAssistantReply(textContent) : textContent;
     const msgObj = { role, content: cleanContent, timestamp: Date.now(), ...extras };
     session.messages.push(msgObj);
 
     if (session.messages.length === 1 && role === "user") {
       const titleStr = typeof cleanContent === "string" ? cleanContent : "Percakapan Baru";
       session.title = titleStr.substring(0, 32) + (titleStr.length > 32 ? "..." : "");
-      updateQuickChipsVisibility();
     }
 
     session.timestamp = Date.now();
@@ -2371,17 +1994,8 @@ document.addEventListener("DOMContentLoaded", async () => {
           ${infoHtml}
         </div>
         <div class="model-item-actions">
-          <button type="button" class="btn-model-action btn-edit-model" title="Ubah Nama Model" aria-label="Ubah Model">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-            </svg>
-          </button>
-          <button type="button" class="btn-model-action btn-del-model" title="Hapus Model" aria-label="Hapus Model">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            </svg>
-          </button>
+          <button type="button" class="btn-model-action btn-edit-model" title="Ubah Nama Model">✏️</button>
+          <button type="button" class="btn-model-action btn-del-model" title="Hapus Model">🗑️</button>
           <label class="toggle-switch small" title="Status Model">
             <input type="checkbox" class="model-item-toggle" ${m.enabled !== false ? "checked" : ""} />
             <span class="toggle-slider"></span>
@@ -2403,7 +2017,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       // Edit model
       row.querySelector(".btn-edit-model")?.addEventListener("click", async (e) => {
         e.stopPropagation();
-        const newName = await showPrompt("Ubah nama model PesatRouter:", "Ubah Nama Model", m.name);
+        const newName = await showPrompt("Ubah nama model PesatRouter:", "Edit Model", m.name);
         if (newName && newName.trim()) {
           m.name = newName.trim();
           m.id = newName.trim();
@@ -2419,6 +2033,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           await showAlert("Minimal harus ada 1 model di daftar.");
           return;
         }
+        if (!await showConfirm(`Hapus model "${m.name}"?`)) return;
         modelsList = modelsList.filter(x => x.id !== m.id);
         if (activeModelId === m.id) {
           const firstEnabled = modelsList.find(x => x.enabled !== false);
@@ -2497,7 +2112,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       "apiBaseUrl",
       "apiFormat",
       "apiKey",
-      "apiProvider",
       "modelName",
       "sessionOnly",
       "googleClientId",
@@ -2525,7 +2139,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       sessionOnly: !!(sessionKey || local.sessionOnly),
       googleClientId: local.googleClientId || "",
       autoPasteDocs: !!local.autoPasteDocs,
-      enableInPageToolbar: local.enableInPageToolbar !== undefined ? !!local.enableInPageToolbar : true
+      enableInPageToolbar: local.enableInPageToolbar !== false
     };
 
     // Sinkronisasi ke form Settings
@@ -2542,32 +2156,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (wizardApiFormat) wizardApiFormat.value = storedSettings.apiFormat;
     if (wizardApiKey) wizardApiKey.value = storedSettings.apiKey;
     if (wizardSessionOnly) wizardSessionOnly.checked = storedSettings.sessionOnly;
-
-    // Provider selection: restore saved provider, apply default base URL when none saved
-    const savedProvider = storedSettings.apiProvider || "pesatrouter";
-    if (wizardProvider) wizardProvider.value = savedProvider;
-    if (settingsProviderSelect) settingsProviderSelect.value = savedProvider;
-    const providerDefaults = {
-      pesatrouter: "https://api.pesatrouter.com/v1",
-      openrouter: "https://openrouter.ai/api/v1",
-      openai: "https://api.openai.com/v1",
-      google: "https://generativelanguage.googleapis.com/v1beta/openai/",
-      custom: ""
-    };
-    const defaultBase = providerDefaults[savedProvider] || providerDefaults.pesatrouter;
-    if (wizardBaseUrl && (!storedSettings.apiBaseUrl || storedSettings.apiBaseUrl === providerDefaults.pesatrouter)) {
-      wizardBaseUrl.value = storedSettings.apiBaseUrl || defaultBase;
-    }
-
-    // Provider selection: ubah Base URL otomatis saat provider dipilih (kecuali Custom)
-    const applyProviderBase = (selectEl, inputEl) => {
-      const p = selectEl?.value;
-      if (!p || p === "custom") return;
-      const d = providerDefaults[p];
-      if (d && inputEl) inputEl.value = d;
-    };
-    if (wizardProvider) wizardProvider.addEventListener("change", () => applyProviderBase(wizardProvider, wizardBaseUrl));
-    if (settingsProviderSelect) settingsProviderSelect.addEventListener("change", () => applyProviderBase(settingsProviderSelect, document.getElementById("apiUrlInput")));
 
     // Sinkronisasi ke model indicator pill di composer
     if (composerModelName) composerModelName.textContent = activeModelId;
@@ -2611,11 +2199,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!inputEl) return;
     const isPass = inputEl.type === "password";
     inputEl.type = isPass ? "text" : "password";
-    if (btnEl) {
-      btnEl.innerHTML = isPass
-        ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>'
-        : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
-    }
+    if (btnEl) btnEl.textContent = isPass ? "🙈" : "👁️";
   }
 
   if (btnToggleWizardKey && wizardApiKey) {
@@ -2626,27 +2210,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ── Usage Tracker (Informasional Pengganti Kuota & Realtime Task Token Tracker) ──
-  function getModelContextWindow(modelName = "") {
-    const m = String(modelName || storedSettings.model || "pesat-flash").toLowerCase();
-    if (m.includes("flash") || m.includes("gemini") || m.includes("1m")) return "1M";
-    if (m.includes("claude-3-5") || m.includes("sonnet") || m.includes("opus")) return "200K";
-    if (m.includes("gpt-4o") || m.includes("gpt-4-turbo")) return "128K";
-    if (m.includes("deepseek") || m.includes("r1") || m.includes("v3")) return "64K";
-    return "1M";
-  }
-
   function updateTokenTrackerUI(usage = {}) {
     if (!tokenTrackerText) return;
     const promptToks = Number(usage.prompt_tokens) || 0;
     const compToks = Number(usage.completion_tokens) || 0;
     const totalToks = Number(usage.total_tokens) || (promptToks + compToks);
-    const maxOutputToks = Number(storedSettings.maxTokens || 4096);
-    const contextLimit = getModelContextWindow(storedSettings.model);
+    const maxToks = Number(storedSettings.maxTokens || 4096);
 
-    tokenTrackerText.innerHTML = `Tokens: <strong>${totalToks.toLocaleString("id-ID")}</strong> (Prompt: ${promptToks.toLocaleString("id-ID")}, Output: ${compToks.toLocaleString("id-ID")}) | Context: ${contextLimit}`;
-    if (tokenTrackerBar) {
-      tokenTrackerBar.title = `Total Tokens: ${totalToks.toLocaleString("id-ID")} | Model Context Window: ${contextLimit} | Max Output: ${maxOutputToks.toLocaleString("id-ID")}`;
-    }
+    tokenTrackerText.innerHTML = `Tokens: <strong>${totalToks.toLocaleString("id-ID")}</strong> (Prompt: ${promptToks.toLocaleString("id-ID")}, Output: ${compToks.toLocaleString("id-ID")}) | Max: ${maxToks.toLocaleString("id-ID")}`;
   }
 
   async function refreshUsageDisplay() {
@@ -2659,10 +2230,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (statTodayTokens) statTodayTokens.textContent = `${toks.toLocaleString("id-ID")}`;
 
       // Ambil token usage akumulatif task dari background
-      const resUsage = await sendToBackground({ action: "GET_TOKEN_USAGE" }).catch(() => ({}));
-      if (resUsage && resUsage.taskTokenUsage) {
-        updateTokenTrackerUI(resUsage.taskTokenUsage);
-      }
+      chrome.runtime.sendMessage({ action: "GET_TOKEN_USAGE" }, (res) => {
+        if (res && res.taskTokenUsage) {
+          updateTokenTrackerUI(res.taskTokenUsage);
+        }
+      });
     } catch (e) {}
   }
 
@@ -2685,7 +2257,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       refreshUsageDisplay();
 
       // Rekam juga ke background tracker
-      await sendToBackground({ action: "RECORD_TOKEN_USAGE", usage }).catch(() => {});
+      chrome.runtime.sendMessage({ action: "RECORD_TOKEN_USAGE", usage });
     } catch (e) {}
   }
 
@@ -2704,91 +2276,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   function closeBugReportModal() {
     if (!bugReportModal) return;
     bugReportModal.classList.add("hidden");
-  }
-
-  // ── Generic Modal Dialog (replaces alert/confirm/prompt) ──
-  let genericModalResolve = null;
-
-  function closeGenericModal(result) {
-    if (genericModal) genericModal.classList.add("hidden");
-    if (genericModalResolve) {
-      genericModalResolve(result);
-      genericModalResolve = null;
-    }
-  }
-
-  // Bind overlay click once (closing by clicking outside resolves null)
-  if (genericModal) {
-    genericModal.addEventListener("click", (e) => {
-      if (e.target === genericModal) closeGenericModal(null);
-    });
-  }
-
-  /**
-   * Show a generic modal dialog and return a Promise that resolves:
-   * - alert: true on OK, null on dismiss (outside click)
-   * - confirm: true on OK, null on Cancel/outside
-   * - prompt: input string on OK, null on Cancel/outside
-   */
-  function showModal({
-    type = "alert",
-    title = "Perhatian",
-    message = "",
-    defaultValue = "",
-    okLabel = "OK",
-    cancelLabel = "Batal",
-    destructive = false
-  } = {}) {
-    return new Promise((resolve) => {
-      if (!genericModal) { resolve(null); return; }
-      genericModalResolve = resolve;
-
-      genericModalTitle.textContent = title;
-      genericModalDesc.textContent = message;
-      genericModalInputValue.value = defaultValue || "";
-
-      // Icon by type
-      if (type === "confirm" || destructive) {
-        genericModalIcon.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
-        genericModalIcon.style.color = destructive ? "#ef4444" : "var(--brand-primary)";
-        genericModalIcon.style.background = destructive ? "#fee2e2" : "var(--brand-soft)";
-      } else {
-        genericModalIcon.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 22s4-4 9-4 9 4 9 4"/><path d="M16 16.2A6.2 6.2 0 0 1 12.8 18c-1.7 0-3.2-.8-4-2"/></svg>`;
-        genericModalIcon.style.color = "var(--brand-primary)";
-        genericModalIcon.style.background = "var(--brand-soft)";
-      }
-
-      if (type === "prompt") {
-        genericModalInput.style.display = "block";
-        setTimeout(() => genericModalInputValue.focus(), 50);
-      } else {
-        genericModalInput.style.display = "none";
-      }
-
-      genericModalCancel.style.display = (type === "confirm" || type === "prompt") ? "inline-flex" : "none";
-      genericModalOk.textContent = okLabel;
-      genericModalOk.className = `btn ${destructive ? "btn-danger-pill" : "btn-primary-pill"}`;
-      genericModalCancel.textContent = cancelLabel;
-
-      genericModal.classList.remove("hidden");
-
-      genericModalOk.addEventListener("click", () => {
-        closeGenericModal(type === "prompt" ? genericModalInputValue.value : true);
-      });
-      genericModalCancel.addEventListener("click", () => {
-        closeGenericModal(null);
-      });
-    });
-  }
-
-  function showAlert(message, title = "Perhatian") {
-    return showModal({ type: "alert", title, message });
-  }
-  function showConfirm(message, title = "Konfirmasi") {
-    return showModal({ type: "confirm", title, message });
-  }
-  function showPrompt(message, title = "Input", defaultValue = "") {
-    return showModal({ type: "prompt", title, message, defaultValue });
   }
 
   async function submitBugReport() {
@@ -2820,7 +2307,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const actionLogs = activeTask?.scratchpad || [];
     const lastErr = activeTask?.scratchpad?.slice(-1)?.[0]?.observation || null;
 
-    const bugRes = await sendToBackground({
+    chrome.runtime.sendMessage({
       action: "SUBMIT_BUG_REPORT",
       userDescription: desc,
       includeLogs: !!bugIncludeLogs?.checked,
@@ -2828,21 +2315,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       domSnapshot: domSnap,
       actionLogs: bugIncludeLogs?.checked ? actionLogs : [],
       lastError: lastErr
-    }).catch(() => ({ success: false }));
+    }, (response) => {
+      if (btnSubmitBugReport) {
+        btnSubmitBugReport.disabled = false;
+        btnSubmitBugReport.innerHTML = `<span>🚀 Kirim Laporan</span>`;
+      }
 
-    if (btnSubmitBugReport) {
-      btnSubmitBugReport.disabled = false;
-      btnSubmitBugReport.innerHTML = `
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13"></line>
-          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-        </svg>
-        <span>Kirim Laporan</span>
-      `;
-    }
-
-    const response = bugRes;
-    if (response && response.success) {
+      if (response && response.success) {
         if (bugReportAlert) {
           bugReportAlert.className = "";
           bugReportAlert.style.background = "rgba(16, 185, 129, 0.2)";
@@ -2862,6 +2341,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           bugReportAlert.textContent = response?.error || "Gagal mengirim laporan. Coba lagi.";
         }
       }
+    });
   }
 
   if (btnBugReport) btnBugReport.addEventListener("click", openBugReportModal);
@@ -2907,7 +2387,6 @@ document.addEventListener("DOMContentLoaded", async () => {
           apiBaseUrl: wizardBaseUrl?.value,
           apiFormat: wizardApiFormat?.value,
           apiKey: wizardApiKey?.value,
-          apiProvider: wizardProvider?.value || "pesatrouter",
           modelName: getModelName()
         },
         wizardTestResult,
@@ -2933,7 +2412,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         apiBaseUrl: base,
         apiFormat: fmt,
         apiKey: rawKey,
-        apiProvider: wizardProvider?.value || "pesatrouter",
         modelName: activeModelId,
         sessionOnly,
         googleClientId: storedSettings.googleClientId || ""
@@ -2944,7 +2422,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         await chrome.storage.local.set({
           apiBaseUrl: base,
           apiFormat: fmt,
-          apiProvider: wizardProvider?.value || "pesatrouter",
           modelName: activeModelId,
           pesat_models: modelsList,
           sessionOnly: true
@@ -2954,7 +2431,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         await chrome.storage.local.set({
           apiBaseUrl: base,
           apiFormat: fmt,
-          apiProvider: wizardProvider?.value || "pesatrouter",
           apiKey: rawKey,
           modelName: activeModelId,
           pesat_models: modelsList,
@@ -2993,7 +2469,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const rawKey = (apiKeyInput?.value || "").trim();
     const sessionOnly = !!settingsSessionOnly?.checked;
     const autoPasteDocs = !!settingsAutoPasteDocs?.checked;
-    const enableInPageToolbar = false;
+    const enableInPageToolbar = settingsEnableInPageToolbar ? !!settingsEnableInPageToolbar.checked : true;
     const base = (apiUrlInput?.value || "").trim() || CFG.DEFAULT_API_BASE_URL;
     const fmt = apiFormatSelect?.value || CFG.DEFAULT_API_FORMAT;
     const googleId = (googleClientIdInput?.value || "").trim();
@@ -3167,14 +2643,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     displayRedirectUri.textContent = currentRedirectUri;
   }
 
-  const linkRedirectUri = document.getElementById("linkRedirectUri");
-  if (linkRedirectUri) {
-    linkRedirectUri.addEventListener("click", (e) => {
-      e.preventDefault();
-      chrome.tabs.create({ url: currentRedirectUri });
-    });
-  }
-
   if (btnCopyRedirectUri) {
     btnCopyRedirectUri.addEventListener("click", async () => {
       try {
@@ -3192,7 +2660,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  function sendToContentScript(payload, timeoutMs = 15000, maxRetries = 2, explicitTabId = null) {
+  function sendToContentScript(payload, timeoutMs = 15000, maxRetries = 2) {
     return new Promise((resolve) => {
       let resolved = false;
       let retryCount = 0;
@@ -3214,10 +2682,8 @@ document.addEventListener("DOMContentLoaded", async () => {
           }
         }, timeoutMs);
 
-        const targetTabId = explicitTabId || payload?.targetTabId || payload?.tabId || activeTask?.targetTabId || null;
-
         chrome.runtime.sendMessage(
-          { action: "EXECUTE_IN_CONTENT", payload, targetTabId },
+          { action: "EXECUTE_IN_CONTENT", payload },
           (response) => {
             if (!resolved) {
               clearTimeout(timer);
@@ -3268,39 +2734,22 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Navigasi URL tab browser secara andal (langsung via chrome.tabs API atau background)
-  // Guard navigasi ganda untuk mencegah bug "buka web" membuka 2 tab
-  let _lastNavigatedUrl = "";
-  let _lastNavigatedTime = 0;
-
   async function navigateToUrl(destUrl) {
     if (!destUrl) return { success: false, error: "URL tidak valid" };
-    const now = Date.now();
-    const norm = String(destUrl).trim();
-    if (norm === _lastNavigatedUrl && now - _lastNavigatedTime < 2000) {
-      appendLog(`⚠️ navigateToUrl diabaikan (duplikat dalam 2s): ${norm}`);
-      return { success: true, url: norm, skipped: true, message: `Sudah navigasi ke ${norm}` };
-    }
-    _lastNavigatedUrl = norm;
-    _lastNavigatedTime = now;
     let dest = String(destUrl).trim();
     if (!/^https?:\/\//i.test(dest)) {
       dest = "https://" + dest;
     }
 
-    // 1. Prioritas Utama: Navigasi langsung via chrome.tabs API di Tab Target atau Aktif
+    // 1. Prioritas Utama: Navigasi langsung via chrome.tabs API di Tab Aktif
     try {
-      if (typeof chrome !== "undefined" && chrome.tabs?.update) {
-        let tabId = activeTask?.targetTabId || null;
-        if (!tabId && chrome.tabs?.query) {
-          const tabs = await new Promise((resolve) => {
-            chrome.tabs.query({ active: true, currentWindow: true }, (t) => resolve(t || []));
-          });
-          if (tabs && tabs.length > 0 && tabs[0].id) {
-            tabId = tabs[0].id;
-          }
-        }
-        if (tabId) {
-          await chrome.tabs.update(Number(tabId), { url: dest });
+      if (typeof chrome !== "undefined" && chrome.tabs?.query && chrome.tabs?.update) {
+        const tabs = await new Promise((resolve) => {
+          chrome.tabs.query({ active: true, currentWindow: true }, (t) => resolve(t || []));
+        });
+        if (tabs && tabs.length > 0 && tabs[0].id) {
+          const tabId = tabs[0].id;
+          await chrome.tabs.update(tabId, { url: dest });
           appendLog(`🌐 chrome.tabs.update berhasil membuka tab ${tabId}: ${dest}`);
           return { success: true, url: dest, message: `Membuka URL: ${dest}` };
         }
@@ -3310,7 +2759,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // 2. Fallback via background script NAVIGATE_TAB
-    const bgRes = await sendToBackground({ action: "NAVIGATE_TAB", url: dest, targetTabId: activeTask?.targetTabId });
+    const bgRes = await sendToBackground({ action: "NAVIGATE_TAB", url: dest });
     if (bgRes && bgRes.success) {
       return bgRes;
     }
@@ -3363,19 +2812,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
       // Jangan persist screenshot base64 (besar) — hanya runtime in-memory
       const { _pendingScreenshot, ...persistable } = activeTask;
-      await chrome.storage.local.set({ [TASK_STORAGE_KEY]: persistable });
-    } catch (e) { /* storage.local tidak tersedia — abaikan */ }
+      await chrome.storage.session.set({ [TASK_STORAGE_KEY]: persistable });
+    } catch (e) { /* storage.session tidak tersedia — abaikan */ }
   }
 
   async function clearPersistedTask() {
     try {
-      await chrome.storage.local.remove(TASK_STORAGE_KEY);
+      await chrome.storage.session.remove(TASK_STORAGE_KEY);
     } catch (e) {}
   }
 
   async function loadResumableTask() {
     try {
-      const data = await chrome.storage.local.get([TASK_STORAGE_KEY]);
+      const data = await chrome.storage.session.get([TASK_STORAGE_KEY]);
       const task = data?.[TASK_STORAGE_KEY];
       if (task && ["PLANNING", "EXECUTING", "WAITING_USER", "PAUSED"].includes(task.status)) {
         appendResumeBanner(task);
@@ -3439,9 +2888,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function cancelActiveTask(reason) {
     if (activeTask) {
-      if (activeTask.targetTabId) {
-        try { chrome.runtime.sendMessage({ action: "CLEAR_ACTIVE_AGENT_TAB", tabId: activeTask.targetTabId }); } catch (_) {}
-      }
       activeTask.status = "CANCELLED";
       refreshTaskCard();
       appendLog(`⛔ Task dibatalkan: ${reason}`, "WARN");
@@ -3463,14 +2909,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const session = getCurrentSession();
-    // Buang teks tool-call mentah dari history agar sampah lama tidak memancing model menghasilkan sampah baru.
-    const history = (session?.messages || []).slice(-6)
-      .map(m => {
-        let content = stripToolCallNoise(String(m.content || ""));
-        if (isToolCallNoise(content)) return null;
-        return { role: m.role, content: content.substring(0, 2000) };
-      })
-      .filter(Boolean);
+    const history = (session?.messages || []).slice(-6).map(m => ({
+      role: m.role,
+      content: String(m.content || "").substring(0, 2000)
+    }));
 
     activeAbortController = new AbortController();
 
@@ -3577,17 +3019,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     return { to, subject, body };
   }
 
-  function shouldSendImmediately(text = "") {
-    const isExplicitDraft = /(?:draf|draft|simpan\s+(?:di|ke)\s+draf|tulis\s+saja|hanya\s+buat|tuliskan\s+draf|buatkan\s+draf|tulis\s+draf|buat\s+draf|jangan\s+kirim)/i.test(text);
-    if (isExplicitDraft) return false;
-    return /(?:kirim|kirimkan|send|submit|langsung|sekarang|auto\s*send)/i.test(text);
-  }
-
-  if (typeof globalThis !== "undefined") {
-    globalThis.shouldSendImmediately = shouldSendImmediately;
-    globalThis.extractEmailParameters = extractEmailParameters;
-  }
-
   // Recovery parser natural language (fallback jika LLM jawab teks instruktif)
   function tryParseNaturalLanguageActions(text, userPrompt = "") {
     if (!text && !userPrompt) return null;
@@ -3643,20 +3074,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     const emailParams = extractEmailParameters(combined);
 
     if (isEmailIntent && emailParams.to) {
-      const sendNow = shouldSendImmediately(combined);
       return {
-        planner: { steps: [
-          `1. Membuka formulir compose Gmail`,
-          `2. Mengisi penerima (${emailParams.to})`,
-          `3. Mengisi subjek (${emailParams.subject})`,
-          sendNow ? `4. Menuliskan isi pesan & mengirimkan email` : `4. Menuliskan isi pesan & menyimpan draf`
-        ] },
+        planner: { steps: [`1. Membuka formulir compose Gmail`, `2. Mengisi penerima (${emailParams.to})`, `3. Mengisi subjek (${emailParams.subject})`, `4. Menuliskan isi pesan & menyelesaikan pengisian`] },
         action: "send_email",
         to: emailParams.to,
         subject: emailParams.subject,
         body: emailParams.body,
-        sendNow,
-        message: sendNow ? `Mengirimkan email ke ${emailParams.to}...` : `Mempersiapkan draf email ke ${emailParams.to}...`
+        sendNow: /(?:kirim sekarang|langsung kirim|auto send)/i.test(combined),
+        message: `Mempersiapkan pengiriman email ke ${emailParams.to}...`
       };
     }
 
@@ -3710,8 +3135,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ═══════════════════════════════════════════════════
   const WRITE_SKILLS = ["gworkspace_append_sheet_data", "gworkspace_update_sheet_data", "gworkspace_write_doc", "autofill_form_batch", "paste_text", "fill_spreadsheet_grid"];
   const HIGH_RISK_ACTIONS = new Set(["send_email", "post_social", "post_twitter", "post_x", "tweet", "social_post", "post_threads", "delete_knowledge_source"]);
-  // Aksi destruktif krusial: TIDAK BOLEH dilewati oleh confirmAllGranted, selalu butuh konfirmasi individual per pemanggilan.
-  const CRITICAL_DESTRUCTIVE_ACTIONS = new Set(["send_email", "post_social", "post_twitter", "post_x", "tweet", "social_post", "post_threads", "delete_knowledge_source"]);
   const RISKY_TEXT_RE = /(kirim|send|bayar|pay|pembayaran|hapus|delete|post|publish|checkout|order|beli\s|transfer|password|sandi|passwd)/i;
 
   function actionRiskLevel(resObj) {
@@ -3750,16 +3173,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   async function ensureActionApproval(resObj) {
     if (resObj?._approvalGranted || !isRiskyAction(resObj)) return { approved: true };
-    const act = resObj.action || "";
-    // Aksi destruktif krusial selalu butuh konfirmasi individual, tidak boleh dilewati oleh confirmAllGranted.
-    if (CRITICAL_DESTRUCTIVE_ACTIONS.has(act)) {
-      const verdict = await requestConfirmation(resObj);
-      if (!verdict || verdict.cancelled) return { approved: false, cancelled: true };
-      if (!verdict.approved) return { approved: false, cancelled: false };
-      resObj._approvalGranted = true;
-      if (activeTask?.status === "WAITING_USER") activeTask.status = "EXECUTING";
-      return { approved: true };
-    }
     if (activeTask?.confirmAllGranted) return { approved: true };
     const verdict = await requestConfirmation(resObj);
     if (!verdict || verdict.cancelled) return { approved: false, cancelled: true };
@@ -3785,10 +3198,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 <div class="plan-approval-card" id="activePlanApprovalCard">
   <div class="plan-approval-header">
     <div style="display:flex; align-items:center; gap:6px;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-      </svg>
+      <span>📋</span>
       <span>Persetujuan Rencana Tugas</span>
     </div>
     <span class="plan-approval-badge">Planning Mode</span>
@@ -3802,9 +3212,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   </div>
   <div class="plan-approval-actions">
     <button type="button" class="btn-approve-plan" id="btnApprovePlan">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-      </svg>
+      <span>🚀</span>
       <span>Setujui & Jalankan Rencana</span>
     </button>
     <button type="button" class="btn-reject-plan" id="btnRejectPlan">
@@ -4145,48 +3553,20 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
 
     // ── Aksi otomatisasi Email Khusus (Gmail / Webmail) ──
     if (actionType === "send_email" || actionType === "compose_email") {
-      let targetTab = null;
-      let targetTabId = activeTask?.targetTabId || null;
+      let currentTab = null;
+      try {
+        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+        if (tabs && tabs[0]) currentTab = tabs[0];
+      } catch (e) {}
 
-      // 1. Cek tab kerja yang tersemat (pinned targetTabId) terlebih dahulu
-      if (targetTabId && typeof chrome !== "undefined" && chrome.tabs?.get) {
-        try {
-          const t = await chrome.tabs.get(Number(targetTabId));
-          if (t && t.id) targetTab = t;
-        } catch (_) {}
-      }
-
-      // 2. Tab reuse: jika targetTab bukan Gmail, cari apakah sudah ada tab Gmail terbuka di jendela
-      if (!targetTab || !/mail\.google\.com/i.test(targetTab.url || "")) {
-        try {
-          const allTabs = await new Promise(resolve => chrome.tabs.query({ currentWindow: true }, resolve));
-          const existingGmailTab = (allTabs || []).find(t => /mail\.google\.com/i.test(t.url || ""));
-          if (existingGmailTab && existingGmailTab.id) {
-            targetTab = existingGmailTab;
-            targetTabId = existingGmailTab.id;
-            if (activeTask) activeTask.targetTabId = targetTabId;
-            try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: targetTabId }); } catch (_) {}
-          }
-        } catch (_) {}
-      }
-
-      const isAlreadyOnGmail = targetTab && /mail\.google\.com/i.test(targetTab.url || "");
+      const isAlreadyOnGmail = currentTab && /mail\.google\.com/i.test(currentTab.url || "");
 
       if (!isAlreadyOnGmail) {
-        appendLog("Membuka formulir Tulis Gmail...");
+        appendLog("Membuka halaman Gmail...");
         showStatusIndicator("Membuka formulir Tulis Gmail...");
-        if (targetTabId) {
-          await sendToBackground({ action: "NAVIGATE_TAB", url: "https://mail.google.com/mail/u/0/#inbox?compose=new", targetTabId });
-        } else {
-          const rNew = await sendToBackground({ action: "NEW_TAB", url: "https://mail.google.com/mail/u/0/#inbox?compose=new" });
-          if (rNew && rNew.tabId) {
-            targetTabId = rNew.tabId;
-            if (activeTask) activeTask.targetTabId = targetTabId;
-            try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: targetTabId }); } catch (_) {}
-          }
-        }
-        await new Promise(r => setTimeout(r, 4000));
-        await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 3500, stableWindowMs: 600 }, 5000, targetTabId).catch(() => {});
+        await sendToBackground({ action: "NAVIGATE_TAB", url: "https://mail.google.com/mail/u/0/#inbox?compose=new" });
+        await new Promise(r => setTimeout(r, 4500));
+        await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 3000, stableWindowMs: 600 }, 5000).catch(() => {});
       }
 
       showStatusIndicator("Mengisi formulir email di Gmail...");
@@ -4199,62 +3579,35 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           body: resObj.body || resObj.message || resObj.value,
           sendNow: resObj.sendNow === true
         }
-      }, 25000, targetTabId);
+      }, 25000);
 
       result.success = !!(r && r.success);
-      result.message = (r && (r.message || r.error)) || (result.success ? "Email berhasil diproses." : "Gagal mengisi formulir email di Gmail.");
-      result.stateChanged = result.success;
-      result.isFinished = result.success;
+      result.message = (r && (r.message || r.error)) || "Email berhasil diproses.";
+      result.stateChanged = true;
+      result.isFinished = true;
       return result;
     }
 
     // ── Aksi otomatisasi Media Sosial Khusus (Twitter/X, Threads, LinkedIn, Facebook) ──
     if (actionType === "post_social" || actionType === "post_twitter" || actionType === "post_x" || actionType === "tweet" || actionType === "social_post" || actionType === "post_threads") {
-      let targetTab = null;
-      let targetTabId = activeTask?.targetTabId || null;
-
-      if (targetTabId && typeof chrome !== "undefined" && chrome.tabs?.get) {
-        try {
-          const t = await chrome.tabs.get(Number(targetTabId));
-          if (t && t.id) targetTab = t;
-        } catch (_) {}
-      }
+      let currentTab = null;
+      try {
+        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+        if (tabs && tabs[0]) currentTab = tabs[0];
+      } catch (e) {}
 
       const targetPlatform = detectTargetSocialPlatform(
         `${resObj.platform || ""} ${resObj.target || ""} ${activeTask?.goal || ""} ${resObj.text || ""}`,
-        targetTab?.url || ""
+        currentTab?.url || ""
       );
 
-      // Tab reuse untuk platform media sosial
-      if (!targetTab || !targetPlatform.domainCheck.test(targetTab.url || "")) {
-        try {
-          const allTabs = await new Promise(resolve => chrome.tabs.query({ currentWindow: true }, resolve));
-          const existingSocialTab = (allTabs || []).find(t => targetPlatform.domainCheck.test(t.url || ""));
-          if (existingSocialTab && existingSocialTab.id) {
-            targetTab = existingSocialTab;
-            targetTabId = existingSocialTab.id;
-            if (activeTask) activeTask.targetTabId = targetTabId;
-            try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: targetTabId }); } catch (_) {}
-          }
-        } catch (_) {}
-      }
-
-      const isAlreadyOnSocial = targetTab && targetPlatform.domainCheck.test(targetTab.url || "");
+      const isAlreadyOnSocial = currentTab && targetPlatform.domainCheck.test(currentTab.url || "");
       if (!isAlreadyOnSocial) {
         appendLog(`Navigasi ke ${targetPlatform.name}...`);
         showStatusIndicator(`Membuka halaman ${targetPlatform.name}...`);
-        if (targetTabId) {
-          await sendToBackground({ action: "NAVIGATE_TAB", url: targetPlatform.url, targetTabId });
-        } else {
-          const rNew = await sendToBackground({ action: "NEW_TAB", url: targetPlatform.url });
-          if (rNew && rNew.tabId) {
-            targetTabId = rNew.tabId;
-            if (activeTask) activeTask.targetTabId = targetTabId;
-            try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: targetTabId }); } catch (_) {}
-          }
-        }
-        await new Promise(r => setTimeout(r, 4000));
-        await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000, targetTabId).catch(() => {});
+        await sendToBackground({ action: "NAVIGATE_TAB", url: targetPlatform.url });
+        await new Promise(r => setTimeout(r, 4500));
+        await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
       }
 
       showStatusIndicator(`Menuliskan draf postingan di ${targetPlatform.name}...`);
@@ -4266,12 +3619,12 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
           text: postText,
           sendNow: resObj.sendNow === true || resObj.postNow === true
         }
-      }, 20000, targetTabId);
+      }, 20000);
 
       result.success = !!(r && r.success);
-      result.message = (r && (r.message || r.error)) || (result.success ? `Postingan di ${targetPlatform.name} berhasil diproses.` : `Gagal memproses postingan di ${targetPlatform.name}.`);
-      result.stateChanged = result.success;
-      result.isFinished = result.success;
+      result.message = (r && (r.message || r.error)) || `Postingan di ${targetPlatform.name} berhasil diproses.`;
+      result.stateChanged = true;
+      result.isFinished = true;
       return result;
     }
 
@@ -4299,10 +3652,6 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       if (actionType === "new_tab") {
         r = await sendToBackground({ action: "NEW_TAB", url: resObj.url || resObj.value });
         if (r && r.success) {
-          if (r.tabId && activeTask) {
-            activeTask.targetTabId = r.tabId;
-            try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: r.tabId }); } catch (_) {}
-          }
           await new Promise(res => setTimeout(res, 800));
           await sendToContentScript({ type: "LOCK_PAGE", message: "Tab baru sedang dikontrol oleh Pesat AI Agent..." }).catch(() => {});
         }
@@ -4311,10 +3660,6 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         await sendToContentScript({ type: "UNLOCK_PAGE" }).catch(() => {});
         r = await sendToBackground({ action: "SWITCH_TAB", matchTitle: resObj.matchTitle, matchUrl: resObj.matchUrl, tabId: resObj.tabId });
         if (r && r.success) {
-          if (r.tabId && activeTask) {
-            activeTask.targetTabId = r.tabId;
-            try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: r.tabId }); } catch (_) {}
-          }
           await new Promise(res => setTimeout(res, 600));
           await sendToContentScript({
             type: "LOCK_PAGE",
@@ -4431,15 +3776,14 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         : { verdict: "RETRY", subtaskComplete: false, reason: "Verifikasi deterministik gagal.", verification: deterministic.checks, errorType: deterministic.errorType };
     }
 
-    // Inconclusive (tidak ada bukti verifikasi deterministik): jangan dipercayai sebagai sukses — fail closed.
-    // Tidak ada fallback ke LLM untuk kasus inconclusive sehingga tidak ada subtask yang ditandai selesai
-    // tanpa verifikasi deterministik yang konkret.
-    return {
-      verdict: "RETRY",
-      subtaskComplete: false,
-      reason: "Verifikasi deterministik tidak konklusif — tidak cukup bukti bahwa aksi berhasil.",
-      errorType: "VERIFICATION_INCONCLUSIVE"
-    };
+    // Jika eksekusi aksi gagal, validator langsung kembalikan RETRY tanpa meloloskan ke DONE
+    if (lastResult !== "success") {
+      return {
+        verdict: "RETRY",
+        subtaskComplete: false,
+        reason: `Aksi '${safeActionType}' mengalami kegagalan eksekusi: ${lastAction?.message || "Error interaksi DOM"}`
+      };
+    }
 
     const isNavOrMenu = /(?:buka|klik|pilih|masuk|tampilkan|kunjungi|navigate|open|click)\s+(?:ke\s+)?(?:menu|sidebar|halaman|tab)?/i.test(sub?.description || activeTask?.goal || "");
     const isSingleStepGoal = (activeTask?.plan?.length || 0) <= 1;
@@ -4905,25 +4249,24 @@ ${topCompStr}
   async function runNewTabFlow(userPrompt, params) {
     const destUrl = params?.url || "https://www.google.com";
     setAgentRunning(true);
-    showStatusIndicator(`Membuka di tab aktif: ${destUrl}...`);
-    appendLog(`🌐 Membuka di tab aktif menuju: ${destUrl}...`);
+    showStatusIndicator(`Membuka tab baru: ${destUrl}...`);
+    appendLog(`🌐 Membuka tab baru menuju: ${destUrl}...`);
 
     try {
-      // Navigasi di tab aktif (tab pertama), bukan tab baru — sesuai preferensi pengguna
-      const res = await sendToBackground({ action: "NAVIGATE_TAB", url: destUrl });
+      const res = await sendToBackground({ action: "NEW_TAB", url: destUrl });
       if (res && res.success !== false) {
-        appendLog(`✅ Berhasil membuka di tab aktif: ${destUrl}`);
-        const reply = `### 🌐 Berhasil Dibuka di Tab Aktif\n\n` +
+        appendLog(`✅ Tab baru berhasil dibuka: ${destUrl}`);
+        const reply = `### 🌐 Tab Baru Berhasil Dibuka\n\n` +
           `- **URL Tujuan:** [${destUrl}](${destUrl})\n` +
-          `- **Status:** Halaman telah dibuka di tab aktif (tab pertama), bukan tab baru.`;
+          `- **Status:** Tab baru telah dibuka dan diarahkan ke tautan yang diperintahkan.`;
         addMessageToCurrentSession("assistant", reply, { skipClean: true });
       } else {
-        appendLog(`⚠️ Gagal membuka di tab aktif: ${res?.error || "Gagal membuka tab"}`, "WARN");
-        addMessageToCurrentSession("assistant", `⚠️ **Gagal membuka halaman:**\n${res?.error || "Peramban menolak navigasi."}`);
+        appendLog(`⚠️ Gagal membuka tab baru: ${res?.error || "Gagal membuka tab"}`, "WARN");
+        addMessageToCurrentSession("assistant", `⚠️ **Gagal membuka tab baru:**\n${res?.error || "Peramban menolak pembuatan tab baru."}`);
       }
     } catch (err) {
-      appendLog(`Error buka halaman di tab aktif: ${err.message}`, "ERROR");
-      addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat membuka halaman: ${err.message}`);
+      appendLog(`Error buka tab baru: ${err.message}`, "ERROR");
+      addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat membuka tab baru: ${err.message}`);
     } finally {
       setAgentRunning(false);
       hideStatusIndicator();
@@ -5011,12 +4354,9 @@ ${topCompStr}
   // ═══════════════════════════════════════════════════
   // MAIN: TASK EXECUTION LOOP (BYOK Gate Checked)
   // ═══════════════════════════════════════════════════
-  let _handleSendBusy = false;
   async function handleSend() {
     const userPrompt = promptInput.value.trim();
-    if (!userPrompt || isAgentRunning || _handleSendBusy) return;
-    _handleSendBusy = true;
-    try {
+    if (!userPrompt || isAgentRunning) return;
 
     // GERBANG BYOK (PLAN Phase A.3): Cek apakah API key sudah ada
     if (!isConfigured()) {
@@ -5125,7 +4465,6 @@ ${topCompStr}
 
     promptInput.value = "";
     promptInput.style.height = "38px";
-    syncSendButtonState();
     shouldStopAgent = false;
 
     // Pastikan state task sebelumnya bersih saat prompt baru dikirim oleh user
@@ -5134,7 +4473,9 @@ ${topCompStr}
       clearPersistedTask();
     }
 
-    await sendToBackground({ action: "RESET_LOOP_TRACKER" }).catch(() => {});
+    chrome.runtime.sendMessage({ action: "RESET_LOOP_TRACKER" }, () => {
+      if (chrome.runtime.lastError) {}
+    });
 
     let displayPrompt = userPrompt;
     const attachedFilesToDisplay = (contextSourcesToSend || []).filter(s => s && (s.type === "File" || s.type === "Image" || s.type === "BrowserTab"));
@@ -5213,13 +4554,8 @@ ${topCompStr}
       return;
     }
 
-    // Deteksi intent navigasi atau pencarian berita/informasi (jangan dibajak sebagai draf konten)
-    const isNavigationOrSearch = /(?:(?:ke|buka|kunjungi|akses|open|go\s*to)\s+[a-zA-Z0-9.-]+|cari\s+.+\s+(?:di|pada|ke)|cari\s+berita\s+(?:di|ke)|(?:di|ke)\s+(?:cnn|detik|kompas|tribun|kumparan|tempo|liputan6|antara|cnbc|viva|tirto|google|bing|wikipedia))/i.test(userPrompt) ||
-      /(?:(?:ke|buka|kunjungi)\s+(?:cnn|detik|kompas|tribun|kumparan|tempo|liputan6|antara|cnbc|viva|tirto))/i.test(userPrompt) ||
-      /(?:cari\s+(?:berita|informasi|artikel|data)\s+(?:tentang|mengenai)?\s+)/i.test(userPrompt);
-
     // Deteksi pembuatan draf konten murni (revisi/ganti draft tanpa aksi fisik)
-    const isContentDraftingIntent = !isNavigationOrSearch && /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan|ulasan|ringkasan|makalah|esai)/i.test(userPrompt) &&
+    const isContentDraftingIntent = /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan|ulasan|ringkasan|makalah|esai)/i.test(userPrompt) &&
       !/(?:posting\s+ke|post\s+ke|kirim\s+ke|upload|unggah\s+ke|buka\s+komposer|isi\s+form|autofill|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos)|tempel.*(?:threads|x|twitter))/i.test(userPrompt);
 
     // Deteksi aksi otomasi browser fisik (klik, login, isi form, navigasi direct, posting medsos)
@@ -5249,11 +4585,6 @@ ${topCompStr}
     }
 
     await startTask(userPrompt, contextSourcesToSend);
-    } catch (err) {
-      appendLog(`Error handleSend: ${err.message}`, "ERROR");
-    } finally {
-      _handleSendBusy = false;
-    }
   }
 
   function parseMarkdownTable(markdown = "") {
@@ -5293,48 +4624,19 @@ ${topCompStr}
       if (domainMatch) {
         resolvedUrl = "https://" + domainMatch[1];
       } else {
-        // 2.5. Portal Berita & Media Populer Indonesia
-        const mediaPortals = [
-          { pattern: /\b(?:cnn\s*indonesia|cnn)\b/i, home: "https://www.cnnindonesia.com", search: "https://www.cnnindonesia.com/search/?query=" },
-          { pattern: /\b(?:detik(?:\.com)?|detikcom|detiknews)\b/i, home: "https://www.detik.com", search: "https://www.detik.com/search/searchall?query=" },
-          { pattern: /\b(?:kompas(?:\.com)?|kompascom)\b/i, home: "https://www.kompas.com", search: "https://search.kompas.com/search/?q=" },
-          { pattern: /\b(?:tribun(?:\s*news)?|tribunnews)\b/i, home: "https://www.tribunnews.com", search: "https://www.tribunnews.com/search?q=" },
-          { pattern: /\bkumparan\b/i, home: "https://kumparan.com", search: "https://kumparan.com/search/" },
-          { pattern: /\btempo(?:\.co)?\b/i, home: "https://www.tempo.co", search: "https://www.tempo.co/search?q=" },
-          { pattern: /\bliputan6\b/i, home: "https://www.liputan6.com", search: "https://www.liputan6.com/search?q=" },
-          { pattern: /\b(?:antara|antaranews)\b/i, home: "https://www.antaranews.com", search: "https://www.antaranews.com/search?q=" },
-          { pattern: /\b(?:cnbc\s*indonesia|cnbc)\b/i, home: "https://www.cnbcindonesia.com", search: "https://www.cnbcindonesia.com/search?query=" },
-          { pattern: /\bjawapos\b/i, home: "https://www.jawapos.com", search: "https://www.jawapos.com/?s=" },
-          { pattern: /\bsindo(?:news)?\b/i, home: "https://www.sindonews.com", search: "https://search.sindonews.com/search?q=" },
-          { pattern: /\bviva(?:\.co\.id)?\b/i, home: "https://www.viva.co.id", search: "https://www.viva.co.id/search?q=" },
-          { pattern: /\btirto(?:\.id)?\b/i, home: "https://tirto.id", search: "https://tirto.id/search?q=" }
-        ];
-
-        const matchedPortal = mediaPortals.find(p => p.pattern.test(prompt));
-        if (matchedPortal) {
-          const searchMatch = prompt.match(/(?:cari|search|temukan|baca)\s+(?:berita\s+|informasi\s+|artikel\s+|kabar\s+)?(?:tentang\s+|mengenai\s+|soal\s+)?["'“]?([^.,'”\n]+?)["'”]?[\.,\s]*(?:lalu|kemudian|setelah|dan|$)/i) ||
-                              prompt.match(/(?:tentang|mengenai|soal)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]*(?:lalu|kemudian|setelah|dan|$)/i);
-          const rawQuery = searchMatch ? searchMatch[1].trim().replace(/^(?:berita|kabar|artikel|tentang|mengenai|soal)\s+/i, "").trim() : "";
-          if (rawQuery && rawQuery.length > 1) {
-            resolvedUrl = matchedPortal.search + encodeURIComponent(rawQuery);
-          } else {
-            resolvedUrl = matchedPortal.home;
-          }
+        // 3. Situs Wikipedia + kueri pencarian (misal: "Kunijungi wikipedia dan cari kecerdasan buatan" atau "Buka wikipedia tentang AI")
+        const wikiSearch = prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]+(?:lalu|kemudian|setelah|dan|rangkum|ke|$)/i) ||
+                           prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+)/i);
+        if (wikiSearch && wikiSearch[1].trim()) {
+          const q = wikiSearch[1].trim().replace(/^(?:tentang|artikel)\s+/i, "").trim();
+          if (q) resolvedUrl = "https://id.wikipedia.org/wiki/" + encodeURIComponent(q.replace(/\s+/g, "_"));
+        } else if (/(?:kuni?jungi|buka|ke|akses)\s+wikipedia/i.test(prompt)) {
+          resolvedUrl = "https://id.wikipedia.org";
         } else {
-          // 3. Situs Wikipedia + kueri pencarian (misal: "Kunijungi wikipedia dan cari kecerdasan buatan" atau "Buka wikipedia tentang AI")
-          const wikiSearch = prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]+(?:lalu|kemudian|setelah|dan|rangkum|ke|$)/i) ||
-                             prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+)/i);
-          if (wikiSearch && wikiSearch[1].trim()) {
-            const q = wikiSearch[1].trim().replace(/^(?:tentang|artikel)\s+/i, "").trim();
-            if (q) resolvedUrl = "https://id.wikipedia.org/wiki/" + encodeURIComponent(q.replace(/\s+/g, "_"));
-          } else if (/(?:kuni?jungi|buka|ke|akses)\s+wikipedia/i.test(prompt)) {
-            resolvedUrl = "https://id.wikipedia.org";
-          } else {
-            // 4. Pencarian umum di Google (misal: "cari di google tren AI 2026")
-            const googleSearchMatch = prompt.match(/(?:cari\s+(?:di\s+)?google|search\s+google|googling)\s+(?:berita\s+|informasi\s+)?(?:tentang\s+|mengenai\s+)?["'“]?([^.'"“”\n]+)["'”]?/i);
-            if (googleSearchMatch && googleSearchMatch[1].trim()) {
-              resolvedUrl = "https://www.google.com/search?q=" + encodeURIComponent(googleSearchMatch[1].trim());
-            }
+          // 4. Pencarian umum di Google (misal: "cari di google tren AI 2026")
+          const googleSearchMatch = prompt.match(/(?:cari\s+(?:di\s+)?google|search\s+google)\s+(?:tentang\s+)?["'“]?([^.'"“”\n]+)["'”]?/i);
+          if (googleSearchMatch && googleSearchMatch[1].trim()) {
+            resolvedUrl = "https://www.google.com/search?q=" + encodeURIComponent(googleSearchMatch[1].trim());
           }
         }
       }
@@ -5376,7 +4678,7 @@ ${topCompStr}
         if (activeTabInfo?.url?.includes("docs.google.com/document")) {
           appendLog(`🌐 Membuka tautan sumber di tab baru: ${detectedSourceUrl}...`);
           showStatusIndicator("Membuka sumber...");
-          await sendToBackground({ action: "NAVIGATE_TAB", url: detectedSourceUrl });
+          await sendToBackground({ action: "NAVIGATE_TAB", url: detectedSourceUrl, newTab: true });
         } else {
           appendLog(`🌐 Membuka tautan sumber target: ${detectedSourceUrl}...`);
           showStatusIndicator("Membuka sumber...");
@@ -5466,13 +4768,6 @@ ${topCompStr}
 	          pageTitle = activeTabInfo?.title || scanFallback?.data?.title || pageTitle;
 	          pageUrl = activeTabInfo?.url || scanFallback?.data?.url || pageUrl;
 	        }
-	      } else if (!cleanText && !fileContextBlock && activeTabInfo) {
-	        // Toggle Tab Aktif OFF: tanpa baca content script, tetap beri metadata ringan
-	        // agar model tahu di mana ia bekerja (mencegah balasan ngawur karena konteks kosong).
-	        cleanText = `[INFO TAB AKTIF]\nJudul: ${activeTabInfo.title || pageTitle || ""}\nURL: ${activeTabInfo.url || pageUrl || ""}`.trim();
-	        pageTitle = activeTabInfo.title || pageTitle;
-	        pageUrl = activeTabInfo.url || pageUrl;
-	        appendLog(`ℹ️ Tab Aktif OFF — menggunakan metadata ringan (judul + URL) tanpa membaca isi halaman.`);
 	      }
 
       if (fileContextBlock) {
@@ -5491,10 +4786,10 @@ ${topCompStr}
                          pageUrl.includes("word.office.com");
 
       const isExplicitExcelOrCsv = /(?:excel|\.xls|\.xlsx|\.csv|spreadsheet|sheets)/i.test(userPrompt);
-      const isExplicitNavigateDocs = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|rangkum(?:kan)?|taruh|post)\s+(?:.*?\s+)?(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:buka|open)\s+(?:google\s+)?(?:docs?|dokumen|document)|docs\.new)/i.test(userPrompt);
-      const isExplicitNavigateSheets = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|taruh)\s+(?:.*?\s+)?(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:buka|open)\s+(?:google\s+)?(?:sheets?|spreadsheet)|sheets\.new)/i.test(userPrompt);
+      const isExplicitNavigateDocs = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|rangkum(?:kan)?|taruh|post)\s+(?:.*?\s+)?(?:ke|di|pada)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:ke|di|pada)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:buka|open)\s+(?:google\s+)?(?:docs?|dokumen|document)|docs\.new)/i.test(userPrompt);
+      const isExplicitNavigateSheets = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|taruh)\s+(?:.*?\s+)?(?:ke|di|pada)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:ke|di|pada)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:buka|open)\s+(?:google\s+)?(?:sheets?|spreadsheet)|sheets\.new)/i.test(userPrompt);
 
-      const userExplicitDocs = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|simpan\s+(?:ke|di|pada|ke\s+dalam)|isi\s+(?:ke|di|pada|ke\s+dalam)|masukkan\s+(?:ke|di|pada|ke\s+dalam)|tulis\s+(?:ke|di|pada|ke\s+dalam)|tempel\s+(?:ke|di|pada|ke\s+dalam)|salin\s+(?:ke|di|pada|ke\s+dalam)|ekspor\s+(?:ke|di|pada|ke\s+dalam)|pindahkan\s+(?:ke|di|pada|ke\s+dalam))\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen|(?:tulis|simpan|masukkan|tempel|ekspor)\s+(?:ke|di|pada|ke\s+dalam)\s+(?:dokumen|docs)|(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:docs?|dokumen|document))/i.test(userPrompt);
+      const userExplicitDocs = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke|tempel\s+ke|salin\s+ke|ekspor\s+ke|pindahkan\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen|(?:tulis\s+ke|simpan\s+ke|masukkan\s+ke|tempel\s+ke|ekspor\s+ke)\s+(?:dokumen|docs)|(?:ke|di)\s+(?:google\s+)?(?:docs?|dokumen|document))/i.test(userPrompt);
       const userExplicitSheets = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|buatkan spreadsheet)/i.test(userPrompt);
       const isDocsTarget = !isExplicitExcelOrCsv && (userExplicitDocs || (attachedFiles.length === 0 && isDocsSite));
 
@@ -5910,20 +5205,6 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         }
       }
 
-      // Validasi dan pembersihan respon noise
-      let cleanAiReply = String(aiReply || "").replace(/(?:\[?\s*(?:show|hide)\s*\]?\s*){2,}/gi, "").trim();
-      if (!cleanAiReply || cleanAiReply.length < 20 || /^(?:\[?\s*(?:show|hide)\s*\]?\s*)+$/i.test(cleanAiReply)) {
-        appendLog("⚠️ Respons model terlalu pendek atau hanya memuat noise UI. Mencoba menghasilkan ulang ringkasan...", "WARN");
-        try {
-          const retryPayload = `Tolong buatkan ringkasan lengkap, mendalam, dan terstruktur rapi dari konten berikut tanpa menyertakan elemen UI web:\n\n${promptPayload}`;
-          const retryReply = await callLLM("chat", retryPayload, { isSummarize: false });
-          if (retryReply && String(retryReply).trim().length > 20) {
-            cleanAiReply = String(retryReply).trim();
-          }
-        } catch (_) {}
-      }
-      aiReply = sanitizeAssistantReply(cleanAiReply || String(aiReply || ""));
-
       const isDocsOutput = !isExplicitExcelOrCsv && (isDocsTableTask || isDocsArticleTask || (isDocsTarget && !isSpreadsheetTask));
       const artType = (isExplicitExcelOrCsv || isSpreadsheetTask || isGeneralTableTask || isProductResearch) ? "table" : (isSocialThread ? "social" : ((isArticle || isDocsOutput) ? "doc" : "text"));
       const artTitle = (isExplicitExcelOrCsv || isSpreadsheetTask || isGeneralTableTask || isProductResearch)
@@ -5932,7 +5213,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
             ? `Thread-${(userPrompt || "Sosmed").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.txt`
             : `Draf-${(userPrompt || "Dokumen").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.docx`);
 
-      const artifact = ((!isSummarize || isDocsOutput) && (isExplicitExcelOrCsv || isSpreadsheetTask || isGeneralTableTask || isProductResearch || isSocialThread || isArticle || isDocsOutput)) ? {
+      const artifact = (!isSummarize && (isExplicitExcelOrCsv || isSpreadsheetTask || isGeneralTableTask || isProductResearch || isSocialThread || isArticle || isDocsOutput)) ? {
         artifactType: artType,
         name: artTitle,
         content: aiReply
@@ -5949,8 +5230,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
                            /x\.com|twitter\.com|linkedin\.com|facebook\.com|threads\.net|threads\.com/i.test(pageUrl);
       const userSocialFillIntent = /(?:isi|tempel|masukkan|tulis|posting|post)\s+(?:ke|di|pada)?\s*(?:threads|x|twitter|linkedin|medsos|postingan|komposer)/i.test(userPrompt);
 
-      const shouldAutoPasteDocs = isExplicitNavigateDocs || (!!storedSettings.autoPasteDocs && (isDocsSite || /(?:tulis|ketik|isi|tempel|salin|simpan|masukkan)\s+(?:ke|di|pada|ke\s+dalam)\s+(?:google\s+)?(?:docs|dokumen)/i.test(userPrompt)));
-      const shouldAutoPasteSheets = isExplicitNavigateSheets || (!!storedSettings.autoPasteDocs && (isSheetsSite || /(?:tulis|isi|tempel)\s+(?:ke\s+|ke\s+dalam\s+)?spreadsheet/i.test(userPrompt)));
+      const shouldAutoPasteDocs = isExplicitNavigateDocs || (!!storedSettings.autoPasteDocs && (isDocsSite || /(?:tulis|ketik|isi|tempel|salin)\s+ke\s+(?:docs|dokumen)/i.test(userPrompt)));
+      const shouldAutoPasteSheets = isExplicitNavigateSheets || (!!storedSettings.autoPasteDocs && (isSheetsSite || /(?:tulis|isi|tempel)\s+(?:ke\s+)?spreadsheet/i.test(userPrompt)));
 
       if (isDocsOutput && shouldAutoPasteDocs && (isDocsSite || isExplicitNavigateDocs)) {
         if (!isDocsSite && isExplicitNavigateDocs) {
@@ -6126,25 +5407,6 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
 
     activeTask = newTask(goal, contextSources);
     taskCardMsgIndex = -1;
-    try {
-      const allTabs = await new Promise(r => chrome.tabs.query({ currentWindow: true }, r));
-      const isEmailGoal = /(?:kirim|tulis|buat|draft|send|compose)\s+(?:ke\s+|pesan\s+)?email|gmail/i.test(goal);
-      if (isEmailGoal && allTabs) {
-        const existingGmail = allTabs.find(t => /mail\.google\.com/i.test(t.url || ""));
-        if (existingGmail && existingGmail.id) {
-          activeTask.targetTabId = existingGmail.id;
-        }
-      }
-      if (!activeTask.targetTabId) {
-        const activeTab = (allTabs || []).find(t => t.active);
-        if (activeTab && activeTab.id) {
-          activeTask.targetTabId = activeTab.id;
-        }
-      }
-      if (activeTask.targetTabId) {
-        try { chrome.runtime.sendMessage({ action: "SET_ACTIVE_AGENT_TAB", tabId: activeTask.targetTabId }); } catch (_) {}
-      }
-    } catch (_) {}
     await persistTask();
 
     try {
@@ -6682,7 +5944,6 @@ ATURAN KETAT:
       activeTask.stepsUsed++;
       const stepNum = activeTask.stepsUsed;
       const sub = currentSubtaskObj();
-      activeTask._parseRetried = false; // Reset flag retry parse setiap langkah/subtask baru
 
       // Semua subtask selesai → validasi akhir → selesai
       if (!sub) {
@@ -6740,7 +6001,6 @@ ${sub.description}
   * Gunakan open_new_tab({ url: "https://..." }) saat pengguna meminta membuka tab baru atau menjelajah tautan baru.
   * Gunakan switch_to_tab({ matchTitle: "...", matchUrl: "..." }) saat perlu beralih ke tab yang sudah terbuka (seperti Google Docs atau spreadsheet).
 - Jika instruksi selesai sepenuhnya, sajikan teks jawaban akhir atau panggil finish_task.
-- FORMAT BALASAN WAJIB (anti-sampah): Jangan pernah mengeluarkan teks tool-call, XML, atau tag mcp__ dalam bahasa balasan. Balas HANYA JSON valid {"action":"..."} atau teks jawaban manusiawi. Jika konteks halaman kurang/tidak yakin, balas JSON {"action":"ask_user","question":"..."} untuk bertanya, jangan mengarang aksi.
 `.trim();
 
       showStatusIndicator();
@@ -6853,22 +6113,6 @@ ${sub.description}
         if (!resObj || (!resObj.action && !resObj.actions && !resObj.message && !resObj.question)) {
           resObj = tryParseNaturalLanguageActions(reply, activeTask.goal);
         }
-
-        // Auto-recovery: bila parse & fallback NL gagal, minta model membalas ulang HANYA JSON valid (1x).
-        if (!resObj && !shouldStopAgent && !activeTask._parseRetried) {
-          activeTask._parseRetried = true;
-          appendLog("🔁 Respons model tidak valid — mencoba ulang dengan instruksi JSON ketat...", "WARN");
-          try {
-            reply = await callLLM("act", `${actPrompt}\n\nCATATAN PENTING: Balas HANYA dengan satu objek JSON valid seperti {"action":"finish_task","message":"..."} atau {"action":"ask_user","question":"..."} atau {"action":"click_element","elementId":"..."}. JANGAN sertakan teks lain, tool-call, XML, atau tag mcp__ di luar JSON.`, {
-              image: activeTask._pendingScreenshot || null
-            });
-            resObj = parseActionJSON(reply);
-            if (!resObj) resObj = tryParseNaturalLanguageActions(reply, activeTask.goal);
-          } catch (retryErr) {
-            if (retryErr.name === "AbortError" || shouldStopAgent) throw retryErr;
-            appendLog(`Retry parse gagal: ${retryErr.message}`, "WARN");
-          }
-        }
       }
 
       // 2. Circuit Breaker & Anti-Looping (Dynamic ReAct Step Budget)
@@ -6944,7 +6188,7 @@ ${sub.description}
               to: toM ? toM[1] : "",
               subject: subM ? subM[1].trim() : "Pesan Baru",
               body: bodyM ? bodyM[1].trim() : goalText,
-              sendNow: shouldSendImmediately(goalText)
+              sendNow: /(?:kirim sekarang|langsung kirim|auto send|kirimkan|kirim)/i.test(goalText)
             };
           }
         }
@@ -7009,7 +6253,7 @@ ${sub.description}
             to: emailParams.to,
             subject: emailParams.subject,
             body: emailParams.body || reply || activeTask.goal,
-            sendNow: shouldSendImmediately(activeTask.goal || sub.description || "")
+            sendNow: /(?:kirim sekarang|langsung kirim|auto send)/i.test(activeTask.goal)
           };
         } else if (isSocialAction) {
           appendLog(`📱 Mengonversi draf ke aksi postingan fisik di Twitter/X / Media Sosial...`);
@@ -7019,8 +6263,6 @@ ${sub.description}
             sendNow: /(?:langsung posting|langsung tweet|auto post|publish)/i.test(activeTask.goal)
           };
         } else if (reply && (reply.length > 100 || isContentTask)) {
-          // Sanitasi dulu: buang teks tool-call mentah sebelum menjadi artefak/bubble.
-          reply = sanitizeAssistantReply(String(reply));
           const isTable = /\|.*\|[\r\n]+\|[-:\s|]+\|/i.test(reply) || /(?:riset|tabel|laptop|produk|komparasi|harga|spesifikasi|csv|penjualan)/i.test(activeTask.goal || sub.description);
           const artType = isTable ? "table" : "text";
           const artTitle = isTable
@@ -7035,7 +6277,6 @@ ${sub.description}
           };
           activeTask.artifacts.push(artifact);
 
-          // skipClean dipertahankan karena teks sudah disanitasi eksplisit di atas
           addMessageToCurrentSession("assistant", `${isTable ? "### 📊 Tabel Data Berhasil Dibuat (.CSV)" : "### 📝 Draf Copywriting Berhasil Dibuat"}\n\n${reply}`, {
             skipClean: true,
             artifact
@@ -7069,26 +6310,11 @@ ${sub.description}
         // Zero Text Suppression (Pilar 2 Rencana Arsitektur):
         // Jika Navigator menghasilkan respon penjelasan/panduan/jawaban tekstual tanpa aksi DOM,
         // tampilkan langsung ke obrolan pengguna dan selesaikan tugas tanpa membungkam teks tersebut.
-        const cleanReply = sanitizeAssistantReply(String(reply || ""));
-        if (isToolCallNoise(String(reply || "")) || cleanReply === FRIENDLY_RETRY_MSG) {
-          // Model mengembalikan teks tool-call mentah / konteks hilang → JANGAN tampilkan sampah ke user.
-          appendLog("⚠️ Respons model tidak valid (teks tool-call mentah). Meminta klarifikasi pengguna...", "WARN");
-          const answer = await requestAskUser(
-            "Saya kehilangan konteks halaman. Aktifkan Tab Aktif, atau sebutkan target yang ingin dikerjakan?",
-            ["Aktifkan Tab Aktif & ulangi", "Batalkan"]
-          );
-          if (shouldStopAgent || !answer || /batalkan/i.test(answer)) {
-            await finalizeTask("cancelled", "Tugas dibatalkan karena konteks halaman tidak tersedia.");
-          } else {
-            await finalizeTask("done", "Silakan aktifkan Tab Aktif lalu kirim ulang perintah Anda.");
-          }
-          return;
-        }
-        addMessageToCurrentSession("assistant", cleanReply);
+        addMessageToCurrentSession("assistant", reply);
         (activeTask.plan || []).forEach(s => { s.status = "done"; });
         refreshTaskCard();
         await persistTask();
-        await finalizeTask("done", cleanReply || "AI telah memberikan jawaban secara lengkap.");
+        await finalizeTask("done", reply || "AI telah memberikan jawaban secara lengkap.");
         return;
       }
 
@@ -7307,15 +6533,9 @@ ${sub.description}
           await finalizeTask("done", finalMsg);
           return;
         }
-
-        // Masih ada subtask lanjutan: wajib lanjut ke subtask berikutnya tanpa memotong tugas
-        appendLog(`⏩ Subtask #${sub.id} selesai. Melanjutkan ke langkah rencana berikutnya...`);
-        continue;
       }
 
-      // Hanya selesaikan langsung jika rencana single-step atau seluruh subtask telah berstatus done
-      const remainingPlanSubs = (activeTask.plan || []).filter(s => s.status !== "done");
-      if (verdict.verdict === "DONE" && exec.success && (remainingPlanSubs.length === 0 || (activeTask.plan || []).length <= 1)) {
+      if (verdict.verdict === "DONE" && exec.success) {
         const finalDoneMsg = (exec.message && exec.message !== "Aksi sukses dijalankan.")
           ? exec.message
           : (verdict.reason ? `✅ ${verdict.reason}` : "✅ Validator menilai seluruh tujuan pengguna telah tercapai.");
@@ -7427,11 +6647,16 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     refreshTaskCard();
 
     const isSuccess = activeTask.status === "DONE";
+    if (isSuccess && activeTask.currentUrl && activeTask.goal) {
+      try {
+        const lastAction = activeTask.history?.[activeTask.history.length - 1];
+        const actionNote = lastAction?.message || "Alur navigasi berhasil diselesaikan";
+        await globalThis.PesatMemoryEngine?.recordLearnedSkill?.(activeTask.currentUrl, activeTask.goal, actionNote);
+      } catch (_) {}
+    }
     const isCancelled = activeTask.status === "CANCELLED";
     const heading = isSuccess ? "✅ **Selesai**" : (isCancelled ? "⏹️ **Dihentikan**" : "⚠️ **Belum selesai**");
-    // Bersihkan teks mentah model (mcp__/tool-call) sebelum tampil di bubble final.
-    let resultText = String(message || (isSuccess ? "Tugas selesai." : "Tugas belum dapat diselesaikan.")).trim();
-    if (isToolCallNoise(resultText)) resultText = FRIENDLY_RETRY_MSG;
+    const resultText = String(message || (isSuccess ? "Tugas selesai." : "Tugas belum dapat diselesaikan.")).trim();
 
     const curSession = getCurrentSession();
     const lastMsg = curSession?.messages?.[curSession.messages.length - 1];
@@ -7445,10 +6670,6 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       { goal: activeTask.goal, status: activeTask.status, steps: activeTask.stepsUsed, artifacts: activeTask.artifacts?.length || 0 },
       "TASK_END"
     );
-
-    if (activeTask?.targetTabId) {
-      try { chrome.runtime.sendMessage({ action: "CLEAR_ACTIVE_AGENT_TAB", tabId: activeTask.targetTabId }); } catch (_) {}
-    }
 
     activeTask = null;
     taskCardMsgIndex = -1;
@@ -7469,28 +6690,6 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       activeTask._pendingScreenshot = null;
       shouldStopAgent = false;
       taskCardMsgIndex = -1;
-
-      // Verifikasi & rekoneksi targetTabId agar eksekusi tidak hilang arah jika tab ditutup atau berpindah
-      if (activeTask.targetTabId) {
-        try {
-          const tab = await chrome.tabs.get(Number(activeTask.targetTabId));
-          if (tab && tab.id) {
-            appendLog(`Target tab terhubung: "${tab.title || tab.url}"`);
-          }
-        } catch (_) {
-          appendLog("Tab target sebelumnya tidak tersedia, menyambungkan ke tab aktif saat ini...", "WARN");
-          const currentTabs = await new Promise(r => chrome.tabs.query({ active: true, currentWindow: true }, r));
-          if (currentTabs && currentTabs[0]?.id) {
-            activeTask.targetTabId = currentTabs[0].id;
-          }
-        }
-      } else {
-        const currentTabs = await new Promise(r => chrome.tabs.query({ active: true, currentWindow: true }, r));
-        if (currentTabs && currentTabs[0]?.id) {
-          activeTask.targetTabId = currentTabs[0].id;
-        }
-      }
-
       setAgentRunning(true);
       showStatusIndicator();
       appendLog(`▶ Melanjutkan task tersimpan: "${activeTask.goal}" (${activeTask.stepsUsed}/${activeTask.stepBudget} langkah)`);
@@ -7510,24 +6709,13 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   });
 
   // ═══════════════════════════════════════════════════
-  // QUICK CHIPS & COMPOSER STATE
+  // QUICK CHIPS
   // ═══════════════════════════════════════════════════
-  function syncSendButtonState() {
-    if (!btnSend) return;
-    if (isAgentRunning) {
-      btnSend.classList.remove("disabled");
-      return;
-    }
-    const hasContent = Boolean((promptInput && promptInput.value.trim()) || (attachedContextSources && attachedContextSources.length > 0));
-    btnSend.classList.toggle("disabled", !hasContent);
-  }
-
   function applyPromptToInput(text) {
     promptInput.value = text;
     promptInput.style.height = "auto";
-    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 38), 120) + "px";
+    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 38), 150) + "px";
     promptInput.focus();
-    syncSendButtonState();
   }
 
   function initQuickChipsSlider() {
@@ -7661,7 +6849,6 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     composerChipsTray.innerHTML = "";
     if (attachedContextSources.length === 0) {
       composerChipsTray.classList.add("hidden");
-      syncSendButtonState();
       return;
     }
     composerChipsTray.classList.remove("hidden");
@@ -7702,7 +6889,6 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       });
       composerChipsTray.appendChild(chip);
     });
-    syncSendButtonState();
   }
 
   function renderMentionItemIcon(src) {
@@ -7712,9 +6898,9 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     }
     const favUrl = src.metadata?.favIconUrl || src.icon;
     if (favUrl && typeof favUrl === "string" && !favUrl.startsWith("chrome://") && favUrl !== "🌐") {
-      return `<div class="mention-item-icon-wrap"><img src="${escapeHtml(favUrl)}" alt="" /><span class="mention-icon-fallback" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
+      return `<div class="mention-item-icon-wrap"><img src="${escapeHtml(favUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';" /><span class="mention-icon-fallback" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
     }
-    return `<div class="mention-item-icon-wrap"><span class="mention-icon-fallback"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
+    return `<div class="mention-item-icon-wrap"><span class="mention-icon-fallback"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
   }
 
   function renderMentionPickerDOM(groups) {
@@ -7756,14 +6942,6 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
             <span class="mention-item-sub">${escapeHtml(subText)}</span>
           </div>
         `;
-
-        // CSP-safe: attach error handler via addEventListener instead of inline onerror attribute
-        item.querySelector("img")?.addEventListener("error", (e) => {
-          const img = e.currentTarget;
-          img.style.display = "none";
-          const fallback = img.nextElementSibling;
-          if (fallback) fallback.style.display = "inline-flex";
-        });
 
         item.addEventListener("click", () => selectMentionSource(src));
         mentionPickerList.appendChild(item);
@@ -7996,11 +7174,10 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   window.addEventListener("dragover", (e) => {
     e.preventDefault();
   });
-  window.addEventListener("dragleave", () => {
-    if (dropOverlay) dropOverlay.classList.add("hidden");
-  });
-  window.addEventListener("dragend", () => {
-    if (dropOverlay) dropOverlay.classList.add("hidden");
+  window.addEventListener("dragleave", (e) => {
+    if (e.relatedTarget === null && dropOverlay) {
+      dropOverlay.classList.add("hidden");
+    }
   });
   window.addEventListener("drop", (e) => {
     e.preventDefault();
@@ -8051,8 +7228,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
 
   promptInput.addEventListener("input", () => {
     promptInput.style.height = "auto";
-    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 38), 120) + "px";
-    syncSendButtonState();
+    promptInput.style.height = Math.min(Math.max(promptInput.scrollHeight, 38), 140) + "px";
 
     const trigger = findMentionTrigger();
     if (trigger) {
@@ -8110,52 +7286,12 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   // ═══════════════════════════════════════════════════
   // HELPERS: STATUS, STOP, LOG, ABORT
   // ═══════════════════════════════════════════════════
-  function updateActiveWorkingTabUI(tabId, title) {
-    const bar = document.getElementById("activeTabWorkingBar");
-    const titleEl = document.getElementById("activeWorkingTabTitle");
-    const btnFocus = document.getElementById("btnFocusWorkingTab");
-    if (!bar) return;
-    if (tabId) {
-      bar.classList.remove("hidden");
-      if (titleEl) titleEl.textContent = title || `Tab #${tabId}`;
-      if (btnFocus) {
-        btnFocus.addEventListener("click", () => {
-          try { chrome.tabs.update(Number(tabId), { active: true }); } catch (_) {}
-        });
-      }
-    } else {
-      bar.classList.add("hidden");
-    }
-  }
-
   function setAgentRunning(running) {
     isAgentRunning = running;
+    agentStatus.textContent = running ? "Bekerja" : "Siap";
     if (running) {
-      setAgentStatus("executing");
+      agentStatus.classList.add("working");
       stopBar.classList.remove("hidden");
-
-      if (activeTask?.targetTabId) {
-        try {
-          chrome.tabs.get(Number(activeTask.targetTabId), (tab) => {
-            if (!chrome.runtime.lastError && tab) {
-              updateActiveWorkingTabUI(tab.id, tab.title || tab.url);
-            } else {
-              updateActiveWorkingTabUI(activeTask.targetTabId, "Tab Aktif");
-            }
-          });
-        } catch (_) {
-          updateActiveWorkingTabUI(activeTask.targetTabId, "Tab Aktif");
-        }
-      } else {
-        try {
-          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            if (tabs && tabs[0]) {
-              updateActiveWorkingTabUI(tabs[0].id, tabs[0].title || tabs[0].url);
-            }
-          });
-        } catch (_) {}
-      }
-
       if (btnSend) {
         btnSend.classList.add("stop-btn");
         btnSend.title = "Hentikan / Batal Proses AI (Klik untuk STOP)";
@@ -8170,10 +7306,8 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
         message: "Tab ini sedang dikontrol oleh Pesat AI Agent... (Halaman dikunci agar AI fokus)"
       }).catch(() => {});
     } else {
-      setAgentStatus("ready");
+      agentStatus.classList.remove("working");
       stopBar.classList.add("hidden");
-      updateActiveWorkingTabUI(null);
-
       if (btnSend) {
         btnSend.classList.remove("stop-btn");
         btnSend.title = "Kirim Perintah (Enter)";
@@ -8183,7 +7317,6 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
             <polyline points="5 12 12 5 19 12"></polyline>
           </svg>
         `;
-        syncSendButtonState();
       }
       sendToContentScript({ type: "UNLOCK_PAGE" }).catch(() => {});
     }
@@ -8219,10 +7352,6 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     sendToContentScript({ type: "CLEAR_MARKERS" }).catch(() => {});
     appendLog(`🛑 ${reason}`);
   }
-
-  // Expose execution controls for testing and runtime automation
-  window.setAgentRunning = setAgentRunning;
-  window.abortAgentExecution = abortAgentExecution;
 
   btnStopAgent.addEventListener("click", () => {
     abortAgentExecution("Otomatisasi dihentikan via Stop Bar.");
@@ -8317,9 +7446,6 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     }
   });
 
-  // btnMoreMenu dibuka via Unified Menu Drawer (lihat bagian akhir file).
-  // Blok dropdown lama dihapus agar tidak dobel membuka menu saat diklik.
-
   btnSettings.addEventListener("click", () => {
     moreDropdown?.classList.add("hidden");
     const isHidden = settingsPanel.classList.toggle("hidden");
@@ -8376,20 +7502,19 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     `).join("");
 
     memoryList.querySelectorAll(".memory-del-btn").forEach(btn => {
-      btn.addEventListener("click", async (e) => {
+      btn.onclick = async (e) => {
         e.stopPropagation();
         const id = btn.getAttribute("data-id");
         if (id) {
           await globalThis.PesatMemoryEngine?.remove?.(id);
           renderMemoryList();
         }
-      });
+      };
     });
   }
 
   if (btnMemory && memoryDrawer) {
     btnMemory.addEventListener("click", () => {
-      moreDropdown?.classList.add("hidden");
       const isHidden = memoryDrawer.classList.toggle("hidden");
       if (!isHidden) {
         historyDrawer?.classList.add("hidden");
@@ -8639,72 +7764,156 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     });
   }
 
+  // ═══════════════════════════════════════════════════
+  // UI REDESIGN v3 — Generic Modal, Toast, Unified Menu Drawer
+  // Diadopsi selektif dari commit 61b629f (hanya UI/UX, bukan perubahan engine)
+  // ═══════════════════════════════════════════════════
 
-  // ══════════════════════════════════════════════════════════════════════
-  // TOAST SYSTEM + UNIFIED MENU DRAWER WIRING (UI Redesign v3)
-  // ═══════════════════════════════════════════════════════════════════════
+  // ── Generic Modal Dialog (menggantikan alert/confirm/prompt bawaan) ──
+  let genericModalResolve = null;
 
+  function closeGenericModal(result) {
+    if (genericModal) genericModal.classList.add("hidden");
+    if (genericModalResolve) {
+      genericModalResolve(result);
+      genericModalResolve = null;
+    }
+  }
+
+  if (genericModal) {
+    genericModal.addEventListener("click", (e) => {
+      if (e.target === genericModal) closeGenericModal(null);
+    });
+  }
+
+  function showModal({
+    type = "alert",
+    title = "Perhatian",
+    message = "",
+    defaultValue = "",
+    okLabel = "OK",
+    cancelLabel = "Batal",
+    destructive = false
+  } = {}) {
+    return new Promise((resolve) => {
+      if (!genericModal) { resolve(null); return; }
+      genericModalResolve = resolve;
+
+      if (genericModalTitle) genericModalTitle.textContent = title;
+      if (genericModalDesc) genericModalDesc.textContent = message;
+      if (genericModalInputValue) genericModalInputValue.value = defaultValue || "";
+
+      if (genericModalIcon) {
+        if (type === "confirm" || destructive) {
+          genericModalIcon.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+          genericModalIcon.style.color = destructive ? "var(--status-red)" : "var(--brand-primary)";
+          genericModalIcon.style.background = destructive ? "var(--status-red-soft)" : "var(--brand-soft, var(--bg-subtle))";
+        } else {
+          genericModalIcon.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 22s4-4 9-4 9 4 9 4"/><path d="M16 16.2A6.2 6.2 0 0 1 12.8 18c-1.7 0-3.2-.8-4-2"/></svg>`;
+          genericModalIcon.style.color = "var(--brand-primary)";
+          genericModalIcon.style.background = "var(--brand-soft, var(--bg-subtle))";
+        }
+      }
+
+      if (genericModalInput) {
+        if (type === "prompt") {
+          genericModalInput.style.display = "block";
+          setTimeout(() => genericModalInputValue?.focus(), 50);
+        } else {
+          genericModalInput.style.display = "none";
+        }
+      }
+
+      if (genericModalCancel) {
+        genericModalCancel.style.display = (type === "confirm" || type === "prompt") ? "inline-flex" : "none";
+        genericModalCancel.textContent = cancelLabel;
+      }
+      if (genericModalOk) {
+        genericModalOk.textContent = okLabel;
+        genericModalOk.className = `btn ${destructive ? "btn-danger-pill" : "btn-primary-pill"}`;
+      }
+
+      genericModal.classList.remove("hidden");
+
+      if (genericModalOk) {
+        genericModalOk.addEventListener("click", () => {
+          closeGenericModal(type === "prompt" ? (genericModalInputValue?.value ?? "") : true);
+        }, { once: true });
+      }
+      if (genericModalCancel) {
+        genericModalCancel.addEventListener("click", () => {
+          closeGenericModal(null);
+        }, { once: true });
+      }
+    });
+  }
+
+  function showAlert(message, title = "Perhatian") {
+    return showModal({ type: "alert", title, message });
+  }
+  function showConfirm(message, title = "Konfirmasi") {
+    return showModal({ type: "confirm", title, message });
+  }
+  function showPrompt(message, title = "Input", defaultValue = "") {
+    return showModal({ type: "prompt", title, message, defaultValue });
+  }
+
+  // ── Toast System ──
   function ensureToastContainer() {
-    let tc = document.getElementById('toastContainer');
+    let tc = document.getElementById("toastContainer");
     if (!tc) {
-      tc = document.createElement('div');
-      tc.id = 'toastContainer';
-      tc.className = 'toast-pill';
-      tc.style.position = 'fixed';
-      tc.style.top = '16px';
-      tc.style.right = '16px';
-      tc.style.zIndex = '9999';
-      tc.style.display = 'flex';
-      tc.style.flexDirection = 'column';
-      tc.style.gap = '8px';
-      tc.style.pointerEvents = 'none';
+      tc = document.createElement("div");
+      tc.id = "toastContainer";
+      tc.className = "toast-pill";
+      tc.style.position = "fixed";
+      tc.style.top = "16px";
+      tc.style.right = "16px";
+      tc.style.zIndex = "9999";
+      tc.style.display = "flex";
+      tc.style.flexDirection = "column";
+      tc.style.gap = "8px";
+      tc.style.pointerEvents = "none";
       document.body.appendChild(tc);
     }
     return tc;
   }
 
-  function showToast(message, type = 'info', duration = 4000) {
+  function showToast(message, type = "info", duration = 4000) {
     const tc = ensureToastContainer();
-    const el = document.createElement('div');
+    const el = document.createElement("div");
     el.className = `toast toast-${type}`;
-    el.style.padding = '10px 14px';
-    el.style.borderRadius = '10px';
-    el.style.color = '#FFFFFF';
-    el.style.fontSize = '13px';
-    el.style.fontWeight = '600';
-    el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
-    el.style.gap = '8px';
-    el.style.animation = 'toastSlideIn 0.3s ease forwards';
+    el.style.padding = "10px 14px";
+    el.style.borderRadius = "10px";
+    el.style.color = "#FFFFFF";
+    el.style.fontSize = "13px";
+    el.style.fontWeight = "600";
+    el.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
+    el.style.display = "flex";
+    el.style.alignItems = "center";
+    el.style.gap = "8px";
+    el.style.animation = "toastSlideIn 0.3s ease forwards";
     el.textContent = message;
-    if (type === 'success') el.style.background = 'var(--brand-blue)';
-    else if (type === 'error') el.style.background = 'var(--brand-primary)';
-    else el.style.background = 'var(--text-primary)';
+    if (type === "success") el.style.background = "var(--status-green)";
+    else if (type === "error") el.style.background = "var(--status-red)";
+    else el.style.background = "var(--text-primary)";
     tc.appendChild(el);
     setTimeout(() => {
-      el.style.animation = 'toastSlideOut 0.3s ease forwards';
+      el.style.animation = "toastSlideOut 0.3s ease forwards";
       setTimeout(() => el.remove(), 300);
     }, duration);
   }
 
-  function hideToast() {
-    const tc = document.getElementById('toastContainer');
-    if (tc) tc.innerHTML = '';
-  }
-
   // ── Unified Menu Drawer: tab switching ──
-  const drawerTabs = document.querySelectorAll('.d-tab-btn');
-  const drawerPanels = document.querySelectorAll('.drawer-tab-panel');
-  const btnDrawerTabNext = document.getElementById('btnDrawerTabNext');
-  const menuDrawer = document.getElementById('menuDrawer');
-  const btnCloseMenuDrawer = document.getElementById('btnCloseMenuDrawer');
-  const btnMenuDrawerClose = document.getElementById('btnMenuDrawerClose');
-  // btnMoreMenu sudah dideklarasikan di bagian DOM ELEMENTS (baris ~41)
+  const drawerTabs = document.querySelectorAll(".d-tab-btn");
+  const drawerPanels = document.querySelectorAll(".drawer-tab-panel");
+  const btnDrawerTabNext = document.getElementById("btnDrawerTabNext");
+  const menuDrawer = document.getElementById("menuDrawer");
+  const btnCloseMenuDrawer = document.getElementById("btnCloseMenuDrawer");
+  const btnMenuDrawerClose = document.getElementById("btnMenuDrawerClose");
 
   function openDrawer() {
     if (menuDrawer) menuDrawer.hidden = false;
-    showDrawerTab('drawerTabAccount');
+    showDrawerTab("drawerTabAccount");
   }
 
   function closeDrawer() {
@@ -8713,109 +7922,109 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
 
   function showDrawerTab(tabId) {
     drawerTabs.forEach(t => {
-      t.classList.remove('active');
-      t.setAttribute('aria-pressed', 'false');
+      t.classList.remove("active");
+      t.setAttribute("aria-pressed", "false");
     });
     drawerPanels.forEach(p => { p.hidden = true; });
     const activeTab = document.querySelector(`.d-tab-btn[data-tab="${tabId}"]`);
     const activePanel = document.getElementById(tabId);
     if (activeTab) {
-      activeTab.classList.add('active');
-      activeTab.setAttribute('aria-pressed', 'true');
+      activeTab.classList.add("active");
+      activeTab.setAttribute("aria-pressed", "true");
     }
     if (activePanel) activePanel.hidden = false;
   }
 
   drawerTabs.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tabId = btn.getAttribute('data-tab');
+    btn.addEventListener("click", () => {
+      const tabId = btn.getAttribute("data-tab");
       if (tabId) showDrawerTab(tabId);
     });
   });
 
   if (btnDrawerTabNext) {
-    btnDrawerTabNext.addEventListener('click', () => {
-      const tabsOrder = ['drawerTabAccount', 'drawerTabSkills', 'drawerTabUtilitas'];
-      const current = Array.from(drawerTabs).findIndex(t => t.classList.contains('active'));
+    btnDrawerTabNext.addEventListener("click", () => {
+      const tabsOrder = ["drawerTabAccount", "drawerTabSkills", "drawerTabUtilitas"];
+      const current = Array.from(drawerTabs).findIndex(t => t.classList.contains("active"));
       const nextIndex = (current + 1) % tabsOrder.length;
       showDrawerTab(tabsOrder[nextIndex]);
     });
   }
 
-  if (btnCloseMenuDrawer) btnCloseMenuDrawer.addEventListener('click', closeDrawer);
-  if (btnMenuDrawerClose) btnMenuDrawerClose.addEventListener('click', closeDrawer);
+  if (btnCloseMenuDrawer) btnCloseMenuDrawer.addEventListener("click", closeDrawer);
+  if (btnMenuDrawerClose) btnMenuDrawerClose.addEventListener("click", closeDrawer);
 
   // Drawer navigation items
-  const btnOpenSettingsFromDrawer = document.getElementById('btnOpenSettingsFromDrawer');
-  const btnOpenWizardFromDrawer = document.getElementById('btnOpenWizardFromDrawer');
-  const btnOpenGoogleFromDrawer = document.getElementById('btnOpenGoogleFromDrawer');
-  const btnOpenMemoryFromDrawer = document.getElementById('btnOpenMemoryFromDrawer');
-  const btnOpenHistoryFromDrawer = document.getElementById('btnOpenHistoryFromDrawer');
-  const btnOpenBugFromDrawer = document.getElementById('btnOpenBugFromDrawer');
-  const btnOpenShortcutsFromDrawer = document.getElementById('btnOpenShortcutsFromDrawer');
-  const btnClearHistoryFromDrawer = document.getElementById('btnClearHistoryFromDrawer');
-  const btnClearMemoryFromDrawer = document.getElementById('btnClearMemoryFromDrawer');
+  const btnOpenSettingsFromDrawer = document.getElementById("btnOpenSettingsFromDrawer");
+  const btnOpenWizardFromDrawer = document.getElementById("btnOpenWizardFromDrawer");
+  const btnOpenGoogleFromDrawer = document.getElementById("btnOpenGoogleFromDrawer");
+  const btnOpenMemoryFromDrawer = document.getElementById("btnOpenMemoryFromDrawer");
+  const btnOpenHistoryFromDrawer = document.getElementById("btnOpenHistoryFromDrawer");
+  const btnOpenBugFromDrawer = document.getElementById("btnOpenBugFromDrawer");
+  const btnOpenShortcutsFromDrawer = document.getElementById("btnOpenShortcutsFromDrawer");
+  const btnClearHistoryFromDrawer = document.getElementById("btnClearHistoryFromDrawer");
+  const btnClearMemoryFromDrawer = document.getElementById("btnClearMemoryFromDrawer");
 
   if (btnOpenSettingsFromDrawer) {
-    btnOpenSettingsFromDrawer.addEventListener('click', () => {
+    btnOpenSettingsFromDrawer.addEventListener("click", () => {
       closeDrawer();
-      const sp = document.getElementById('settingsPanel');
-      if (sp) sp.classList.remove('hidden');
+      const sp = document.getElementById("settingsPanel");
+      if (sp) sp.classList.remove("hidden");
     });
   }
   if (btnOpenWizardFromDrawer) {
-    btnOpenWizardFromDrawer.addEventListener('click', () => {
+    btnOpenWizardFromDrawer.addEventListener("click", () => {
       closeDrawer();
-      const om = document.getElementById('onboardingModal');
-      if (om) om.classList.remove('hidden');
+      const om = document.getElementById("onboardingModal");
+      if (om) om.classList.remove("hidden");
     });
   }
   if (btnOpenGoogleFromDrawer) {
-    btnOpenGoogleFromDrawer.addEventListener('click', () => {
+    btnOpenGoogleFromDrawer.addEventListener("click", () => {
       closeDrawer();
-      const sp = document.getElementById('settingsPanel');
-      if (sp) sp.classList.remove('hidden');
+      const sp = document.getElementById("settingsPanel");
+      if (sp) sp.classList.remove("hidden");
     });
   }
   if (btnOpenMemoryFromDrawer) {
-    btnOpenMemoryFromDrawer.addEventListener('click', () => {
+    btnOpenMemoryFromDrawer.addEventListener("click", () => {
       closeDrawer();
-      const md = document.getElementById('memoryDrawer');
-      if (md) md.classList.toggle('hidden');
+      const md = document.getElementById("memoryDrawer");
+      if (md) md.classList.toggle("hidden");
     });
   }
   if (btnOpenHistoryFromDrawer) {
-    btnOpenHistoryFromDrawer.addEventListener('click', () => {
+    btnOpenHistoryFromDrawer.addEventListener("click", () => {
       closeDrawer();
-      const hd = document.getElementById('historyDrawer');
-      if (hd) hd.classList.toggle('hidden');
+      const hd = document.getElementById("historyDrawer");
+      if (hd) hd.classList.toggle("hidden");
     });
   }
   if (btnOpenBugFromDrawer) {
-    btnOpenBugFromDrawer.addEventListener('click', () => {
+    btnOpenBugFromDrawer.addEventListener("click", () => {
       closeDrawer();
       openBugReportModal();
     });
   }
   if (btnOpenShortcutsFromDrawer) {
-    btnOpenShortcutsFromDrawer.addEventListener('click', () => {
+    btnOpenShortcutsFromDrawer.addEventListener("click", () => {
       closeDrawer();
-      showToast('Pintasan: Ctrl+Shift+Y buka side panel.', 'info', 2500);
+      showToast("Pintasan: Ctrl+Shift+Y buka side panel.", "info", 2500);
     });
   }
   if (btnClearHistoryFromDrawer) {
-    btnClearHistoryFromDrawer.addEventListener('click', async () => {
+    btnClearHistoryFromDrawer.addEventListener("click", async () => {
       closeDrawer();
-      if (await showConfirm('Hapus semua riwayat percakapan?')) {
+      if (await showConfirm("Hapus semua riwayat percakapan?")) {
         sessions = [];
         createNewSession();
       }
     });
   }
   if (btnClearMemoryFromDrawer) {
-    btnClearMemoryFromDrawer.addEventListener('click', async () => {
+    btnClearMemoryFromDrawer.addEventListener("click", async () => {
       closeDrawer();
-      if (await showConfirm('Hapus semua memori dan aturan?')) {
+      if (await showConfirm("Hapus semua memori dan aturan?")) {
         await globalThis.PesatMemoryEngine?.clear?.();
         renderMemoryList();
       }
@@ -8824,23 +8033,32 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
 
   // Buka drawer melalui tombol More Menu di header
   if (btnMoreMenu) {
-    btnMoreMenu.addEventListener('click', (e) => {
+    btnMoreMenu.addEventListener("click", (e) => {
       e.stopPropagation();
       openDrawer();
     });
   }
 
+  // Safety net: pastikan overlay tertutup saat halaman dimuat
+  // (menuDrawer pakai hidden attribute untuk toggle, jadi jangan diset di sini)
+  document.querySelectorAll(".modal-overlay, .drop-overlay, .composer-model-dropdown, .more-dropdown, .settings-panel").forEach(el => {
+    el.classList.add("hidden");
+  });
+
   // ═══════════════════════════════════════════════════
   // INITIALIZATION (Runs after all variables & functions are declared)
   // ═══════════════════════════════════════════════════
+  await loadSettings();
+  await loadSessions();
+  await refreshGoogleStatus();
+  await loadResumableTask();
+  await refreshUsageDisplay();
+  attachSuggestionListeners();
+  initQuickChipsSlider();
+  checkOnboarding();
+  await checkPendingPrompt();
+  appendLog("Sesi ekstensi v5.2 (Direct PesatRouter BYOK) diaktifkan.", "INFO", { timestamp: Date.now() }, "SESSION_OPEN");
 
-  // Safety net: pastikan semua overlay tertutup saat halaman dimuat
-  // JANGAN set hidden=true pada menuDrawer karena itu menggunakan hidden attribute untuk toggle
-  document.querySelectorAll('.modal-overlay, .drop-overlay, .composer-model-dropdown, .more-dropdown, .history-drawer, .settings-panel').forEach(el => {
-    el.classList.add('hidden');
-  });
-
-  // Pasang event listener SEBELUM await untuk memastikan tombol responsif
   btnSend.addEventListener("click", () => {
     if (isAgentRunning) {
       abortAgentExecution("Pengguna menghentikan proses via tombol Stop.");
@@ -8848,17 +8066,4 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       handleSend();
     }
   });
-
-  // Async initialization dengan try-catch untuk mencegah blocking
-  try { await loadSettings(); } catch (_) {}
-  try { await loadSessions(); } catch (_) {}
-  try { await refreshGoogleStatus(); } catch (_) {}
-  try { await loadResumableTask(); } catch (_) {}
-  try { await refreshUsageDisplay(); } catch (_) {}
-  attachSuggestionListeners();
-  initQuickChipsSlider();
-  checkOnboarding();
-  try { await checkPendingPrompt(); } catch (_) {}
-  syncSendButtonState();
-  appendLog("Sesi ekstensi v5.2 (Direct PesatRouter BYOK) diaktifkan.", "INFO", { timestamp: Date.now() }, "SESSION_OPEN");
 });

@@ -49,33 +49,11 @@ build/
 .cache/
 .zcode/
 
-# Agent & Audit Internal (jangan ikut ke GitHub)
-.kilo/
-.mimosa/
-.zcode/
-*.pem
-*.key
-*.pfx
-*.p12
-
-# Artefak Uji & Laporan
-gui-test-screenshots/
-test-connection-screenshots/
-.playwright-artifacts/
-
 # Internal Roadmaps, Docs & Notes
 ROADMAP_AITOPIA_BENCHMARK.md
 To-do-list.md
 coldstart.md
-RANGKUMAN-*.md
 docs/
-*.pdf
 *.tmp
 *.log
-RANGKUMAN_SESI_UI_UX_FRONTEND.md
-AI AGENT EXECUTION INSTRUCTIONS.md
-ARCHITECTURE_RELIABILITY_AUDIT.md
-
-reports/
-referensi desain/
-Konsep desain pesat AI ekstension.html
+pesat_ai_extension_redesign.html
