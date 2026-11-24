@@ -2006,7 +2006,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       row.className = `model-item-row ${m.id === activeModelId && m.enabled !== false ? "selected" : ""} ${m.enabled === false ? "disabled" : ""}`;
       row.setAttribute("data-model-id", m.id);
 
-      const infoHtml = m.hasInfo ? '<span class="model-info-icon" title="Recommended for complex reasoning">ℹ</span>' : '';
+      const infoHtml = m.hasInfo ? '<span class="model-info-icon" title="Direkomendasikan untuk penalaran kompleks">ℹ</span>' : '';
       row.innerHTML = `
         <div class="model-item-left">
           <span class="model-item-name">${escapeHtml(m.name)}</span>
@@ -2037,7 +2037,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       // Edit model
       row.querySelector(".btn-edit-model")?.addEventListener("click", async (e) => {
         e.stopPropagation();
-        const newName = await showPrompt("Ubah nama model PesatRouter:", "Edit Model", m.name);
+        const newName = await showPrompt("Ubah nama model PesatRouter:", "Ubah Model", m.name);
         if (newName && newName.trim()) {
           m.name = newName.trim();
           m.id = newName.trim();
@@ -2674,7 +2674,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           const detailsEl = document.querySelector(".advanced-google-details");
           if (detailsEl) detailsEl.open = true;
           googleClientIdInput?.focus();
-          showGoogleAlert("info", "💡 <strong>Cara Menghubungkan Google Workspace:</strong><br><br>1. <strong>Otomatisasi Tab (Rekomendasi - Tanpa Login):</strong> Anda bisa langsung meminta AI Agent membuka dan mengedit Google Sheets/Docs/Gmail di browser Chrome tanpa setup!<br><br>2. <strong>API Latar Belakang:</strong> Buat OAuth Client ID di Google Cloud Console, masukkan ke kolom <em>Custom OAuth Client ID</em> di bawah, lalu klik tombol ini lagi.");
+          showGoogleAlert("info", "💡 <strong>Cara Menghubungkan Google Workspace:</strong><br><br>1. <strong>Otomatisasi Tab (Rekomendasi - Tanpa Login):</strong> Anda bisa langsung meminta AI Agent membuka dan mengedit Google Sheets/Docs/Gmail di browser Chrome tanpa setup!<br><br>2. <strong>API Latar Belakang:</strong> Buat OAuth Client ID di Google Cloud Console, masukkan ke kolom <em>ID Klien OAuth Kustom</em> di bawah, lalu klik tombol ini lagi.");
           btnGoogleConnect.disabled = false;
           return;
         }
@@ -2771,7 +2771,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 resolve({ success: false, error: chrome.runtime.lastError.message });
               } else {
                 resolved = true;
-                resolve(response?.data || response || { success: false, error: "No response" });
+                resolve(response?.data || response || { success: false, error: "Tidak ada respons" });
               }
             }
           }
@@ -2788,7 +2788,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const timer = setTimeout(() => {
         if (!resolved) {
           resolved = true;
-          resolve({ success: false, error: "Background timeout" });
+          resolve({ success: false, error: "Waktu habis di background" });
         }
       }, timeoutMs);
 
@@ -2799,7 +2799,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           if (chrome.runtime.lastError) {
             resolve({ success: false, error: chrome.runtime.lastError.message });
           } else {
-            resolve(response || { success: false, error: "No response" });
+            resolve(response || { success: false, error: "Tidak ada respons" });
           }
         }
       });
@@ -7283,7 +7283,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       const { connectors, tabs } = await PesatContextEngine.getFilteredGrouped(query);
       if (thisQuery !== mentionQueryCounter) return; // stale result
       groups = [
-        { title: "Browser Tabs", items: tabs.slice(0, 20) },
+        { title: "Tab Browser", items: tabs.slice(0, 20) },
         { title: "Connectors", items: connectors }
       ];
     }

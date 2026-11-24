@@ -85,7 +85,7 @@ export async function onRequestPost(context) {
       timestamp: body.timestamp || now,
       timeStr: new Date(body.timestamp || now).toISOString(),
       category: body.category || "GENERAL_BUG",
-      title: String(body.title || "User Bug Report"),
+      title: String(body.title || "Laporan Bug Pengguna"),
       description: String(body.description || ""),
       clientId: body.clientId || "anonymous",
       url: body.url || null,

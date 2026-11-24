@@ -174,7 +174,7 @@
         level: "ERROR",
         source: "UNCAUGHT_EXCEPTION",
         type: "RUNTIME_ERROR",
-        message: event.message || "Uncaught runtime exception",
+        message: event.message || "Exception runtime tak tertangkap",
         details: {
           filename: event.filename,
           lineno: event.lineno,
@@ -189,7 +189,7 @@
         level: "ERROR",
         source: "UNHANDLED_PROMISE",
         type: "PROMISE_REJECTION",
-        message: event.reason ? (event.reason.message || String(event.reason)) : "Unhandled Promise Rejection",
+        message: event.reason ? (event.reason.message || String(event.reason)) : "Promise Rejection Tak Tertangkap",
         details: {
           reason: event.reason ? (event.reason.stack || String(event.reason)) : null
         }

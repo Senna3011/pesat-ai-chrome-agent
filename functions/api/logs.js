@@ -234,7 +234,7 @@ function renderTelemetryDashboardHtml(logs, total) {
       <span class="badge">${devLogs.length}</span>
     </button>
     <button class="tab-btn" onclick="switchTab('tab-bugs')">
-      🐞 User Bug Reports
+      🐞 Laporan Bug Pengguna
       <span class="badge" style="background:#7f1d1d;color:#fecaca;">${bugReports.length}</span>
     </button>
   </div>

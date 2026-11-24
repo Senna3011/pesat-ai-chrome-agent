@@ -25,7 +25,7 @@
 
   window.addEventListener("unhandledrejection", (e) => {
     try {
-      const reason = e.reason?.message || String(e.reason || "Unhandled Promise Rejection");
+      const reason = e.reason?.message || String(e.reason || "Promise Rejection Tak Tertangkap");
       capturedPageErrors.push(`[Promise Rejection] ${reason}`);
       if (capturedPageErrors.length > 10) capturedPageErrors.shift();
     } catch (_) {}
@@ -2511,7 +2511,7 @@ ${tabText}`;
       return makeActionResult({
         success: false,
         action: actionData.action,
-        error: unexpected.message || "Unexpected execution error",
+        error: unexpected.message || "Kesalahan eksekusi tak terduga",
         errorType: "UNKNOWN_ERROR",
         durationMs: elapsed
       });

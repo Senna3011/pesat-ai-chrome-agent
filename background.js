@@ -159,7 +159,7 @@ function setupContextMenus() {
     });
     chrome.contextMenus.create({
       id: "pesat-explain-image",
-      title: "Jelaskan Gambar Ini (Vision OCR)",
+      title: "Jelaskan Gambar Ini (OCR Penglihatan)",
       contexts: ["image"]
     });
     chrome.contextMenus.create({
@@ -179,7 +179,7 @@ chrome.runtime.onInstalled.addListener(() => {
   }
 
   bgLog("INFO", "SW_INSTALLED", "Background Service Worker berhasil diinstal & aktif.");
-  console.log("[Pesat AI Agent] Background Service Worker installed successfully.");
+  console.log("[Pesat AI Agent] Background Service Worker berhasil diinstal.");
 });
 
 if (chrome.runtime.onStartup) {
@@ -365,7 +365,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "PING" || request.type === "PING") {
-    sendResponse({ status: "OK", message: "Background service worker active", timestamp: Date.now() });
+    sendResponse({ status: "OK", message: "Background service worker aktif", timestamp: Date.now() });
     return true;
   }
 
@@ -503,7 +503,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     });
 
-    sendResponse({ success: true, message: "Agent loop aborted successfully" });
+    sendResponse({ success: true, message: "Siklus agent dihentikan dengan sukses" });
     return true;
   }
 
@@ -953,7 +953,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
       return true;
     }
-    sendResponse({ success: false, error: "Sidepanel API not supported" });
+    sendResponse({ success: false, error: "API Sidepanel tidak didukung" });
     return true;
   }
 
