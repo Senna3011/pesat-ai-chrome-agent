@@ -1602,11 +1602,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       ` : (!msg.artifact && !msg.askUser && !msg.confirmation && msgText.trim() ? `
         <div class="assistant-msg-actions">
           <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
-            <span>📋</span>
+            <svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="12" rx="1.6" fill="#0F172A"/><rect x="10.5" y="6.5" width="5.2" height="1.1" rx="0.55" fill="#fff"/><rect x="10.5" y="9" width="5.2" height="1.1" rx="0.55" fill="#fff"/><rect x="10.5" y="11.5" width="3.4" height="1.1" rx="0.55" fill="#fff"/><rect x="4" y="7" width="8" height="14" rx="1.8" fill="#475569" opacity="0.35"/></svg>
             <span class="btn-copy-text">Salin</span>
           </button>
           <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
-            <span>⤴️</span>
+            <svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5" fill="#0F172A"/><path d="M12 8.5v7M8.5 12h7" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
             <span class="btn-paste-text">Tempel ke Tab</span>
           </button>
         </div>
@@ -4826,6 +4826,8 @@ ${topCompStr}
         if (workTabId) {
           // Tandai tab dengan warna (Tab Group merah + border glow) agar mudah dikenali user.
           try { sendToBackground({ action: "SET_ACTIVE_AGENT_TAB", tabId: workTabId }).catch(() => {}); } catch (_) {}
+          // Perbarui workTabId di activeTask agar finalizeTask membersihkan tab yang benar.
+          if (activeTask) activeTask.workTabId = workTabId;
 
           if (!activeAlreadyOnSource) {
             appendLog(`🌐 Menelusuri sumber di tab aktif Anda: ${detectedSourceUrl}...`);
@@ -5684,15 +5686,18 @@ ${emailParams.subject && emailParams.subject !== "Pesan Baru" ? `[SUBJEK]\n${ema
     appendLog(`Memulai task: "${goal}" (${contextSources.length} konteks terlampir)`);
 
     // Tandai tab aktif sebagai "sedang dikerjakan agent" (indikator visual ala Comet)
+    let startTabId = null;
     try {
       const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const activeTabId = activeTabs && activeTabs[0] ? activeTabs[0].id : null;
-      sendToBackground({ action: "SET_ACTIVE_AGENT_TAB", tabId: activeTabId }).catch(() => {});
+      startTabId = activeTabs && activeTabs[0] ? activeTabs[0].id : null;
+      sendToBackground({ action: "SET_ACTIVE_AGENT_TAB", tabId: startTabId }).catch(() => {});
     } catch (_) {
       sendToBackground({ action: "SET_ACTIVE_AGENT_TAB" }).catch(() => {});
     }
 
     activeTask = newTask(goal, contextSources);
+    // Simpan tab kerja agar finalizeTask bisa membersihkan border dari tab yang benar.
+    activeTask.workTabId = startTabId;
     taskCardMsgIndex = -1;
     await persistTask();
 
@@ -6970,12 +6975,23 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       "TASK_END"
     );
 
+    // Bersihkan penanda tab spesifik (workTabId) agar border glow hilang dari tab target.
+    const clearTabId = activeTask.workTabId || null;
     activeTask = null;
     taskCardMsgIndex = -1;
     await clearPersistedTask();
     setAgentRunning(false);
     hideStatusIndicator();
-    sendToBackground({ action: "CLEAR_ACTIVE_AGENT_TAB" }).catch(() => {});
+    if (clearTabId) {
+      sendToBackground({ action: "CLEAR_ACTIVE_AGENT_TAB", tabId: clearTabId }).catch(() => {});
+    } else {
+      // Fallback: bersihkan semua tab agent yang ditandai
+      sendToBackground({ action: "CLEAR_ACTIVE_AGENT_TAB" }).catch(() => {});
+    }
+    // Auto-clear tab yang mungkin masih aktif setelah task selesai (safety net).
+    setTimeout(() => {
+      sendToBackground({ action: "CLEAR_ACTIVE_AGENT_TAB" }).catch(() => {});
+    }, 5000);
     sendToContentScript({ type: "UNLOCK_PAGE" }).catch(() => {});
   }
 

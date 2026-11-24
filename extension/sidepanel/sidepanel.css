@@ -1185,8 +1185,10 @@ html, body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.assistant-action-btn span:first-child {
-  font-size: 14px;
+.assistant-action-btn svg {
+  flex: 0 0 auto;
+  display: inline-block;
+  vertical-align: -2px;
 }
 
 .assistant-action-btn:hover {

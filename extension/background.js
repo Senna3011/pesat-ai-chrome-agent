@@ -1078,13 +1078,17 @@ ATURAN KETAT:
               const existing = tabs.find(t => t.url && t.url.includes(urlHost));
               if (existing && existing.id) {
                 activeAgentTabs.add(Number(existing.id));
+                try { chrome.tabs.sendMessage(Number(existing.id), { type: "PESAT_SET_WORKING_BORDER", active: true }); } catch (_) {}
                 sendResponse({ success: true, message: `Menggunakan tab yang sudah terbuka: ${existing.url}`, url: existing.url, tabId: existing.id, reused: true });
                 return;
               }
             } catch (_) {}
           }
           const newTab = await chrome.tabs.create({ url, active: makeActive });
-          if (newTab?.id) activeAgentTabs.add(Number(newTab.id));
+          if (newTab?.id) {
+            activeAgentTabs.add(Number(newTab.id));
+            try { chrome.tabs.sendMessage(Number(newTab.id), { type: "PESAT_SET_WORKING_BORDER", active: true }); } catch (_) {}
+          }
           sendResponse({ success: true, message: `Membuka tab baru: ${url}`, url, tabId: newTab?.id });
           return;
         }
@@ -1105,7 +1109,10 @@ ATURAN KETAT:
 
         if (!targetId) {
           const newTab = await chrome.tabs.create({ url, active: makeActive });
-          if (newTab?.id) activeAgentTabs.add(Number(newTab.id));
+          if (newTab?.id) {
+            activeAgentTabs.add(Number(newTab.id));
+            try { chrome.tabs.sendMessage(Number(newTab.id), { type: "PESAT_SET_WORKING_BORDER", active: true }); } catch (_) {}
+          }
           sendResponse({ success: true, message: `Membuka tab baru: ${url}`, url, tabId: newTab?.id });
           return;
         }
@@ -1113,6 +1120,8 @@ ATURAN KETAT:
         activeAgentTabs.add(Number(targetId));
         actionHistoryPerTab.delete(Number(targetId));
         await chrome.tabs.update(Number(targetId), { url });
+        // Kirim border aktif agar konsisten dengan status di activeAgentTabs
+        try { chrome.tabs.sendMessage(Number(targetId), { type: "PESAT_SET_WORKING_BORDER", active: true }); } catch (_) {}
         sendResponse({ success: true, message: `Membuka URL: ${url}`, url, tabId: Number(targetId) });
       } catch (err) {
         sendResponse({ success: false, error: err.message });
@@ -1151,6 +1160,8 @@ ATURAN KETAT:
 
       const activeTabId = activeTab.id;
       activeAgentTabs.add(Number(activeTabId));
+      // Kirim border aktif agar konsisten dengan status di activeAgentTabs
+      try { chrome.tabs.sendMessage(Number(activeTabId), { type: "PESAT_SET_WORKING_BORDER", active: true }); } catch (_) {}
       const tabUrl = activeTab.url || "";
 
       // 1. Handling Halaman internal Chrome (chrome://, edge://, about:)
