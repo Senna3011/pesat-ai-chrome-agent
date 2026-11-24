@@ -4706,24 +4706,6 @@ ${topCompStr}
     return null;
   }
 
-  // Buka URL sumber di TAB LATAR BELAKANG (active:false) agar fokus/active tab
-  // pengguna TIDAK dialihkan. Mengembalikan tabId tab kerja, atau null bila gagal.
-  async function openSourceTabInBackground(url) {
-    if (!url) return null;
-    try {
-      // OPEN_NEW_TAB = paksa tab baru; background:true = active:false (tidak mengalihkan fokus).
-      const res = await sendToBackground({ action: "OPEN_NEW_TAB", url, background: true });
-      if (res && res.success && res.tabId) return res.tabId;
-    } catch (_) {}
-    try {
-      if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.create) {
-        const tab = await chrome.tabs.create({ url, active: false });
-        if (tab && tab.id) return tab.id;
-      }
-    } catch (_) {}
-    return null;
-  }
-
   // Baca readable text dari tab tertentu dengan penantian (retry) sampai halaman termuat.
   async function readTextFromTabWithWait(tabId, tries = 10, delayMs = 700) {
     let last = { text: "" };
@@ -4745,6 +4727,7 @@ ${topCompStr}
       appendLog("⚠️ Analisis sudah berjalan, permintaan duplikat diabaikan.", "WARN");
       return;
     }
+    let workTabId = null;
     try {
       setAgentRunning(true);
       showStatusIndicator();
@@ -4756,39 +4739,42 @@ ${topCompStr}
         if (tabs && tabs[0]) activeTabInfo = tabs[0];
       } catch (_) {}
 
-      // 0.0. Jika perintah menyertakan situs/URL sumber, buka di TAB LATAR BELAKANG
-      // (active:false) sehingga pekerjaan tetap berjalan meski user tidak sedang
-      // membuka/melihat tab tersebut, dan fokus tab aktif user tidak berpindah.
-      let workTabId = null;
+      // 0.0. Jika perintah menyertakan situs/URL sumber, telusuri di TAB AKTIF user saat
+      // ini (JANGAN membuat tab baru). Tab ditandai warna agar user tahu tab ini sedang
+      // dikerjakan, dan pekerjaan tetap lanjut meski user berpindah ke tab lain.
       let workTabData = null;
       const detectedSourceUrl = resolveSourceUrlFromPrompt(userPrompt);
       const sourceHostKey = detectedSourceUrl ? detectedSourceUrl.replace(/^https?:\/\//i, "").replace(/\/$/, "") : "";
       const activeAlreadyOnSource = detectedSourceUrl && activeTabInfo?.url && activeTabInfo.url.includes(sourceHostKey);
-      if (detectedSourceUrl && !activeAlreadyOnSource) {
-        appendLog(`🌐 Membuka sumber di tab latar (fokus Anda tidak dialihkan): ${detectedSourceUrl}...`);
-        showStatusIndicator("Membuka sumber di latar...");
-        workTabId = await openSourceTabInBackground(detectedSourceUrl);
+      if (detectedSourceUrl) {
+        // Kunci ke tab aktif user saat perintah; buat tab baru HANYA bila tak ada tab aktif.
+        workTabId = activeTabInfo?.id || null;
+        if (!workTabId) {
+          try {
+            const created = await sendToBackground({ action: "OPEN_NEW_TAB", url: detectedSourceUrl, background: true });
+            workTabId = created && created.tabId ? created.tabId : null;
+          } catch (_) {}
+        }
+
         if (workTabId) {
+          // Tandai tab dengan warna (Tab Group merah + border glow) agar mudah dikenali user.
+          try { sendToBackground({ action: "SET_ACTIVE_AGENT_TAB", tabId: workTabId }).catch(() => {}); } catch (_) {}
+
+          if (!activeAlreadyOnSource) {
+            appendLog(`🌐 Menelusuri sumber di tab aktif Anda: ${detectedSourceUrl}...`);
+            showStatusIndicator("Membuka sumber...");
+            try { await sendToBackground({ action: "NAVIGATE_TAB", url: detectedSourceUrl, targetTabId: workTabId }); } catch (_) {}
+          }
+
           const srcRes = await readTextFromTabWithWait(workTabId);
           if (srcRes && srcRes.text && srcRes.text.trim().length > 20) {
             workTabData = { text: srcRes.text.trim(), title: srcRes.title || "", url: srcRes.url || detectedSourceUrl };
-            appendLog(`✓ Sumber tab latar siap: "${workTabData.title || detectedSourceUrl}" (${workTabData.text.length} karakter).`);
+            appendLog(`✓ Sumber siap: "${workTabData.title || detectedSourceUrl}" (${workTabData.text.length} karakter).`);
           } else {
-            appendLog(`⚠️ Tab latar belum memuat teks yang cukup; melanjutkan dengan konteks lain.`, "WARN");
+            appendLog(`⚠️ Tab sumber belum memuat teks yang cukup; melanjutkan dengan konteks lain.`, "WARN");
           }
         } else {
-          // Fallback: bila pembuatan tab latar gagal, lakukan navigasi (perilaku lama)
-          appendLog(`⚠️ Gagal membuat tab latar, fallback membuka di tab aktif.`, "WARN");
-          if (activeTabInfo?.url?.includes("docs.google.com/document")) {
-            await sendToBackground({ action: "NAVIGATE_TAB", url: detectedSourceUrl, newTab: true });
-          } else {
-            await navigateToUrl(detectedSourceUrl);
-          }
-          await new Promise(r => setTimeout(r, 2200));
-          try {
-            const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
-            if (tabs && tabs[0]) activeTabInfo = tabs[0];
-          } catch (_) {}
+          appendLog(`⚠️ Tidak ada tab aktif yang bisa ditelusuri.`, "WARN");
         }
       }
 
@@ -5506,6 +5492,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
     } finally {
       setAgentRunning(false);
       hideStatusIndicator();
+      // Lepas penanda warna pada tab yang tadi dikerjakan.
+      try { sendToBackground({ action: "CLEAR_ACTIVE_AGENT_TAB", tabId: workTabId }).catch(() => {}); } catch (_) {}
     }
   }
 
