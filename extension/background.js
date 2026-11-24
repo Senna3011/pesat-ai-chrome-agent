@@ -1256,9 +1256,15 @@ ATURAN KETAT:
 // Auto-clean visual markers & reset loop history saat user berpindah tab atau tab di-refresh
 chrome.tabs.onActivated.addListener((activeInfo) => {
   if (!activeInfo?.tabId) return;
-  // Jangan hapus marker atau reset history jika tab ini merupakan tab kerja agent yang aktif
-  if (activeAgentTabs.has(Number(activeInfo.tabId))) {
-    return;
+  const tabId = Number(activeInfo.tabId);
+  if (activeAgentTabs.has(tabId)) {
+    try {
+      chrome.tabs.sendMessage(tabId, { type: "PESAT_SET_WORKING_BORDER", active: true });
+    } catch (_) {}
+  } else {
+    try {
+      chrome.tabs.sendMessage(tabId, { type: "PESAT_SET_WORKING_BORDER", active: false });
+    } catch (_) {}
   }
 });
 
@@ -1270,5 +1276,10 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
         if (chrome.runtime.lastError) {}
       });
     }
+  }
+  if (changeInfo.status === "complete" && activeAgentTabs.has(Number(tabId))) {
+    try {
+      chrome.tabs.sendMessage(tabId, { type: "PESAT_SET_WORKING_BORDER", active: true });
+    } catch (_) {}
   }
 });

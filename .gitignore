@@ -57,3 +57,5 @@ docs/
 *.tmp
 *.log
 pesat_ai_extension_redesign.html
+.mimosa/
+.kilo/

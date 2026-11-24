@@ -2139,7 +2139,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       sessionOnly: !!(sessionKey || local.sessionOnly),
       googleClientId: local.googleClientId || "",
       autoPasteDocs: !!local.autoPasteDocs,
-      enableInPageToolbar: local.enableInPageToolbar !== false
+      enableInPageToolbar: local.enableInPageToolbar !== false,
+      maxTokens: local.maxTokens || undefined
     };
 
     // Sinkronisasi ke form Settings
@@ -2210,14 +2211,29 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ── Usage Tracker (Informasional Pengganti Kuota & Realtime Task Token Tracker) ──
+  // Ubah string konteks model (mis. "32K", "128K", "1M", "200K") menjadi jumlah token numerik.
+  function parseContextWindow(context) {
+    if (typeof context === "number" && Number.isFinite(context)) return context;
+    const s = String(context || "").trim().toUpperCase();
+    const m = s.match(/([\d.]+)\s*([KM])?/);
+    if (!m) return 4096;
+    const val = parseFloat(m[1]);
+    if (!Number.isFinite(val)) return 4096;
+    const unit = m[2];
+    if (unit === "M") return Math.round(val * 1024 * 1024);
+    if (unit === "K") return Math.round(val * 1024);
+    return Math.round(val);
+  }
+
   function updateTokenTrackerUI(usage = {}) {
     if (!tokenTrackerText) return;
     const promptToks = Number(usage.prompt_tokens) || 0;
     const compToks = Number(usage.completion_tokens) || 0;
     const totalToks = Number(usage.total_tokens) || (promptToks + compToks);
-    const maxToks = Number(storedSettings.maxTokens || 4096);
+    const activeModel = modelsList.find(m => m.id === activeModelId);
+    const maxToks = Number(storedSettings.maxTokens) || parseContextWindow(activeModel?.context) || 4096;
 
-    tokenTrackerText.innerHTML = `Tokens: <strong>${totalToks.toLocaleString("id-ID")}</strong> (Prompt: ${promptToks.toLocaleString("id-ID")}, Output: ${compToks.toLocaleString("id-ID")}) | Max: ${maxToks.toLocaleString("id-ID")}`;
+    tokenTrackerText.innerHTML = `Tokens: <strong>${totalToks.toLocaleString("id-ID")}</strong> (Prompt: ${promptToks.toLocaleString("id-ID")}, Output: ${compToks.toLocaleString("id-ID")}) | Context: ${maxToks.toLocaleString("id-ID")}`;
   }
 
   async function refreshUsageDisplay() {
@@ -2927,7 +2943,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         config: {
           apiBaseUrl: getApiBaseUrl(),
           apiKey: getApiKey(),
-          modelName: getModelName()
+          modelName: getModelName(),
+          maxTokens: storedSettings.maxTokens || undefined
         },
         signal: activeAbortController.signal,
         isSummarize: isSummarize,
@@ -3016,7 +3033,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     }
 
-    return { to, subject, body };
+    // Selaraskan dengan spec tests/email-intent.test.js:
+    // - Ada kata kunci draf/larangan kirim → draf (false).
+    // - Selain itu, jika ada kata kirim/send/submit → kirim langsung (true).
+    // - Default tanpa kata kirim → draf (false).
+    const isExplicitDraft = /(?:draf|draft|simpan\s+(?:di|ke)\s+draf|tulis\s+saja|hanya\s+buat|tuliskan\s+draf|buatkan\s+draf|tulis\s+draf|buat\s+draf|jangan\s+kirim|tanpa\s+kirim|belum\s+kirim)/i.test(text);
+    const sendNow = !isExplicitDraft && /(?:kirim|kirimkan|send|submit|langsung|sekarang|auto\s*send)/i.test(text);
+
+    return { to, subject, body, sendNow };
   }
 
   // Recovery parser natural language (fallback jika LLM jawab teks instruktif)
@@ -3080,8 +3104,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         to: emailParams.to,
         subject: emailParams.subject,
         body: emailParams.body,
-        sendNow: /(?:kirim sekarang|langsung kirim|auto send)/i.test(combined),
-        message: `Mempersiapkan pengiriman email ke ${emailParams.to}...`
+        sendNow: emailParams.sendNow === true,
+        message: emailParams.sendNow ? `Mempersiapkan pengiriman email ke ${emailParams.to}...` : `Menyiapkan draf email ke ${emailParams.to} (tidak dikirim otomatis)...`
       };
     }
 
@@ -4574,10 +4598,13 @@ ${topCompStr}
     const isMultiStepGoal = /(?:lalu|kemudian|setelah\s+itu|\bthen\b|setelahnya|dan\s+(?:buka|paste|tempel|masukkan|kirim)|(?:buka|kunjungi).*(?:lalu|kemudian|setelah|paste|tempel))/i.test(userPrompt);
 
     const typedIntent = globalThis.PesatAgentEngine?.classifyTask?.(userPrompt, contextSourcesToSend) || null;
-    const needsAgentLoop = !isContentDraftingIntent && (isPhysicalAutomation || isMultiStepGoal ||
+    let needsAgentLoop = !isContentDraftingIntent && (isPhysicalAutomation || isMultiStepGoal ||
       typedIntent?.mode === "execute" ||
       typedIntent?.mode === "research" || typedIntent?.mode === "hybrid" ||
       /(?:knowledge(?:\s+base)?|dokumen tersimpan|cari sumber|riset multi[- ]?sumber|laporan enterprise|simpan (?:halaman|dokumen)|hapus (?:source|sumber|dokumen))/i.test(userPrompt));
+
+    const isEmailIntent = /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt);
+    if (isEmailIntent) needsAgentLoop = true;
 
     if (!needsAgentLoop) {
       await runAnalysisFlow(userPrompt, contextSourcesToSend);
@@ -5442,7 +5469,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
       const isSocialActionInGoal = /(?:posting|post|tweet|unggah|publikasikan|komposer|tempelkan.*(?:twitter|x|threads|medsos)|buka\s+komposer|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(goal);
       const isFormFillingActionInGoal = /(?:isi\s+(?:seluruh\s+|semua\s+)?(?:form|formulir|field|kolom|data)|autofill)/i.test(goal);
       const isDraftingOrRewritingGoal = /(?:draft|draf|berita|artikel|konten|surat|paragraf|naskah|tweet|thread|postingan)\b/i.test(goal) &&
-        !/(?:posting\s+ke|post\s+ke|kirim\s+ke|upload|unggah\s+ke|buka\s+komposer|isi\s+form|autofill|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(goal);
+        !/(?:posting\s+ke|post\s+ke|kirim\s+ke|upload|unggah\s+ke|buka\s+komposer|isi\s+form|autofill|isi\s+(?:di|ke)\s+(?:threads|x|twitter|linkedin|medsos))/i.test(goal) &&
+        !((/(?:cari|search|riset)/i.test(goal)) && /[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i.test(goal));
 
       const isAnalysisOrSummaryGoal = isDraftingOrRewritingGoal || (!isSocialActionInGoal && !isFormFillingActionInGoal && (
         /(?:rangkum|ringkas|summarize|ringkasan|rangkuman|intisari|poin\s+penting)\b/i.test(goal) ||
