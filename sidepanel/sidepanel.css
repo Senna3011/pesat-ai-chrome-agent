@@ -2093,9 +2093,27 @@ textarea::placeholder {
 		  border-color: #059669;
 		}
 
-		.toggle-switch input:checked + .toggle-slider:before {
-		  transform: translateX(18px);
-		}
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(18px);
+}
+
+/* Varian kecil untuk model list agar baris tidak wrap / tombol tidak bergeser */
+.toggle-switch.small {
+  width: 34px;
+  height: 18px;
+}
+.toggle-switch.small .toggle-slider {
+  border-radius: 20px;
+}
+.toggle-switch.small .toggle-slider:before {
+  height: 14px;
+  width: 14px;
+  left: 1px;
+  bottom: 1px;
+}
+.toggle-switch.small input:checked + .toggle-slider:before {
+  transform: translateX(16px);
+}
 
 		.btn-icon-ghost {
 		  background: transparent;
@@ -2248,17 +2266,17 @@ textarea::placeholder {
 		  overflow-y: auto;
 		}
 
-		.model-item-row {
-		  display: flex;
-		  align-items: center;
-		  justify-content: space-between;
-		  flex-wrap: wrap;
-		  gap: 4px 8px;
-		  background: rgba(255, 255, 255, 0.04);
-		  border: 1px solid rgba(255, 255, 255, 0.08);
-		  border-radius: 8px;
-		  padding: 6px 8px;
-		}
+.model-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 4px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
 
 		.model-item-row.selected {
 		  border-color: var(--text-accent);
@@ -2268,20 +2286,24 @@ textarea::placeholder {
 		  opacity: 0.55;
 		}
 
-		.model-item-left {
-		  display: flex;
-		  align-items: center;
-		  flex-wrap: wrap;
-		  gap: 6px;
-		  min-width: 0;
-		  flex: 1 1 auto;
-		}
+.model-item-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
 
-		.model-item-name {
-		  font-size: 14px;
-		  font-weight: 500;
-		  color: var(--text-primary);
-		}
+.model-item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 		.model-context-badge {
 		  font-size: 11px;
@@ -2300,27 +2322,30 @@ textarea::placeholder {
 		  cursor: help;
 		}
 
-		.model-item-actions {
-		  display: flex;
-		  align-items: center;
-		  gap: 6px;
-		  flex: 0 0 auto;
-		}
+.model-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 
-		.btn-model-action {
-		  display: inline-flex;
-		  align-items: center;
-		  justify-content: center;
-		  width: 26px;
-		  height: 26px;
-		  padding: 0;
-		  background: rgba(255, 255, 255, 0.06);
-		  border: 1px solid var(--border-subtle);
-		  border-radius: 6px;
-		  color: var(--text-secondary);
-		  cursor: pointer;
-		  flex: 0 0 auto;
-		}
+.btn-model-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 13px;
+  line-height: 1;
+}
 
 		.btn-model-action:hover {
 		  color: var(--text-primary);
