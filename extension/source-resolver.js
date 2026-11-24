@@ -47,12 +47,18 @@
           { pattern: /\bjawapos\b/i, home: "https://www.jawapos.com", search: "https://www.jawapos.com/?s=" },
           { pattern: /\bsindo(?:news)?\b/i, home: "https://www.sindonews.com", search: "https://search.sindonews.com/search?q=" },
           { pattern: /\bviva(?:\.co\.id)?\b/i, home: "https://www.viva.co.id", search: "https://www.viva.co.id/search?q=" },
-          { pattern: /\btirto(?:\.id)?\b/i, home: "https://tirto.id", search: "https://tirto.id/search?q=" }
+          { pattern: /\btirto(?:\.id)?\b/i, home: "https://tirto.id", search: "https://tirto.id/search?q=" },
+          // Situs e-commerce / marketplace Indonesia
+          { pattern: /\btokopedia\b/i, home: "https://www.tokopedia.com", search: "https://www.tokopedia.com/search?q=" },
+          { pattern: /\bshopee(?:\.co\.id)?\b/i, home: "https://shopee.co.id", search: "https://shopee.co.id/search?keyword=" },
+          { pattern: /\blazada\b/i, home: "https://www.lazada.co.id", search: "https://www.lazada.co.id/catalog/?q=" },
+          { pattern: /\bbukalapak\b/i, home: "https://www.bukalapak.com", search: "https://www.bukalapak.com/cari?q=" },
+          { pattern: /\btik(?:tok)?\s*shop\b/i, home: "https://www.tiktok.com/shop", search: "https://www.tiktok.com/search?q=" }
         ];
 
         const matchedPortal = mediaPortals.find(p => p.pattern.test(text));
         if (matchedPortal) {
-          const searchMatch = text.match(/(?:cari|search|temukan|baca)\s+(?:berita\s+|informasi\s+|artikel\s+|kabar\s+)?(?:tentang\s+|mengenai\s+|soal\s+)?["'“]?([^.,'”\n]+?)["'”]?[\.,\s]*(?:lalu|kemudian|setelah|dan|$)/i) ||
+          const searchMatch = text.match(/(?:cari|search|temukan|baca|list|lihat|tampilkan|cari\s+di)\s+(?:berita\s+|informasi\s+|artikel\s+|kabar\s+|produk\s+|list\s+)?(?:tentang\s+|mengenai\s+|soal\s+)?["'“]?([^.,'”\n]+?)["'”]?[\.,\s]*(?:lalu|kemudian|setelah|dan|$)/i) ||
                               text.match(/(?:tentang|mengenai|soal)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]*(?:lalu|kemudian|setelah|dan|$)/i);
           let rawQuery = searchMatch ? searchMatch[1].trim() : "";
           // Bersihkan kotoran agar query fokus ke topik inti:

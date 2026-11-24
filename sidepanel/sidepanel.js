@@ -4865,6 +4865,16 @@ ${topCompStr}
         pageTitle = workTabData.title || pageTitle;
         pageUrl = workTabData.url || pageUrl;
       }
+      // pageUrl di atas masih dari activeTabInfo SEBELUM navigasi; saat tab dipindah ke
+      // sumber (mis. tokopedia) kita harus pakai URL tab setelah navigasi agar deteksi
+      // isSheetsSite / isDocsSite / dst. akurat.
+      if (workTabId) {
+        try {
+          const t = await chrome.tabs.get(workTabId);
+          if (t && t.url) pageUrl = t.url;
+          if (t && t.title) pageTitle = t.title;
+        } catch (_) {}
+      }
 
       if (referencedTabs.length > 0) {
         for (const refTab of referencedTabs) {
@@ -4937,7 +4947,7 @@ ${topCompStr}
 
       const isExplicitExcelOrCsv = /(?:excel|\.xls|\.xlsx|\.csv|spreadsheet|sheets)/i.test(userPrompt);
       const isExplicitNavigateDocs = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|rangkum(?:kan)?|taruh|post)\s+(?:.*?\s+)?(?:ke|di|pada)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:ke|di|pada)\s+(?:google\s+)?(?:docs?|dokumen|document|gdocs?)|(?:buka|open)\s+(?:google\s+)?(?:docs?|dokumen|document)|docs\.new)/i.test(userPrompt);
-      const isExplicitNavigateSheets = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|taruh)\s+(?:.*?\s+)?(?:ke|di|pada)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:ke|di|pada)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:buka|open)\s+(?:google\s+)?(?:sheets?|spreadsheet)|sheets\.new)/i.test(userPrompt);
+      const isExplicitNavigateSheets = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|taruh)\s+(?:.*?\s+)?(?:ke|di|pada)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:ke|di|pada)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:buka|open)\s+(?:google\s+)?(?:sheets?|spreadsheet)|sheets\.new|kedalam\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:buat|masukkan|tempel|isi|tulis|simpan)\s+.*(?:kedalam|ke\s+dalam|ke)\s+(?:google\s+)?(?:sheets?|spreadsheet))/i.test(userPrompt);
 
       const userExplicitDocs = /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke|tempel\s+ke|salin\s+ke|ekspor\s+ke|pindahkan\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen|(?:tulis\s+ke|simpan\s+ke|masukkan\s+ke|tempel\s+ke|ekspor\s+ke)\s+(?:dokumen|docs)|(?:ke|di)\s+(?:google\s+)?(?:docs?|dokumen|document))/i.test(userPrompt);
       const userExplicitSheets = /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|buatkan spreadsheet)/i.test(userPrompt);
@@ -5012,6 +5022,11 @@ PEDOMAN KETAT DOKUMEN GOOGLE DOCS:
 		${cleanText.substring(0, 4000)}
 
 		PEDOMAN KETAT OUTPUT SPREADSHEET (STANDAR EKSEKUTIF & RAPI):
+		0. ATURAN KRITIS — JANGAN PERNAH MENOLAK PERINTAH:
+		   - Kamu TIDAK punya akses browser/network/tool. JANGAN bilang "tidak ada tool", "tidak bisa buka", "sesi tanpa akses", atau menawarkan opsi/pertanyaan balik ke user.
+		   - Kamu WAJIB langsung menghasilkan tabel Markdown berdasarkan data/konteks yang diberikan di bawah, meskipun data terbatas.
+		   - Jika konteks kosong atau minim: buat tabel dengan struktur lengkap (header + 5-8 baris contoh realistis berdasarkan pengetahuanmu tentang topik user), lalu tulis catatan singkat di bawah tabel bahwa data perlu dilengkapi.
+		   - DILARANG menanyakan "pilih mana?", "kirim screenshot", atau menawarkan opsi alternatif. LANGSUNG KIRIM TABELNYA.
 		1. SAJIKAN TABEL DATA LENGKAP DALAM FORMAT MARKDOWN TABLE (WAJIB):
 		   - Baris Pertama: Header kolom yang deskriptif dan profesional (contoh: | No | Merek & Model | Kategori | Prosesor (CPU) | Grafis (GPU) | RAM | Storage | Baterai | Benchmark | Estimasi Harga (IDR) |).
 		   - Format Angka & Mata Uang: Wajib gunakan pemisah ribuan agar mudah dibaca (contoh: tulis 'Rp 42.999.000' atau '42.999.000', JANGAN tulis angka mentah tanpa pemisah seperti '42999000').

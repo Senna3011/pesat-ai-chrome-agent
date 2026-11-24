@@ -87,6 +87,8 @@
     let accumulatedContent = "";
     let accumulatedReasoning = "";
     let buffer = "";
+    // Usage asli dari stream (bila API mengirim baris usage terakhir sebelum [DONE])
+    let streamUsage = null;
 
     try {
       while (true) {
@@ -104,6 +106,8 @@
             const jsonStr = trimmed.slice(6);
             try {
               const data = JSON.parse(jsonStr);
+              // Beberapa provider mengirim usage di objek stream root atau di choice
+              if (data.usage) streamUsage = data.usage;
               const choice = data.choices?.[0];
               const contentDelta = choice?.delta?.content ?? data.reply;
               const reasoningDelta = choice?.delta?.reasoning_content;
@@ -128,7 +132,7 @@
     }
 
     const finalReply = accumulatedContent.trim() ? accumulatedContent : accumulatedReasoning;
-    return { reply: finalReply, success: true };
+    return { reply: finalReply, success: true, usage: streamUsage || null };
   }
 
   const ApiClient = {

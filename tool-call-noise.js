@@ -18,6 +18,33 @@
 
   const FRIENDLY_RETRY_MSG = "Maaf, saya belum bisa menyelesaikan perintah ini. Aktifkan Tab Aktif atau tulis perintahnya lebih spesifik.";
 
+  // Pola respons refusal / "aku tak punya tool" yang harus dianggap noise
+  // dan memicu retry dengan instruksi "jawab langsung".
+  const REFUSAL_PATTERNS = [
+    /tidak\s+(?:ada|punya)\s+(?:akses|tool|alat)/i,
+    /(?:sesi|session)\s+(?:ini\s+)?tanpa\s+(?:akses|izin)/i,
+    /(?:gagal|tidak\s+bisa|cannot|unable)\s+(?:membuka|buka|menjalankan|melakukan|execute|open)/i,
+    /(?:tidak\s+dapat|cannot|unable\s+to)\s+(?:membuka|buka|menjalankan|mengakses|access)/i,
+    /(?:tidak\s+ada|no|without|there\s+(?:is|are)\s+no)\s+(?:tool|alat|izin|permission|akses|access)\s*(?:s)?\s*(?:yang\s+)?(?:tersedia|available)?/i,
+    /(?:aku|saya|I)\s+(?:tidak\s+(?:bisa|dapat|punya|memiliki))\s+.*(?:tool|akses|browser|network|jaringan)/i,
+    /(?:pilih\s+mana|choose\s+(?:one|which)|kirim\s+(?:screenshot|tangkapan))/i,
+    /(?:tolong\s+(?:kirim|paste|tempel)\s+(?:screenshot|teks|daftar))/i
+  ];
+
+  // Deteksi apakah jawaban menolak perintah dengan alasan "tidak ada tool/akses".
+  function isRefusalReply(text) {
+    const t = String(text || "").trim();
+    if (t.length < 20) return false;
+    // Harus ada minimal 2 kecocokan pola refusal agar false-positive rendah
+    // (respons normal bisa menyebut sekali kata "tool" atau "buka").
+    let hits = 0;
+    for (const re of REFUSAL_PATTERNS) {
+      if (re.test(t)) hits++;
+      if (hits >= 2) return true;
+    }
+    return false;
+  }
+
   // Buang artefak tool-call dari teks jawaban.
   function stripToolCallNoise(text) {
     if (!text || typeof text !== "string") return text || "";
@@ -64,10 +91,12 @@
     return false;
   }
 
-  // Bersihkan jawaban; kembalikan pesan ramah bila hanya berisi noise tool-call.
+  // Bersihkan jawaban; kembalikan pesan ramah bila hanya berisi noise tool-call
+  // atau refusal "tidak ada tool".
   function sanitizeAssistantReply(text) {
     const cleaned = stripToolCallNoise(String(text || ""));
-    return isToolCallNoise(cleaned) ? FRIENDLY_RETRY_MSG : cleaned;
+    if (isToolCallNoise(cleaned) || isRefusalReply(cleaned)) return FRIENDLY_RETRY_MSG;
+    return cleaned;
   }
 
   // Konteks metadata ringan saat Tab Aktif OFF (tanpa content script).
@@ -80,6 +109,7 @@
     stripToolCallNoise,
     isToolCallPayloadJson,
     isToolCallNoise,
+    isRefusalReply,
     sanitizeAssistantReply,
     buildLightMetadataContext,
     FRIENDLY_RETRY_MSG

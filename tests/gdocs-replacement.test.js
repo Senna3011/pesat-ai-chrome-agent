@@ -189,6 +189,23 @@ test('resolveSourceUrlFromPrompt: accurately extracts target URL from natural us
   assert.equal(resolveSourceUrlFromPrompt('buatkan draf artikel tentang kesehatan'), null);
 });
 
+test('resolveSourceUrlFromPrompt: resolves e-commerce sites with search query', () => {
+  // Kasus nyata user: "buka tokopedia dan list laptop RTX 4080 ..."
+  assert.equal(
+    resolveSourceUrlFromPrompt('buka tokopedia dan list laptop RTX 4080 dan buat list nya kedalam spreadsheet'),
+    'https://www.tokopedia.com/search?q=laptop%20RTX%204080'
+  );
+  assert.equal(resolveSourceUrlFromPrompt('buka shopee dan cari sepatu'), 'https://shopee.co.id/search?keyword=sepatu');
+  assert.equal(resolveSourceUrlFromPrompt('buka tokopedia'), 'https://www.tokopedia.com/');
+});
+
+test('isExplicitNavigateSheets: detects "kedalam spreadsheet" destination phrasing', () => {
+  const re = /(?:(?:buka|open|masukkan|buat(?:kan)?|tulis(?:kan)?|isi(?:kan)?|tempel(?:kan)?|salin|simpan|pindahkan|ekspor|taruh)\s+(?:.*?\s+)?(?:ke|di|pada)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:ke|di|pada)\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:buka|open)\s+(?:google\s+)?(?:sheets?|spreadsheet)|sheets\.new|kedalam\s+(?:google\s+)?(?:sheets?|spreadsheet)|(?:buat|masukkan|tempel|isi|tulis|simpan)\s+.*(?:kedalam|ke\s+dalam|ke)\s+(?:google\s+)?(?:sheets?|spreadsheet))/i;
+  assert.equal(re.test('buka tokopedia dan list laptop RTX 4080 dan buat list nya kedalam spreadsheet'), true);
+  assert.equal(re.test('masukkan data ke spreadsheet'), true);
+  assert.equal(re.test('rangkum halaman ini'), false);
+});
+
 test('parseDirectDocTypingParams: extracts exact literal word/text from Mas Alfu prompt without summarizing', () => {
   function parseDirectDocTypingParams(prompt = "") {
     const text = String(prompt).trim();

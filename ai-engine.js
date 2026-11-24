@@ -238,7 +238,12 @@ Pedoman Respon:
 1. Jawab pertanyaan dan instruksi secara langsung, mendalam, dan terstruktur rapi menggunakan format Markdown.
 2. Jika diminta merangkum: sajikan ringkasan komprehensif, poin-poin kunci substantif, dan kesimpulan/rekomendasi yang jelas berdasarkan teks konten yang diberikan. DILARANG mengulang noise UI (seperti [show], [hide], tombol menu, atau teks navigasi).
 3. Jika pengguna meminta tabel: sajikan tabel Markdown lengkap (| Header |) dengan baris data riil, akurat, dan realistis tanpa placeholder [...]. Sertakan analisis dan ringkasan eksekutif berbobot di bawah tabel.
-4. DILARANG menggunakan format JSON action peramban untuk respons percakapan langsung ini.`;
+4. DILARANG menggunakan format JSON action peramban untuk respons percakapan langsung ini.
+5. ATURAN KRITIS — JANGAN PERNAH MENOLAK PERINTAH:
+   - Kamu TIDAK punya tool/akses browser/network. JANGAN pernah menyebut "tidak ada tool", "tidak bisa buka", "sesi tanpa akses", "tidak ada tool tersedia", atau frasa serupa.
+   - Kamu WAJIB langsung menjawab/menghasilkan konten berdasarkan data yang diberikan, meskipun data terbatas.
+   - Jika data kosong/minim: hasilkan konten terbaik dari pengetahuanmu (tabel contoh realistis, dsb) lalu catat singkat bahwa data perlu dilengkapi.
+   - DILARANG menanyakan "pilih mana?", "kirim screenshot", atau menawarkan opsi/pertanyaan balik ke user. LANGSUNG KIRIM HASILNYA.`;
       } else if (phase === "validate") {
         basePrompt = `Kamu adalah Validator AI - Evaluator hasil tindakan peramban web.
 Analisis apakah aksi terakhir berhasil memenuhi subtask pengguna berdasarkan kondisi halaman saat ini.
@@ -335,7 +340,8 @@ Gunakan hanya tool yang tersedia. Maksimal 10 langkah. Langkah act wajib memilik
             onChunk
           );
           const finalReply = streamRes.reply || "";
-          const usage = {
+          // Pakai usage asli dari stream bila tersedia; jika tidak, estimasi kasar.
+          const usage = streamRes.usage || {
             prompt_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length) / 4),
             completion_tokens: Math.ceil(finalReply.length / 4),
             total_tokens: Math.ceil((promptText.length + JSON.stringify(payloadMessages).length + finalReply.length) / 4)

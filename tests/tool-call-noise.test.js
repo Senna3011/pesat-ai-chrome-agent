@@ -2,60 +2,18 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 // ═══════════════════════════════════════════════════════════
-// Salin fungsi murni dari sidepanel/sidepanel.js (konvensi repo:
-// sidepanel.js IIFE/DOM-bound, tidak bisa di-require).
-// Sumber: cleanAssistantReply / stripToolCallNoise / isToolCallNoise /
-// sanitizeAssistantReply + buildLightMetadataContext (P1.7).
+// Uji fungsi produksi (bukan salinan lokal) dari tool-call-noise.js
+// agar tidak ada pergeseran diam-diam antara runtime & unit test.
 // ═══════════════════════════════════════════════════════════
-
-function stripToolCallNoise(text) {
-  if (!text || typeof text !== 'string') return text || '';
-  let out = text;
-  out = out.replace(/^\s*(?:[-*]\s*)?(?:<|mcp__|tool_call|function_call)[^\n]*$/gim, '');
-  out = out.replace(/(?:^|\n)\s*(?:mcp__[a-z0-9_]+(?:\s|$)|<[a-z]+__[a-z0-9_]+__\w+[^>\n]*>)/g, '\n');
-  out = out.replace(/```(?:tool_call|function_call|xml)[\s\S]*?```/gi, '');
-  out = out.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-  return out;
-}
-
-// Sisa JSON tool-call setelah tag dibuang, mis. {"text":"Lewis Hamilton"}
-function isToolCallPayloadJson(s) {
-  const t = String(s || '').trim();
-  if (!(t.startsWith('{') && t.endsWith('}'))) return false;
-  try {
-    const o = JSON.parse(t);
-    if (!o || typeof o !== 'object' || Array.isArray(o)) return false;
-    const keys = Object.keys(o);
-    const allowed = new Set(['text', 'value', 'input', 'elementId', 'key', 'targetText', 'url', 'action', 'args', 'parameters']);
-    if (!keys.length) return true;
-    return keys.every(k => allowed.has(k));
-  } catch (e) {
-    return false;
-  }
-}
-
-function isToolCallNoise(text) {
-  if (!text || typeof text !== 'string') return true;
-  const stripped = stripToolCallNoise(text);
-  if (stripped.length < 15) return true;
-  const noiseMatches = (String(text).match(/mcp__|<[a-z]+__[a-z0-9_]+__|tool_call|function_call/gi) || []).length;
-  if (noiseMatches > 0 && stripped.length < 40) return true;
-  if (isToolCallPayloadJson(stripped)) return true;
-  return false;
-}
-
-const FRIENDLY_RETRY_MSG = 'Maaf, saya belum bisa menyelesaikan perintah ini. Aktifkan Tab Aktif atau tulis perintahnya lebih spesifik.';
-
-function sanitizeAssistantReply(text) {
-  const cleaned = stripToolCallNoise(String(text || ''));
-  return isToolCallNoise(cleaned) ? FRIENDLY_RETRY_MSG : cleaned;
-}
-
-// P1.7: konteks metadata ringan saat Tab Aktif OFF (tanpa content script)
-function buildLightMetadataContext(activeTabInfo, pageTitle = '', pageUrl = '') {
-  if (!activeTabInfo) return '';
-  return `[INFO TAB AKTIF]\nJudul: ${activeTabInfo.title || pageTitle || ''}\nURL: ${activeTabInfo.url || pageUrl || ''}`.trim();
-}
+const {
+  stripToolCallNoise,
+  isToolCallPayloadJson,
+  isToolCallNoise,
+  isRefusalReply,
+  sanitizeAssistantReply,
+  buildLightMetadataContext,
+  FRIENDLY_RETRY_MSG
+} = require('../tool-call-noise.js');
 
 // ═══════════════════════════════════════════════════════════
 // TEST: stripToolCallNoise
@@ -156,4 +114,38 @@ test('buildLightMetadataContext: fallback ke pageTitle/pageUrl bila field tab ko
   const out = buildLightMetadataContext({ title: '', url: '' }, 'Judul Cadangan', 'https://cadangan.id');
   assert.ok(out.includes('Judul Cadangan'));
   assert.ok(out.includes('https://cadangan.id'));
+});
+
+// ═══════════════════════════════════════════════════════════
+// TEST: isRefusalReply (respons "tidak ada tool" → retry)
+// ═══════════════════════════════════════════════════════════
+
+test('isRefusalReply: true untuk pesan refusal tool/tanpa akses (kasus nyata Tokopedia)', () => {
+  const refusal = 'Tidak bisa buka Tokopedia — sesi ini tanpa akses browser/network. Tidak ada tool tersedia.\n\nDua opsi:\nKamu scrape/buka link https://www.tokopedia.com/search?q=laptop, tempel daftarnya ke sini (nama produk + harga), saya rapikan jadi tabel Markdown.\nSaya buatkan template spreadsheet kosong dulu (header: No, Merek & Model) + formula Rata-rata/Min/Max, tinggal isi data.\n\nPilih mana? Kalau mau langsung lengkap, kirim screenshot/teks hasil pencarian.';
+  assert.equal(isRefusalReply(refusal), true);
+});
+
+test('isRefusalReply: true untuk refusal Inggris "no tools available"', () => {
+  const refusal = 'I cannot open the website because this session has no access to browser or network. There are no tools available. Please paste the data here and I will format it.';
+  assert.equal(isRefusalReply(refusal), true);
+});
+
+test('isRefusalReply: false untuk jawaban normal yang menyebut kata "tool" sekali', () => {
+  const normal = 'Berikut ringkasan artikel tentang kecerdasan buatan:\n\n1. Definisi AI\n2. Aplikasi industri\n3. Tantangan etika\n\nKesimpulan: AI berkembang pesat namun membutuhkan regulasi.';
+  assert.equal(isRefusalReply(normal), false);
+});
+
+test('isRefusalReply: false untuk tabel jawaban yang valid', () => {
+  const table = '| No | Merek | Harga |\n|---|---|---|\n| 1 | Asus ROG | Rp 45.000.000 |\n| 2 | Lenovo Legion | Rp 42.000.000 |\n\nAnalisis: Asus menawarkan performa terbaik.';
+  assert.equal(isRefusalReply(table), false);
+});
+
+test('isRefusalReply: false untuk string pendek/kosong', () => {
+  assert.equal(isRefusalReply(''), false);
+  assert.equal(isRefusalReply('ok'), false);
+});
+
+test('sanitizeAssistantReply: refusal tool → FRIENDLY_RETRY_MSG', () => {
+  const refusal = 'Tidak bisa buka Tokopedia — sesi ini tanpa akses browser/network. Tidak ada tool tersedia. Pilih mana? Kirim screenshot/teks hasil pencarian.';
+  assert.equal(sanitizeAssistantReply(refusal), FRIENDLY_RETRY_MSG);
 });
