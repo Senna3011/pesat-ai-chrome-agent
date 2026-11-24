@@ -1067,6 +1067,9 @@ ATURAN KETAT:
         }
 
         const forceNewTab = ["CREATE_TAB", "OPEN_TAB", "OPEN_NEW_TAB", "open_new_tab", "NEW_TAB"].includes(request.action);
+        // Jika request.background === true atau active === false, buka tab TANPA mengalihkan
+        // fokus (active:false) agar pekerjaan agent berjalan di latar belakang.
+        const makeActive = !(request.background === true || request.active === false);
         if (forceNewTab) {
           // Tab deduplication: jika membuka URL layanan penting (Gmail, Docs, Sheets), cek apakah sudah ada tab terbuka
           if (tabs && tabs.length > 0 && /mail\.google\.com|docs\.google\.com\/(?:document|spreadsheets)/i.test(url)) {
@@ -1080,7 +1083,7 @@ ATURAN KETAT:
               }
             } catch (_) {}
           }
-          const newTab = await chrome.tabs.create({ url, active: true });
+          const newTab = await chrome.tabs.create({ url, active: makeActive });
           if (newTab?.id) activeAgentTabs.add(Number(newTab.id));
           sendResponse({ success: true, message: `Membuka tab baru: ${url}`, url, tabId: newTab?.id });
           return;
@@ -1101,7 +1104,7 @@ ATURAN KETAT:
         }
 
         if (!targetId) {
-          const newTab = await chrome.tabs.create({ url, active: true });
+          const newTab = await chrome.tabs.create({ url, active: makeActive });
           if (newTab?.id) activeAgentTabs.add(Number(newTab.id));
           sendResponse({ success: true, message: `Membuka tab baru: ${url}`, url, tabId: newTab?.id });
           return;

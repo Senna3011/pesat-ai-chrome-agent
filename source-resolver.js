@@ -1,0 +1,97 @@
+// source-resolver.js - Pesat AI Browser Agent
+// Modul bersama (shared) resolusi URL sumber dari prompt bahasa natural.
+// Dipakai baik oleh sidepanel (runtime) maupun unit test produksi (Node),
+// sehingga logika "dapur" (termasuk portal berita Indonesia) identik & dapat diuji.
+//
+// Dimuat sebagai <script> di sidepanel.html (mengisi globalThis.PesatSourceResolver)
+// dan sebagai CommonJS module (module.exports) saat di-require oleh node --test.
+(function (root, factory) {
+  const api = factory();
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = api;
+  }
+  if (root) {
+    root.PesatSourceResolver = api;
+  }
+})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  "use strict";
+
+  // Resolusi deterministik URL target dari prompt.
+  // Urutan: (1) URL eksplisit -> (2) domain ber-TLD -> (3) portal berita/media
+  // -> (4) Wikipedia (+mode pencarian) -> (5) Pencarian Google.
+  function resolveSourceUrlFromPrompt(prompt = "") {
+    let resolvedUrl = null;
+    const text = String(prompt || "");
+
+    // 1. URL eksplisit (https://... atau http://...)
+    const directUrlMatch = text.match(/https?:\/\/[^\s`"']+/i);
+    if (directUrlMatch) {
+      resolvedUrl = directUrlMatch[0];
+    } else {
+      // 2. Domain dengan TLD (wikipedia.org, detik.com, kompas.com, dll)
+      const domainMatch = text.match(/\b([a-zA-Z0-9-]+\.(?:com|org|id|net|io|co\.id|gov|edu)(?:\/[^\s`"']*)?)\b/i);
+      if (domainMatch) {
+        resolvedUrl = "https://" + domainMatch[1];
+      } else {
+        // 3. Portal Berita & Media Populer Indonesia (resolusi URL pencarian deterministik)
+        const mediaPortals = [
+          { pattern: /\b(?:cnn\s*indonesia|cnn)\b/i, home: "https://www.cnnindonesia.com", search: "https://www.cnnindonesia.com/search/?query=" },
+          { pattern: /\b(?:detik(?:\.com)?|detikcom|detiknews)\b/i, home: "https://www.detik.com", search: "https://www.detik.com/search/searchall?query=" },
+          { pattern: /\b(?:kompas(?:\.com)?|kompascom)\b/i, home: "https://www.kompas.com", search: "https://search.kompas.com/search/?q=" },
+          { pattern: /\b(?:tribun(?:\s*news)?|tribunnews)\b/i, home: "https://www.tribunnews.com", search: "https://www.tribunnews.com/search?q=" },
+          { pattern: /\bkumparan\b/i, home: "https://kumparan.com", search: "https://kumparan.com/search/" },
+          { pattern: /\btempo(?:\.co)?\b/i, home: "https://www.tempo.co", search: "https://www.tempo.co/search?q=" },
+          { pattern: /\bliputan6\b/i, home: "https://www.liputan6.com", search: "https://www.liputan6.com/search?q=" },
+          { pattern: /\b(?:antara|antaranews)\b/i, home: "https://www.antaranews.com", search: "https://www.antaranews.com/search?q=" },
+          { pattern: /\b(?:cnbc\s*indonesia|cnbc)\b/i, home: "https://www.cnbcindonesia.com", search: "https://www.cnbcindonesia.com/search?query=" },
+          { pattern: /\bjawapos\b/i, home: "https://www.jawapos.com", search: "https://www.jawapos.com/?s=" },
+          { pattern: /\bsindo(?:news)?\b/i, home: "https://www.sindonews.com", search: "https://search.sindonews.com/search?q=" },
+          { pattern: /\bviva(?:\.co\.id)?\b/i, home: "https://www.viva.co.id", search: "https://www.viva.co.id/search?q=" },
+          { pattern: /\btirto(?:\.id)?\b/i, home: "https://tirto.id", search: "https://tirto.id/search?q=" }
+        ];
+
+        const matchedPortal = mediaPortals.find(p => p.pattern.test(text));
+        if (matchedPortal) {
+          const searchMatch = text.match(/(?:cari|search|temukan|baca)\s+(?:berita\s+|informasi\s+|artikel\s+|kabar\s+)?(?:tentang\s+|mengenai\s+|soal\s+)?["'“]?([^.,'”\n]+?)["'”]?[\.,\s]*(?:lalu|kemudian|setelah|dan|$)/i) ||
+                              text.match(/(?:tentang|mengenai|soal)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]*(?:lalu|kemudian|setelah|dan|$)/i);
+          const rawQuery = searchMatch ? searchMatch[1].trim().replace(/^(?:berita|kabar|artikel|tentang|mengenai|soal)\s+/i, "").trim() : "";
+          if (rawQuery && rawQuery.length > 1) {
+            resolvedUrl = matchedPortal.search + encodeURIComponent(rawQuery);
+          } else {
+            resolvedUrl = matchedPortal.home;
+          }
+        } else {
+          // 4. Situs Wikipedia + kueri pencarian
+          const wikiSearch = text.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]+(?:lalu|kemudian|setelah|dan|rangkum|ke|$)/i) ||
+                             text.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+)/i);
+          if (wikiSearch && wikiSearch[1].trim()) {
+            const q = wikiSearch[1].trim().replace(/^(?:tentang|artikel)\s+/i, "").trim();
+            if (q) resolvedUrl = "https://id.wikipedia.org/wiki/" + encodeURIComponent(q.replace(/\s+/g, "_"));
+          } else if (/(?:kuni?jungi|buka|ke|akses)\s+wikipedia/i.test(text)) {
+            resolvedUrl = "https://id.wikipedia.org";
+          } else {
+            // 5. Pencarian umum di Google
+            const googleSearchMatch = text.match(/(?:cari\s+(?:di\s+)?google|search\s+google)\s+(?:tentang\s+)?["'“]?([^.'"“”\n]+)["'”]?/i);
+            if (googleSearchMatch && googleSearchMatch[1].trim()) {
+              resolvedUrl = "https://www.google.com/search?q=" + encodeURIComponent(googleSearchMatch[1].trim());
+            }
+          }
+        }
+      }
+    }
+
+    if (!resolvedUrl) return null;
+
+    try {
+      const parsed = new URL(resolvedUrl);
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return null;
+      }
+      return parsed.href;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  return { resolveSourceUrlFromPrompt };
+});

@@ -4649,6 +4649,18 @@ ${topCompStr}
     const isEmailIntent = /(?:email|gmail|kirim\s+(?:ke|email)|compose|pesan\s+baru)/i.test(userPrompt);
     if (isEmailIntent) needsAgentLoop = true;
 
+    // ── HYBRID (engine deterministik + kerja di latar belakang) ──
+    // Bila user meminta browse + search dan sumber bisa diresolusi secara
+    // deterministik (portal berita / domain ber-TLD / Wikipedia / Google), baca
+    // sumber di TAB LATAR lalu jawab langsung tanpa agent loop LLM. Tugas
+    // multi-langkah / email / mutasi tetap diteruskan ke agent loop.
+    const resolvedSourceUrl = resolveSourceUrlFromPrompt(userPrompt);
+    if (needsAgentLoop && isBrowseAndSearchIntent && resolvedSourceUrl && !isMultiStepGoal && !isEmailIntent) {
+      appendLog("🧭 Mode hybrid: membaca sumber secara deterministik di tab latar (tautan ter-resolusi).");
+      await runAnalysisFlow(userPrompt, contextSourcesToSend);
+      return;
+    }
+
     if (!needsAgentLoop) {
       await runAnalysisFlow(userPrompt, contextSourcesToSend);
       return;
@@ -4682,47 +4694,49 @@ ${topCompStr}
   // ═══════════════════════════════════════════════════
   // PENGURAI TAUTAN SUMBER DARI PERINTAH RAMAH PENGGUNA
   // ═══════════════════════════════════════════════════
+  // Delegasi ke modul bersama source-resolver.js agar logika resolusi URL sumber
+  // (termasuk portal berita/media Indonesia) identik dengan unit test produksi.
   function resolveSourceUrlFromPrompt(prompt = "") {
-    let resolvedUrl = null;
-    // 1. Direct explicit URL (https://... or http://...)
-    const directUrlMatch = prompt.match(/https?:\/\/[^\s`"']+/i);
-    if (directUrlMatch) {
-      resolvedUrl = directUrlMatch[0];
-    } else {
-      // 2. Domain dengan TLD (wikipedia.org, detik.com, kompas.com, dll)
-      const domainMatch = prompt.match(/\b([a-zA-Z0-9-]+\.(?:com|org|id|net|io|co\.id|gov|edu)(?:\/[^\s`"']*)?)\b/i);
-      if (domainMatch) {
-        resolvedUrl = "https://" + domainMatch[1];
-      } else {
-        // 3. Situs Wikipedia + kueri pencarian (misal: "Kunijungi wikipedia dan cari kecerdasan buatan" atau "Buka wikipedia tentang AI")
-        const wikiSearch = prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]+(?:lalu|kemudian|setelah|dan|rangkum|ke|$)/i) ||
-                           prompt.match(/wikipedia.*?(?:cari|tentang|topik|artikel|baca)\s+["'“]?([^.,'”\n]+)/i);
-        if (wikiSearch && wikiSearch[1].trim()) {
-          const q = wikiSearch[1].trim().replace(/^(?:tentang|artikel)\s+/i, "").trim();
-          if (q) resolvedUrl = "https://id.wikipedia.org/wiki/" + encodeURIComponent(q.replace(/\s+/g, "_"));
-        } else if (/(?:kuni?jungi|buka|ke|akses)\s+wikipedia/i.test(prompt)) {
-          resolvedUrl = "https://id.wikipedia.org";
-        } else {
-          // 4. Pencarian umum di Google (misal: "cari di google tren AI 2026")
-          const googleSearchMatch = prompt.match(/(?:cari\s+(?:di\s+)?google|search\s+google)\s+(?:tentang\s+)?["'“]?([^.'"“”\n]+)["'”]?/i);
-          if (googleSearchMatch && googleSearchMatch[1].trim()) {
-            resolvedUrl = "https://www.google.com/search?q=" + encodeURIComponent(googleSearchMatch[1].trim());
-          }
-        }
-      }
+    const fn = (typeof globalThis !== "undefined" && globalThis.PesatSourceResolver)
+      ? globalThis.PesatSourceResolver.resolveSourceUrlFromPrompt
+      : null;
+    if (typeof fn === "function") {
+      try { return fn(prompt); } catch (_) { return null; }
     }
+    return null;
+  }
 
-    if (!resolvedUrl) return null;
-
+  // Buka URL sumber di TAB LATAR BELAKANG (active:false) agar fokus/active tab
+  // pengguna TIDAK dialihkan. Mengembalikan tabId tab kerja, atau null bila gagal.
+  async function openSourceTabInBackground(url) {
+    if (!url) return null;
     try {
-      const parsed = new URL(resolvedUrl);
-      if (!["http:", "https:"].includes(parsed.protocol)) {
-        return null;
+      // OPEN_NEW_TAB = paksa tab baru; background:true = active:false (tidak mengalihkan fokus).
+      const res = await sendToBackground({ action: "OPEN_NEW_TAB", url, background: true });
+      if (res && res.success && res.tabId) return res.tabId;
+    } catch (_) {}
+    try {
+      if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.create) {
+        const tab = await chrome.tabs.create({ url, active: false });
+        if (tab && tab.id) return tab.id;
       }
-      return parsed.href;
-    } catch (_) {
-      return null;
+    } catch (_) {}
+    return null;
+  }
+
+  // Baca readable text dari tab tertentu dengan penantian (retry) sampai halaman termuat.
+  async function readTextFromTabWithWait(tabId, tries = 10, delayMs = 700) {
+    let last = { text: "" };
+    for (let i = 0; i < tries; i++) {
+      let r = null;
+      try {
+        r = await sendToBackground({ action: "GET_READABLE_TEXT", tabId });
+      } catch (_) {}
+      if (r && r.text && r.text.trim().length > 20) return r;
+      if (r && r.text) last = r;
+      await new Promise(res => setTimeout(res, delayMs));
     }
+    return last;
   }
 
   async function runAnalysisFlow(userPrompt, contextSources = []) {
@@ -4742,23 +4756,40 @@ ${topCompStr}
         if (tabs && tabs[0]) activeTabInfo = tabs[0];
       } catch (_) {}
 
-      // 0.0. Jika perintah menyertakan situs/URL sumber, buka situs target di tab baru/aktif terlebih dahulu
+      // 0.0. Jika perintah menyertakan situs/URL sumber, buka di TAB LATAR BELAKANG
+      // (active:false) sehingga pekerjaan tetap berjalan meski user tidak sedang
+      // membuka/melihat tab tersebut, dan fokus tab aktif user tidak berpindah.
+      let workTabId = null;
+      let workTabData = null;
       const detectedSourceUrl = resolveSourceUrlFromPrompt(userPrompt);
-      if (detectedSourceUrl && (!activeTabInfo?.url || !activeTabInfo.url.includes(detectedSourceUrl.replace(/^https?:\/\//i, "").replace(/\/$/, "")))) {
-        if (activeTabInfo?.url?.includes("docs.google.com/document")) {
-          appendLog(`🌐 Membuka tautan sumber di tab baru: ${detectedSourceUrl}...`);
-          showStatusIndicator("Membuka sumber...");
-          await sendToBackground({ action: "NAVIGATE_TAB", url: detectedSourceUrl, newTab: true });
+      const sourceHostKey = detectedSourceUrl ? detectedSourceUrl.replace(/^https?:\/\//i, "").replace(/\/$/, "") : "";
+      const activeAlreadyOnSource = detectedSourceUrl && activeTabInfo?.url && activeTabInfo.url.includes(sourceHostKey);
+      if (detectedSourceUrl && !activeAlreadyOnSource) {
+        appendLog(`🌐 Membuka sumber di tab latar (fokus Anda tidak dialihkan): ${detectedSourceUrl}...`);
+        showStatusIndicator("Membuka sumber di latar...");
+        workTabId = await openSourceTabInBackground(detectedSourceUrl);
+        if (workTabId) {
+          const srcRes = await readTextFromTabWithWait(workTabId);
+          if (srcRes && srcRes.text && srcRes.text.trim().length > 20) {
+            workTabData = { text: srcRes.text.trim(), title: srcRes.title || "", url: srcRes.url || detectedSourceUrl };
+            appendLog(`✓ Sumber tab latar siap: "${workTabData.title || detectedSourceUrl}" (${workTabData.text.length} karakter).`);
+          } else {
+            appendLog(`⚠️ Tab latar belum memuat teks yang cukup; melanjutkan dengan konteks lain.`, "WARN");
+          }
         } else {
-          appendLog(`🌐 Membuka tautan sumber target: ${detectedSourceUrl}...`);
-          showStatusIndicator("Membuka sumber...");
-          await navigateToUrl(detectedSourceUrl);
+          // Fallback: bila pembuatan tab latar gagal, lakukan navigasi (perilaku lama)
+          appendLog(`⚠️ Gagal membuat tab latar, fallback membuka di tab aktif.`, "WARN");
+          if (activeTabInfo?.url?.includes("docs.google.com/document")) {
+            await sendToBackground({ action: "NAVIGATE_TAB", url: detectedSourceUrl, newTab: true });
+          } else {
+            await navigateToUrl(detectedSourceUrl);
+          }
+          await new Promise(r => setTimeout(r, 2200));
+          try {
+            const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+            if (tabs && tabs[0]) activeTabInfo = tabs[0];
+          } catch (_) {}
         }
-        await new Promise(r => setTimeout(r, 2200));
-        try {
-          const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
-          if (tabs && tabs[0]) activeTabInfo = tabs[0];
-        } catch (_) {}
       }
 
       // 0. Ekstraksi Dokumen / File Lampiran Pengguna
@@ -4785,6 +4816,14 @@ ${topCompStr}
       let cleanText = "";
       let pageTitle = (attachedFiles[0]?.name) || activeTabInfo?.title || "Halaman Web";
       let pageUrl = activeTabInfo?.url || "";
+
+      // Jika sumber dibuka & dibaca dari tab latar belakang, pakai teksnya sebagai konteks utama
+      // sehingga analisis tidak bergantung pada tab aktif (user tidak perlu membuka tab tersebut).
+      if (workTabData && workTabData.text) {
+        cleanText = workTabData.text;
+        pageTitle = workTabData.title || pageTitle;
+        pageUrl = workTabData.url || pageUrl;
+      }
 
       if (referencedTabs.length > 0) {
         for (const refTab of referencedTabs) {
