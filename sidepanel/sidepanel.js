@@ -1512,8 +1512,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
               </div>
               <div class="doc-card-actions">
-                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi thread">📋 Salin Thread</button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke kotak postingan X / medsos aktif">⤴️ Tempel ke X / Medsos</button>
+                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi thread"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="12" rx="1.6" fill="#0F172A"/><rect x="10.5" y="6.5" width="5.2" height="1.1" rx="0.55" fill="#fff"/><rect x="10.5" y="9" width="5.2" height="1.1" rx="0.55" fill="#fff"/><rect x="10.5" y="11.5" width="3.4" height="1.1" rx="0.55" fill="#fff"/></svg>Salin Thread</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke kotak postingan X / medsos aktif"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="#0F172A"/><path d="M7.2 7.2l9.6 9.6M16.8 7.2l-9.6 9.6" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></svg>Tempel ke X / Medsos</button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -1528,7 +1528,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             <div class="doc-card-header">
               <div class="doc-card-title-group">
                 <span class="doc-badge-icon table-badge" title="Google Sheets">
-                  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M6 2h8l4 4v16a0 0 0 0 1 0 0H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path fill="#FFFFFF" d="M8 7h8v2H8zm0 4h8v2H8zm0 4h8v2H8z"/><path fill="#FFFFFF" d="M8 11h2v8H8zm4 0h2v8h-2z" opacity="0.85"/></svg>
+                  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+                    <path fill="#FFFFFF" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/>
+                    <path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/>
+                  </svg>
                 </span>
                 <div class="doc-card-meta">
                   <div class="doc-card-title">${escapeHtml(tableTitle)}</div>
@@ -1536,12 +1540,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
               </div>
               <div class="doc-card-actions">
-                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh penjelasan dan teks jawaban biasa">📋 Salin Teks</button>
-                <button class="doc-action-btn" data-artifact-act="copy_tsv" title="Salin data tabel dalam format baris & kolom untuk Spreadsheet / Excel">📊 Salin Data Sheet</button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_excel" title="Unduh spreadsheet Excel dengan format tabel visual rapi">⬇️ Unduh Excel (.xls)</button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_csv" title="Unduh file tabel dalam format data murni .CSV">⬇️ .CSV</button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Sheets baru di tab terpisah dan tempelkan rapi">⤴️ Tempel ke Sheet (Tab Baru)</button>
-                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Isikan langsung ke lembar kerja spreadsheet aktif saat ini">⤴️ Di Sheet Ini</button>
+                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh penjelasan dan teks jawaban biasa"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Salin Teks</button>
+                <button class="doc-action-btn" data-artifact-act="copy_tsv" title="Salin data tabel dalam format baris & kolom untuk Spreadsheet / Excel"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Salin Data Sheet</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_excel" title="Unduh spreadsheet Excel dengan format tabel visual rapi"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#217346" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#33C481" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Unduh Excel (.xls)</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_csv" title="Unduh file tabel dalam format data murni .CSV"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>.CSV</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Sheets baru di tab terpisah dan tempelkan rapi"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Tempel ke Sheet (Tab Baru)</button>
+                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Isikan langsung ke lembar kerja spreadsheet aktif saat ini"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Di Sheet Ini</button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -1556,7 +1560,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             <div class="doc-card-header">
               <div class="doc-card-title-group">
                 <span class="doc-badge-icon docs-badge" title="Google Docs">
-                  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A1C2FA" d="M14 2v6h6z"/><path fill="#FFFFFF" d="M8 12h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>
+                  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+                    <path fill="#A1C2FA" d="M14 2v4a2 2 0 0 0 2 2h4z"/>
+                    <path fill="#FFFFFF" d="M8 11.5h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/>
+                  </svg>
                 </span>
                 <div class="doc-card-meta">
                   <div class="doc-card-title">${escapeHtml(docTitle)}</div>
@@ -1564,10 +1572,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
               </div>
               <div class="doc-card-actions">
-                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi artikel">📋 Salin Teks</button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Unduh file dokumen resmi Microsoft Word .docx">⬇️ Unduh Word (.docx)</button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Docs baru di tab terpisah dan tempelkan rapi">⤴️ Tempel ke Docs (Tab Baru)</button>
-                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Tempelkan langsung di posisi kursor dokumen aktif saat ini">⤴️ Di Kursor Ini</button>
+                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi artikel"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A1C2FA" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8 11.5h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>Salin Teks</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Unduh file dokumen resmi Microsoft Word .docx"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#2B579A" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#41A5EE" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8 11.5h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>Unduh Word (.docx)</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Docs baru di tab terpisah dan tempelkan rapi"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A1C2FA" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8 11.5h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>Tempel ke Docs (Tab Baru)</button>
+                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Tempelkan langsung di posisi kursor dokumen aktif saat ini"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A1C2FA" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8 11.5h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>Di Kursor Ini</button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -1684,6 +1692,25 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
     } else if (msg.artifact) {
       const actBtns = msgDiv.querySelectorAll(".doc-action-btn, .artifact-btn");
+      // Flash label tombol tanpa merusak ikon SVG anaknya: simpan node asli,
+      // tampilkan teks sementara, lalu pulihkan node yang sama persis.
+      function flashBtnLabel(btn, text) {
+        if (!btn) return;
+        if (!btn._pesatOrig) btn._pesatOrig = Array.from(btn.childNodes);
+        btn.textContent = text;
+      }
+      function flashBtnSuccess(btn, text, ms = 1800) {
+        if (!btn) return;
+        if (!btn._pesatOrig) btn._pesatOrig = Array.from(btn.childNodes);
+        const orig = btn._pesatOrig;
+        btn.textContent = text;
+        clearTimeout(btn._pesatTimer);
+        btn._pesatTimer = setTimeout(() => {
+          btn.textContent = "";
+          orig.forEach(n => btn.appendChild(n));
+          btn._pesatOrig = null;
+        }, ms);
+      }
       actBtns.forEach((btn) => {
         btn.addEventListener("click", async () => {
           const act = btn.getAttribute("data-artifact-act");
@@ -1693,9 +1720,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (act === "copy") {
               await navigator.clipboard.writeText(contentStr);
               appendLog(`📋 Teks "${a.name}" disalin ke clipboard.`);
-              const origText = btn.textContent;
-              btn.textContent = "✓ Teks Tersalin!";
-              setTimeout(() => { btn.textContent = origText; }, 1800);
+              flashBtnSuccess(btn, "✓ Teks Tersalin!", 1800);
             } else if (act === "copy_tsv") {
               let copyPayload = contentStr;
               const tableRows = typeof parseMarkdownTable === "function" ? parseMarkdownTable(contentStr) : null;
@@ -1704,31 +1729,23 @@ document.addEventListener("DOMContentLoaded", async () => {
               }
               await navigator.clipboard.writeText(copyPayload);
               appendLog(`📊 Data sheet "${a.name}" disalin ke clipboard (format TSV/Excel).`);
-              const origText = btn.textContent;
-              btn.textContent = "✓ Data Sheet Tersalin!";
-              setTimeout(() => { btn.textContent = origText; }, 1800);
+              flashBtnSuccess(btn, "✓ Data Sheet Tersalin!", 1800);
             } else if (act === "download_excel") {
               const xlsName = (a.name || "Tabel-Riset-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "").replace(/\.csv$/, "") + ".xls";
               const xlsContent = generateExcelSpreadsheetHtml(contentStr, xlsName.replace(/\.xls$/, ""));
               await downloadArtifactFile(xlsName, xlsContent, "application/vnd.ms-excel;charset=utf-8");
-              const origText = btn.textContent;
-              btn.textContent = "✓ Terunduh (.xls)!";
-              setTimeout(() => { btn.textContent = origText; }, 1800);
+              flashBtnSuccess(btn, "✓ Terunduh (.xls)!", 1800);
             } else if (act === "download_csv") {
               const csvName = (a.name || "Tabel-Riset-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "").replace(/\.xls$/, "") + ".csv";
               const csvContent = generateCsvFromMarkdownTable(contentStr);
               await downloadArtifactFile(csvName, "\uFEFF" + csvContent, "text/csv;charset=utf-8");
-              const origText = btn.textContent;
-              btn.textContent = "✓ Terunduh (.csv)!";
-              setTimeout(() => { btn.textContent = origText; }, 1800);
+              flashBtnSuccess(btn, "✓ Terunduh (.csv)!", 1800);
             } else if (act === "download_doc" || act === "download") {
-              const origText = btn.textContent;
-              btn.textContent = "⏳ Mengunduh...";
+              flashBtnLabel(btn, "⏳ Mengunduh...");
               const docxName = (a.name || "Dokumen-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "").replace(/\.docx$/, "") + ".docx";
               const docxBytes = generateWordDocx(contentStr, docxName.replace(/\.docx$/, ""));
               const ok = await downloadArtifactFile(docxName, docxBytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-              btn.textContent = ok ? "✓ Terunduh (.docx)!" : "✓ Terunduh!";
-              setTimeout(() => { btn.textContent = origText; }, 2000);
+              flashBtnSuccess(btn, ok ? "✓ Terunduh (.docx)!" : "✓ Terunduh!", 2000);
             } else if (act === "paste" || act === "paste_current") {
               const isSocialArt = a.artifactType === "social" || (a.name && (a.name.startsWith("Thread") || a.name.includes("Sosmed") || a.name.includes("Tweet")));
               setAgentRunning(true);
@@ -1861,9 +1878,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 		                  appendLog(`⤴️ Dokumen "${a.name}" berhasil ditempelkan ke Google Docs.`);
 		                }
 
-                const origText = btn.textContent;
-                btn.textContent = "✓ Tertempel!";
-                setTimeout(() => { btn.textContent = origText; }, 2000);
+                flashBtnSuccess(btn, "✓ Tertempel!", 2000);
               } catch (pasteErr) {
                 appendLog(`Gagal menempelkan teks: ${pasteErr.message}`, "WARN");
               } finally {

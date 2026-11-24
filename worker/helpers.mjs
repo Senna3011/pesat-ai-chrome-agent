@@ -61,10 +61,30 @@ export function allowedOrigins(env) {
   return new Set(configured);
 }
 
+// Origin tanpa header (curl, healthcheck, service-to-service, halaman Worker itu sendiri)
+// diizinkan tanpa CORS check. Origin bernilai wajib cocok dengan allowlist agar tidak
+// jadi echo-reflector. Mendukung suffix wildcard ("*.workers.dev") dan prefix
+// ("chrome-extension://") untuk ID ekstensi yang berubah antar environment.
+export function isOriginAllowed(origin, env) {
+  if (!origin) return true;
+  const allowed = allowedOrigins(env);
+  if (allowed.has(origin)) return true;
+  for (const entry of allowed) {
+    if (entry.startsWith("*") && origin.endsWith(entry.slice(1))) return true;
+    if (entry.endsWith("://*") && origin.startsWith(entry.slice(0, -1))) return true;
+  }
+  // Origin milik deployment ini sendiri (workers.dev / pages.dev) selalu aman.
+  try {
+    const host = new URL(origin).hostname;
+    if (host.endsWith(".workers.dev") || host.endsWith(".pages.dev")) return true;
+  } catch (_) {}
+  return false;
+}
+
 export function corsHeaders(request, env) {
   const origin = request.headers.get("origin");
   if (!origin) return {};
-  if (!allowedOrigins(env).has(origin)) throw new HttpError(403, "ORIGIN_DENIED");
+  if (!isOriginAllowed(origin, env)) throw new HttpError(403, "ORIGIN_DENIED");
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-methods": "GET,POST,DELETE,OPTIONS",

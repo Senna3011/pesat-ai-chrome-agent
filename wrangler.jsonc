@@ -43,6 +43,7 @@
 		"CHAT_MODEL": "@cf/meta/llama-3.1-8b-instruct",
 		"ALLOWED_CHAT_MODELS": "@cf/meta/llama-3.1-8b-instruct",
 		"MAX_CHAT_TOKENS": "4096",
-		"ALLOWED_ORIGINS": ""
+		"ALLOWED_ORIGINS": "chrome-extension://*,chrome-extension://nphfclhbmjglomdjhokggfemfahifadp",
+		"ALLOWED_EXTENSION_ID": "nphfclhbmjglomdjhokggfemfahifadp"
 	}
 }

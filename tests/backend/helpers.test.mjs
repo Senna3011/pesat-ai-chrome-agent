@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LIMITS, allowedOrigins, chunkDocument, normalizeText, selectContext, sha256 } from "../../worker/helpers.mjs";
+import { LIMITS, allowedOrigins, isOriginAllowed, chunkDocument, normalizeText, selectContext, sha256 } from "../../worker/helpers.mjs";
 
 const originalCrypto = globalThis.crypto;
 if (!originalCrypto) globalThis.crypto = (await import("node:crypto")).webcrypto;
@@ -42,6 +42,32 @@ test("allowedOrigins uses exact configured values", () => {
   assert.equal(origins.has("https://app.example.com"), true);
   assert.equal(origins.has("https://app.example.com.evil.test"), false);
   assert.equal(origins.has("chrome-extension://abc"), true);
+});
+
+test("isOriginAllowed: no Origin header is always allowed (curl/health/service-to-service)", () => {
+  assert.equal(isOriginAllowed("", {}), true);
+  assert.equal(isOriginAllowed(null, {}), true);
+});
+
+test("isOriginAllowed: exact and wildcard origins", () => {
+  const env = { ALLOWED_ORIGINS: "https://app.example.com, chrome-extension://*, *.workers.dev" };
+  assert.equal(isOriginAllowed("https://app.example.com", env), true);
+  assert.equal(isOriginAllowed("chrome-extension://abcdefghijklmnop", env), true);
+  assert.equal(isOriginAllowed("https://pesat-ai-chrome-agent.senna-947.workers.dev", env), true);
+  // Subdomain of an allowed host must NOT match an exact entry
+  assert.equal(isOriginAllowed("https://evil.app.example.com", { ALLOWED_ORIGINS: "https://app.example.com" }), false);
+});
+
+test("isOriginAllowed: self-hosted workers.dev/pages.dev origins are always allowed", () => {
+  assert.equal(isOriginAllowed("https://pesat-ai-chrome-agent.senna-947.workers.dev", {}), true);
+  assert.equal(isOriginAllowed("https://example.pages.dev", {}), true);
+  assert.equal(isOriginAllowed("https://evil.example.com", {}), false);
+});
+
+test("isOriginAllowed: chrome-extension ID from ALLOWED_EXTENSION_ID", () => {
+  const env = { ALLOWED_EXTENSION_ID: "nphfclhbmjglomdjhokggfemfahifadp" };
+  assert.equal(isOriginAllowed("chrome-extension://nphfclhbmjglomdjhokggfemfahifadp", env), true);
+  assert.equal(isOriginAllowed("chrome-extension://someotherextensionid", env), false);
 });
 
 test("sha256 returns canonical digest", async () => {

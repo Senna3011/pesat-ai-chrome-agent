@@ -21,6 +21,7 @@ async function getJob(env, session, id) {
 
 async function route(request, env) {
   const url = new URL(request.url);
+  // Health check publik tanpa sesi: dipakai dev/debug & uptime monitor.
   if (request.method === "GET" && url.pathname === "/api/health") return health(env);
   if (request.method === "POST" && url.pathname === "/api/auth/google") {
     if (env.AUTH_RATE_LIMITER) {
