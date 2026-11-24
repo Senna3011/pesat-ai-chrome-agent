@@ -137,6 +137,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const bugReportAlert = document.getElementById("bugReportAlert");
   const tokenTrackerBar = document.getElementById("tokenTrackerBar");
   const tokenTrackerText = document.getElementById("tokenTrackerText");
+  const tokenTrackerContext = document.getElementById("tokenTrackerContext");
 
   // ═══════════════════════════════════════════════════
   // KONFIGURASI TERPUSAT & BYOK STATE
@@ -2240,7 +2241,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function updateTokenTrackerUI(usage = {}) {
-    if (!tokenTrackerText) return;
     const promptToks = Number(usage.prompt_tokens) || 0;
     const compToks = Number(usage.completion_tokens) || 0;
     const totalToks = Number(usage.total_tokens) || (promptToks + compToks);
@@ -2252,7 +2252,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       ? String(rawContext).trim().toUpperCase().replace(/\s+/g, "")
       : formatContextShort(maxToks);
 
-    tokenTrackerText.innerHTML = `Tokens: <strong>${totalToks.toLocaleString("id-ID")}</strong> (Prompt: ${promptToks.toLocaleString("id-ID")}, Output: ${compToks.toLocaleString("id-ID")}) | Context: ${contextLabel}`;
+    if (tokenTrackerText) {
+      tokenTrackerText.innerHTML = `Tokens: <strong>${totalToks.toLocaleString("id-ID")}</strong> (Prompt: ${promptToks.toLocaleString("id-ID")}, Output: ${compToks.toLocaleString("id-ID")})`;
+    }
+    // Context selalu ditampilkan & diposisikan tetap (tidak terpotong) agar user tahu batas limit.
+    if (tokenTrackerContext) {
+      tokenTrackerContext.textContent = `Context: ${contextLabel}`;
+      tokenTrackerBar?.setAttribute("title", `Penggunaan Token Sesi Ini | Context Window: ${contextLabel}`);
+    }
   }
 
   async function refreshUsageDisplay() {
@@ -3060,6 +3067,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     const sendNow = !isExplicitDraft && /(?:kirim|kirimkan|send|submit|langsung|sekarang|auto\s*send)/i.test(text);
 
     return { to, subject, body, sendNow };
+  }
+
+  // Deteksi niat email yang kuat (untuk routing dini sebelum cek analisis/draf/form).
+  function detectEmailIntent(text = "") {
+    if (!text) return false;
+    const hasEmailWord = /(?:e-?mail|gmail|surat elektronik)/i.test(text);
+    if (!hasEmailWord) return false;
+    const hasRecipient = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i.test(text);
+    const hasEmailVerb = /(?:kirim|kirimkan|tulis|buat|buatkan|compose|send|balas|reply|isi|siapkan|susun|draft|draf|resume|lanjutkan)\b/i.test(text);
+    const hasComposeTarget = /(?:email|gmail)\s+(?:ke|pada|kepada|untuk)\b/i.test(text);
+    return hasRecipient || hasEmailVerb || hasComposeTarget;
   }
 
   // Recovery parser natural language (fallback jika LLM jawab teks instruktif)
@@ -5452,6 +5470,76 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
     }
   }
 
+  // Alur khusus email: buat isi (formal/bebas) via AI bila perlu, lalu isi form Gmail & kirim/draf.
+  async function runEmailFlow(goal, contextSources = []) {
+    const emailParams = extractEmailParameters(goal);
+
+    // Deteksi body eksplisit secara KETAT (hanya bila ada frasa "isi pesan/body/pesan ... :").
+    // extractEmailParameters mengembalikan fallback = seluruh teks bila tak ada, jadi jangan dipakai mentah.
+    const explicitBodyMatch = goal.match(/(?:isi\s+pesan(?:\s+email)?|pesan(?:\s+email)?|isi(?:\s+email)?|body)(?:\s+nya)?\s*[:=]\s*([\s\S]+)$/i)
+      || goal.match(/(?:isi\s+pesan(?:\s+email)?|pesan(?:\s+email)?|isi(?:\s+email)?|body)(?:\s+nya)?\s+["'“`]([\s\S]+?)["'”`]\s*$/i);
+    const explicitBody = explicitBodyMatch ? explicitBodyMatch[1].trim() : "";
+    const hasExplicitBody = explicitBody.length > 0;
+
+    // Jika pengguna tidak memberi body eksplisit, minta AI menyusun body (formal maupun bebas).
+    let body = hasExplicitBody ? explicitBody : "";
+    if (!hasExplicitBody) {
+      const tone = /formal|resmi|profesional|bisnis/i.test(goal)
+        ? "formal, profesional, dan sopan"
+        : /santai|bebas|nonformal|akrab/i.test(goal)
+          ? "santai, akrab, dan bebas"
+          : "jelas dan sesuai konteks";
+      showStatusIndicator("Menyusun isi email...");
+      appendLog(`✍️ Menyusun isi email (${tone})...`);
+      const composePrompt = `Tulis HANYA isi/body sebuah email ${tone}.
+
+[PERINTAH PENGGUNA]
+${goal}
+
+${emailParams.subject && emailParams.subject !== "Pesan Baru" ? `[SUBJEK]\n${emailParams.subject}\n` : ""}Aturan:
+- Kembalikan HANYA teks isi email (tanpa To/Subject, tanpa tanda kutip pembungkus, tanpa penjelasan tambahan).
+- Jangan mengarang penerima atau subjek.`;
+      try {
+        const generated = await callLLM("chat", composePrompt);
+        if (generated && generated.trim().length > 0) body = generated.trim();
+      } catch (e) {
+        appendLog(`Gagal menyusun isi via AI: ${e.message}`, "WARN");
+      }
+    }
+
+    const sendNow = emailParams.sendNow === true;
+    showStatusIndicator(sendNow ? "Mengisi & mengirim email..." : "Mengisi draf email di Gmail...");
+
+    activeTask.plan = [{
+      id: "step-1",
+      description: sendNow ? `Kirim email ke ${emailParams.to || "penerima"}` : `Susun draf email ke ${emailParams.to || "penerima"}`,
+      status: "in_progress",
+      kind: "act", dependencies: [], tool: "send_email", inputs: {}, successCriteria: [],
+      sideEffect: sendNow ? "external-send" : "draft", risk: sendNow ? "high" : "low", maxAttempts: 2
+    }];
+    activeTask.status = "EXECUTING";
+    refreshTaskCard();
+
+    const execRes = await executeAgentAction({
+      action: "send_email",
+      to: emailParams.to,
+      subject: emailParams.subject,
+      body,
+      sendNow
+    });
+
+    if (execRes && execRes.success) {
+      (activeTask.plan || []).forEach(s => { s.status = "done"; });
+      const summary = `### 📧 ${sendNow ? "Email Terkirim" : "Draf Email Siap"}\n\n` +
+        `**Kepada:** ${emailParams.to || "(belum diisi)"}\n` +
+        `**Subjek:** ${emailParams.subject}\n\n${body}`;
+      addMessageToCurrentSession("assistant", summary, { skipClean: true });
+      await finalizeTask("done", execRes.message || (sendNow ? "Email berhasil dikirim." : "Draf email berhasil disusun di Gmail."));
+    } else {
+      await finalizeTask("error", execRes?.error || execRes?.message || "Gagal mengisi formulir email Gmail.");
+    }
+  }
+
   async function startTask(goal, contextSources = []) {
     setAgentRunning(true);
     showStatusIndicator();
@@ -5496,6 +5584,13 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
 	      const serpParams = parseSerpRankingParams(goal);
 	      if (serpParams) {
 	        await runSerpRankingFlow(goal, serpParams);
+	        return;
+	      }
+
+	      // 1.4.0. FAST PATH EMAIL: buat/isi/kirim email ditangani lebih dulu sebelum routing analisis/draf/form.
+	      if (detectEmailIntent(goal)) {
+	        appendLog("📧 Instruksi email terdeteksi. Mengalihkan ke Email Automation Engine...");
+	        await runEmailFlow(goal, contextSources);
 	        return;
 	      }
 
