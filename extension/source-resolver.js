@@ -54,7 +54,15 @@
         if (matchedPortal) {
           const searchMatch = text.match(/(?:cari|search|temukan|baca)\s+(?:berita\s+|informasi\s+|artikel\s+|kabar\s+)?(?:tentang\s+|mengenai\s+|soal\s+)?["'“]?([^.,'”\n]+?)["'”]?[\.,\s]*(?:lalu|kemudian|setelah|dan|$)/i) ||
                               text.match(/(?:tentang|mengenai|soal)\s+["'“]?([^.,'”\n]+?)["'”]?[\.,\s]*(?:lalu|kemudian|setelah|dan|$)/i);
-          const rawQuery = searchMatch ? searchMatch[1].trim().replace(/^(?:berita|kabar|artikel|tentang|mengenai|soal)\s+/i, "").trim() : "";
+          let rawQuery = searchMatch ? searchMatch[1].trim() : "";
+          // Bersihkan kotoran agar query fokus ke topik inti:
+          // - buang kata pembuka (berita/informasi/terbaru/tentang, dst.)
+          // - buang ekor "di/ke/dari [berita] <nama portal>" (mis. "gibran di cnn" -> "gibran")
+          rawQuery = rawQuery
+            .replace(/^(?:(?:berita|informasi|info|artikel|kabar|tentang|mengenai|soal|terbaru|terkini|terhangat|update)\s+)+/i, "")
+            .replace(/\s+(?:di|ke|pada|dari|via|melalui)\s+(?:berita\s+|informasi\s+|info\s+|artikel\s+|kabar\s+)?(?:cnn(?:\s*indonesia)?|detik(?:\.com)?|detikcom|kompas(?:\.com)?|kompascom|tribun(?:\s*news)?|tribunnews|kumparan|tempo(?:\.co)?|liputan6|antara|antaranews|cnbc(?:\s*indonesia)?|jawapos|sindo(?:news)?|viva(?:\.co\.id)?|tirto(?:\.id)?|google|bing|wikipedia)\s*$/i, "")
+            .replace(/[.,;:]+$/g, "")
+            .trim();
           if (rawQuery && rawQuery.length > 1) {
             resolvedUrl = matchedPortal.search + encodeURIComponent(rawQuery);
           } else {

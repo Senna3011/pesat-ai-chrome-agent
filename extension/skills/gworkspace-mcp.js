@@ -103,6 +103,35 @@
             required: ["documentId", "text"]
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "gworkspace_replace_in_doc",
+          description: "Find and replace text (a word, a sentence, or a whole paragraph) inside a Google Document using Google Docs REST API v1 (replaceAllText). Reliable for editing articles without needing manual selection.",
+          parameters: {
+            type: "object",
+            properties: {
+              documentId: {
+                type: "string",
+                description: "The ID of the Google Document (extracted from URL e.g. /document/d/{documentId}/edit)."
+              },
+              findText: {
+                type: "string",
+                description: "Exact text to find. Can be a word, a sentence, or a full paragraph."
+              },
+              replaceText: {
+                type: "string",
+                description: "Replacement text that will replace every match."
+              },
+              matchCase: {
+                type: "boolean",
+                description: "Whether the search is case-sensitive (default false)."
+              }
+            },
+            required: ["documentId", "findText", "replaceText"]
+          }
+        }
       }
     ],
 
@@ -110,6 +139,7 @@
 [SKILL: GOOGLE WORKSPACE REST/MCP]
 - Gunakan 'gworkspace_append_sheet_data' atau 'gworkspace_read_sheet' ketika pengguna meminta operasi Google Sheets dan akun Google Workspace sudah terhubung via OAuth token.
 - Gunakan 'gworkspace_write_doc' untuk menyisipkan teks atau artikel langsung ke dokumen Google Docs via REST API latar belakang.
+- Gunakan 'gworkspace_replace_in_doc' untuk mengganti kata, kalimat, atau paragraf di Google Docs (find & replace andal via REST API) ketika pengguna meminta pengeditan artikel.
 `,
 
     async getAuthToken() {
@@ -270,6 +300,59 @@
           success: true,
           message: `Berhasil menuliskan ${textToInsert.length} karakter ke Google Document via REST API.`,
           stateChanged: true
+        };
+      }
+
+      if (toolName === "gworkspace_replace_in_doc") {
+        const documentId = params.documentId;
+        const findText = params.findText;
+        const replaceText = params.replaceText;
+        const matchCase = params.matchCase === true;
+
+        if (!documentId || !findText) {
+          return { success: false, error: "documentId dan findText tidak boleh kosong." };
+        }
+        if (typeof replaceText !== "string") {
+          return { success: false, error: "replaceText wajib berupa teks (boleh kosong untuk menghapus)." };
+        }
+
+        const url = `https://docs.googleapis.com/v1/documents/${encodeURIComponent(documentId)}:batchUpdate`;
+        const requests = [
+          {
+            replaceAllText: {
+              containsText: { text: findText, matchCase },
+              replaceText
+            }
+          }
+        ];
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ requests })
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          return { success: false, error: `Google Docs API Error (${res.status}): ${errText}` };
+        }
+
+        let occurrencesChanged = 0;
+        try {
+          const data = await res.json();
+          occurrencesChanged = data?.replies?.[0]?.replaceAllText?.occurrencesChanged || 0;
+        } catch (_) {}
+
+        return {
+          success: true,
+          occurrencesChanged,
+          message: occurrencesChanged > 0
+            ? `Berhasil mengganti ${occurrencesChanged} kemunculan teks di Google Document via REST API.`
+            : "Tidak ada teks yang cocok ditemukan di dokumen (0 penggantian).",
+          stateChanged: occurrencesChanged > 0
         };
       }
 

@@ -3194,7 +3194,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ═══════════════════════════════════════════════════
   // RISK CLASSIFIER & CONFIRMATION GATE (Phase 7.1)
   // ═══════════════════════════════════════════════════
-  const WRITE_SKILLS = ["gworkspace_append_sheet_data", "gworkspace_update_sheet_data", "gworkspace_write_doc", "autofill_form_batch", "paste_text", "fill_spreadsheet_grid"];
+  const WRITE_SKILLS = ["gworkspace_append_sheet_data", "gworkspace_update_sheet_data", "gworkspace_write_doc", "gworkspace_replace_in_doc", "autofill_form_batch", "paste_text", "fill_spreadsheet_grid"];
   const HIGH_RISK_ACTIONS = new Set(["send_email", "post_social", "post_twitter", "post_x", "tweet", "social_post", "post_threads", "delete_knowledge_source"]);
   const RISKY_TEXT_RE = /(kirim|send|bayar|pay|pembayaran|hapus|delete|post|publish|checkout|order|beli\s|transfer|password|sandi|passwd)/i;
 
@@ -4124,9 +4124,9 @@ ${topCompStr}
       };
     }
 
-    // 2. Format standar: "ganti kata X menjadi Y"
-    const m = text.match(/(?:ganti|ubah|replace)\s+(?:kata|word|text|teks|kalimat|frasa|tulisan)?\s*["'“]([^"'“”]+)["'”]\s*(?:menjadi|jadi|dengan|ke|with|to)\s*["'“]([^"'“”]+)["'”]/i) ||
-              text.match(/(?:ganti|ubah|replace)\s+(?:1\s+kata|kata|word|text|teks|kalimat|frasa|tulisan)\s+([^\s"']+)\s+(?:menjadi|jadi|dengan|ke|with|to)\s+([^\s"']+)/i) ||
+    // 2. Format standar: "ganti kata X menjadi Y" (mendukung kata/kalimat/frasa/paragraf)
+    const m = text.match(/(?:ganti|ubah|replace)\s+(?:kata|word|text|teks|kalimat|frasa|tulisan|paragraf)?\s*["'“]([^"'“”]+)["'”]\s*(?:menjadi|jadi|dengan|ke|with|to)\s*["'“]([^"'“”]+)["'”]/i) ||
+              text.match(/(?:ganti|ubah|replace)\s+(?:1\s+kata|kata|word|text|teks|kalimat|frasa|tulisan|paragraf)\s+([^\s"']+)\s+(?:menjadi|jadi|dengan|ke|with|to)\s+([^\s"']+)/i) ||
               text.match(/(?:ganti|ubah|replace)\s+([^\s"']+)\s+(?:menjadi|jadi|dengan|with)\s+([^\s"']+)\s+(?:di|pada|in)\s+(?:gdocs|docs|google\s+docs|dokumen)/i);
     if (m) {
       return {
@@ -4167,6 +4167,42 @@ ${topCompStr}
     appendLog(`📝 Menjalankan penggantian kata: "${findText}" ➔ "${replaceText}"...`);
 
     try {
+      // 1) Jika ini dokumen Google Docs, utamakan REST API (replaceAllText) — andal
+      //    untuk mengganti kata, kalimat, hingga paragraf tanpa perlu seleksi manual.
+      if (!isDirectSelection && findText && findText !== "(terseleksi)") {
+        try {
+          const tabs = await new Promise(r => chrome.tabs.query({ active: true, currentWindow: true }, r));
+          const docUrl = tabs && tabs[0] ? (tabs[0].url || "") : "";
+          const docIdMatch = docUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+          if (docIdMatch && docIdMatch[1] && globalThis.PesatGWorkspaceMCPSkill) {
+            const apiRes = await globalThis.PesatGWorkspaceMCPSkill.execute("gworkspace_replace_in_doc", {
+              documentId: docIdMatch[1],
+              findText,
+              replaceText,
+              matchCase: false
+            });
+            if (apiRes && apiRes.success && apiRes.occurrencesChanged > 0) {
+              appendLog(`✅ Teks berhasil diganti via Google Docs API → "${replaceText}" (${apiRes.occurrencesChanged} kemunculan).`);
+              const reply = `### ✏️ Penggantian Teks Berhasil (Google Docs API)\n\n` +
+                `- **Teks Cari:** \`${findText}\`\n` +
+                `- **Teks Pengganti:** \`${replaceText}\`\n` +
+                `- **Diganti:** ${apiRes.occurrencesChanged} kemunculan\n` +
+                `- **Status:** Dokumen Google Docs diperbarui langsung via REST API.\n`;
+              addMessageToCurrentSession("assistant", reply, { skipClean: true });
+              return;
+            }
+            if (apiRes && apiRes.success && apiRes.occurrencesChanged === 0) {
+              appendLog(`⚠️ Teks "${findText}" tidak ditemukan di dokumen via API.`, "WARN");
+              addMessageToCurrentSession("assistant", `⚠️ **Tidak dapat mengganti:** teks \`${findText}\` tidak ditemukan di dokumen yang sedang dibuka.`);
+              return;
+            }
+            appendLog(`ℹ️ Google Docs API tidak tersedia (${apiRes?.error || "gagal"}), beralih ke mode DOM.`, "WARN");
+          }
+        } catch (apiErr) {
+          appendLog(`ℹ️ Abaikan jalur API, lanjut DOM: ${apiErr.message}`, "WARN");
+        }
+      }
+
       const res = await sendToContentScript({
         type: "EXECUTE_ACTION",
         actionData: {
