@@ -2052,6 +2052,7 @@ textarea::placeholder {
 		.toggle-switch {
 		  position: relative;
 		  display: inline-block;
+		  flex: 0 0 auto;
 		  width: 44px;
 		  height: 26px;
 		}
@@ -2099,20 +2100,20 @@ textarea::placeholder {
 
 /* Varian kecil untuk model list agar baris tidak wrap / tombol tidak bergeser */
 .toggle-switch.small {
-  width: 34px;
-  height: 18px;
+  width: 38px;
+  height: 20px;
 }
 .toggle-switch.small .toggle-slider {
   border-radius: 20px;
 }
 .toggle-switch.small .toggle-slider:before {
-  height: 14px;
-  width: 14px;
-  left: 1px;
-  bottom: 1px;
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
 }
 .toggle-switch.small input:checked + .toggle-slider:before {
-  transform: translateX(16px);
+  transform: translateX(18px);
 }
 
 		.btn-icon-ghost {
