@@ -67,6 +67,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const settingsSessionOnly = document.getElementById("settingsSessionOnly");
   const settingsAutoPasteDocs = document.getElementById("settingsAutoPasteDocs");
   const settingsEnableInPageToolbar = document.getElementById("settingsEnableInPageToolbar");
+  const settingsAutoSwitchModel = document.getElementById("settingsAutoSwitchModel");
   const btnSettingsTest = document.getElementById("btnSettingsTest");
   const settingsTestResult = document.getElementById("settingsTestResult");
   const btnToggleSettingsKey = document.getElementById("btnToggleSettingsKey");
@@ -177,7 +178,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     modelName: CFG.DEFAULT_MODEL,
     sessionOnly: false,
     googleClientId: "",
-    autoPasteDocs: false
+    autoPasteDocs: false,
+    autoSwitchModel: false
   };
 
   // Context & File Ingestion State (§ 6, 10, 11 PRD)
@@ -2205,6 +2207,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       sessionOnly: !!(sessionKey || local.sessionOnly),
       googleClientId: local.googleClientId || "",
       autoPasteDocs: !!local.autoPasteDocs,
+      autoSwitchModel: !!local.autoSwitchModel,
       enableInPageToolbar: local.enableInPageToolbar !== false,
       maxTokens: local.maxTokens || undefined
     };
@@ -2216,6 +2219,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (settingsSessionOnly) settingsSessionOnly.checked = storedSettings.sessionOnly;
     if (settingsAutoPasteDocs) settingsAutoPasteDocs.checked = storedSettings.autoPasteDocs;
     if (settingsEnableInPageToolbar) settingsEnableInPageToolbar.checked = storedSettings.enableInPageToolbar;
+    if (settingsAutoSwitchModel) settingsAutoSwitchModel.checked = storedSettings.autoSwitchModel;
     if (googleClientIdInput) googleClientIdInput.value = storedSettings.googleClientId;
 
     // Sinkronisasi ke form Wizard
@@ -2250,6 +2254,24 @@ document.addEventListener("DOMContentLoaded", async () => {
       return activeModelId;
     }
     return enabledModels[0]?.id || (storedSettings.modelName && storedSettings.modelName.trim()) || CFG.DEFAULT_MODEL;
+  }
+
+  // Pilih model aktif (enabled) berikutnya untuk auto-switch saat kuota/token habis.
+  // Hanya mempertimbangkan model yang di-enable di Settings; melewati model saat ini.
+  function pickNextEnabledModel(currentId) {
+    const enabled = modelsList.filter(m => m.enabled !== false && m.id);
+    if (enabled.length <= 1) return null;
+    const idx = enabled.findIndex(m => m.id === currentId);
+    if (idx === -1) return enabled[0].id;
+    return enabled[(idx + 1) % enabled.length].id;
+  }
+
+  // Deteksi error kuota/rate-limit yang memicu auto-switch.
+  function isRateLimitError(err) {
+    if (!err) return false;
+    if (err.httpStatus === 429) return true;
+    const msg = String(err.message || "");
+    return /rate limit/i.test(msg) || /HTTP_429/.test(msg) || /\bquota\b/i.test(msg) || /insufficient/i.test(msg) || /too many requests/i.test(msg);
   }
 
   function isConfigured() {
@@ -2521,7 +2543,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         apiKey: rawKey,
         modelName: activeModelId,
         sessionOnly,
-        googleClientId: storedSettings.googleClientId || ""
+        googleClientId: storedSettings.googleClientId || "",
+        autoSwitchModel: !!storedSettings.autoSwitchModel
       };
 
       if (sessionOnly) {
@@ -2577,6 +2600,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const sessionOnly = !!settingsSessionOnly?.checked;
     const autoPasteDocs = !!settingsAutoPasteDocs?.checked;
     const enableInPageToolbar = settingsEnableInPageToolbar ? !!settingsEnableInPageToolbar.checked : true;
+    const autoSwitchModel = settingsAutoSwitchModel ? !!settingsAutoSwitchModel.checked : false;
     const base = (apiUrlInput?.value || "").trim() || CFG.DEFAULT_API_BASE_URL;
     const fmt = apiFormatSelect?.value || CFG.DEFAULT_API_FORMAT;
     const googleId = (googleClientIdInput?.value || "").trim();
@@ -2589,7 +2613,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       sessionOnly,
       googleClientId: googleId,
       autoPasteDocs,
-      enableInPageToolbar
+      enableInPageToolbar,
+      autoSwitchModel
     };
 
     if (sessionOnly) {
@@ -2602,7 +2627,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         sessionOnly: true,
         googleClientId: googleId,
         autoPasteDocs,
-        enableInPageToolbar
+        enableInPageToolbar,
+        autoSwitchModel
       });
       await chrome.storage.local.remove(["apiKey"]);
     } else {
@@ -2615,14 +2641,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         sessionOnly: false,
         googleClientId: googleId,
         autoPasteDocs,
-        enableInPageToolbar
+        enableInPageToolbar,
+        autoSwitchModel
       });
       try { await chrome.storage.session.remove(["apiKey"]); } catch (e) {}
     }
 
     await loadSettings();
     settingsPanel.classList.add("hidden");
-    appendLog("✅ Pengaturan API pesatrouter disimpan.");
+    appendLog("✅ PesatRouter API settings saved.");
   });
 
   const btnOpenShortcuts = document.getElementById("btnOpenShortcuts");
@@ -3037,51 +3064,77 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     activeAbortController = new AbortController();
 
-    try {
-      const res = await PesatAIEngine.callLLMDirect({
-        phase,
-        prompt: promptText,
-        messages: history,
-        taskState: taskSummaryForLLM(),
-        image: image && visionEnabled ? image : null,
-        capabilities: { google: googleConnected, vision: visionEnabled },
-        config: {
-          apiBaseUrl: getApiBaseUrl(),
-          apiKey: getApiKey(),
-          modelName: getModelName(),
-          maxTokens: storedSettings.maxTokens || undefined
-        },
-        signal: activeAbortController.signal,
-        isSummarize: isSummarize,
-        onChunk: onChunk
-      });
+    const doCall = (modelName) => PesatAIEngine.callLLMDirect({
+      phase,
+      prompt: promptText,
+      messages: history,
+      taskState: taskSummaryForLLM(),
+      image: image && visionEnabled ? image : null,
+      capabilities: { google: googleConnected, vision: visionEnabled },
+      config: {
+        apiBaseUrl: getApiBaseUrl(),
+        apiKey: getApiKey(),
+        modelName,
+        maxTokens: storedSettings.maxTokens || undefined
+      },
+      signal: activeAbortController.signal,
+      isSummarize: isSummarize,
+      onChunk: onChunk
+    });
 
-      if (res.visionFallback) {
-        visionEnabled = false;
-        appendLog("👁️ Payload image ditolak engine — mode vision dimatikan untuk sesi ini.", "WARN");
-      }
-
-      if (res.usage) {
-        recordUsage(res.usage);
-      }
-
-      const replyStr = res.reply || "";
-      const resultWrapper = new String(replyStr);
-      resultWrapper.tool_calls = res.tool_calls || null;
-      resultWrapper.message = res.message || null;
-      resultWrapper.reply = replyStr;
-      return resultWrapper;
-    } catch (err) {
-      if (err.name === "AbortError") throw err;
-      // Jaringan/HTTP mentah → pesan ramah (hindari "Failed to fetch" / body JSON mentah).
+    const handleFinalError = (err) => {
       if (err && (err instanceof TypeError || /failed to fetch/i.test(err.message || ""))) {
-        const friendly = globalThis.PesatAIEngine?.describeConnectionFailure?.(err) || "Koneksi ke server gagal. Periksa internet/VPN/proxy Anda lalu coba lagi.";
+        const friendly = globalThis.PesatAIEngine?.describeConnectionFailure?.(err) || "Connection to the server failed. Check your internet/VPN/proxy and try again.";
         appendLog(`AI Error (${phase}): ${friendly}`, "ERROR");
-        throw new Error(friendly);
+        return new Error(friendly);
       }
       appendLog(`AI Error (${phase}): ${err.message}`, "ERROR");
-      throw err;
+      return err;
+    };
+
+    let res;
+    try {
+      res = await doCall(getModelName());
+    } catch (err) {
+      if (err.name === "AbortError") throw err;
+      // Auto-switch ke model enabled berikutnya saat kuota/rate-limit habis (opsional di Settings).
+      const nextModel = (isRateLimitError(err) && storedSettings.autoSwitchModel) ? pickNextEnabledModel(activeModelId) : null;
+      if (nextModel) {
+        const prevModel = activeModelId;
+        appendLog(`🔁 Rate limit/quota on "${prevModel}". Auto-switching to enabled model "${nextModel}".`, "WARN");
+        activeModelId = nextModel;
+        storedSettings.modelName = nextModel;
+        try { await chrome.storage.local.set({ modelName: nextModel }); } catch (_) {}
+        if (composerModelName) composerModelName.textContent = nextModel;
+        if (typeof updateTokenTrackerUI === "function") updateTokenTrackerUI();
+        if (typeof renderAllModelLists === "function") renderAllModelLists();
+        if (typeof showToast === "function") showToast(`Auto-switched to ${nextModel} (quota/rate limit).`, "info", 3500);
+        try {
+          res = await doCall(nextModel);
+        } catch (err2) {
+          if (err2.name === "AbortError") throw err2;
+          throw handleFinalError(err2);
+        }
+      } else {
+        throw handleFinalError(err);
+      }
     }
+
+    if (res.visionFallback) {
+      visionEnabled = false;
+      appendLog("👁️ Image payload rejected by engine — vision mode disabled for this session.", "WARN");
+    }
+
+    if (res.usage) {
+      recordUsage(res.usage);
+    }
+
+    const replyStr = res.reply || "";
+    const resultWrapper = new String(replyStr);
+    resultWrapper.tool_calls = res.tool_calls || null;
+    resultWrapper.message = res.message || null;
+    resultWrapper.reply = replyStr;
+    return resultWrapper;
   }
 
   // ═══════════════════════════════════════════════════
@@ -5443,26 +5496,36 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
       // tool-call tanpa jawaban, minta jawaban langsung sekali lagi.
       {
         const noise = globalThis.PesatToolCallNoise;
-        const friendly = noise ? noise.FRIENDLY_RETRY_MSG : "Maaf, saya belum bisa menyelesaikan perintah ini.";
-        let safe = noise ? noise.sanitizeAssistantReply(aiReply) : aiReply;
-        if (safe === friendly && !shouldStopAgent) {
+        const friendly = noise ? noise.FRIENDLY_RETRY_MSG : "Sorry, I couldn't complete this request. Try Active Tab or a more specific command.";
+        // Anggap sebuah teks "bermakna" bila ada isi substansial dan bukan payload tool/refusal.
+        const isMeaningful = (t) => {
+          const s = String(t || "").trim();
+          if (s.length < 12) return false;
+          if (noise && noise.isToolCallPayloadJson(s)) return false;
+          if (noise && noise.isRefusalReply(s)) return false;
+          return true;
+        };
+        // 1) Bersihkan tool-call mentah; bila jawaban LLM sudah ada, tampilkan apa adanya.
+        const cleanedFirst = noise ? noise.stripToolCallNoise(typeof aiReply === "string" ? aiReply : String(aiReply ?? "")) : aiReply;
+        let safe;
+        if (isMeaningful(cleanedFirst)) {
+          safe = cleanedFirst;
+        } else if (!shouldStopAgent) {
+          // 2) Jawaban kosong/noise → minta jawaban langsung sekali lagi ke LLM murni.
           try {
-            appendLog("ℹ️ Model mengeluarkan tool-call mentah; meminta jawaban langsung sekali lagi...", "WARN");
+            appendLog("ℹ️ Model mengeluarkan respons kosong/tool-call; meminta jawaban langsung sekali lagi...", "WARN");
             const retryRaw = await callLLM(
               "chat",
-              promptPayload + "\n\nPENTING: Jawab LANGSUNG dalam teks biasa (Markdown) berdasarkan konten yang diberikan. JANGAN keluarkan tool call, XML, <function=...>, atau JSON. Tulis hanya jawaban/analisis akhir.",
+              promptPayload + "\n\nIMPORTANT: Answer DIRECTLY in plain text (Markdown) based on the given content. DO NOT output tool calls, XML, <function=...>, or JSON. Write only the final answer/analysis.",
               { image: primaryImage, isSummarize: isSummarize }
             );
-            const retrySafe = noise ? noise.sanitizeAssistantReply(retryRaw) : retryRaw;
-            if (retrySafe && retrySafe !== friendly) {
-              aiReply = retrySafe;
-              safe = retrySafe;
-            } else {
-              safe = "Sorry, the AI service returned an invalid response (a tool-call). Try again or clarify your command.";
-            }
+            const cleanedRetry = noise ? noise.stripToolCallNoise(typeof retryRaw === "string" ? retryRaw : String(retryRaw ?? "")) : retryRaw;
+            safe = isMeaningful(cleanedRetry) ? cleanedRetry : friendly;
           } catch (e) {
-            safe = "Sorry, the AI service returned an invalid response. Try again.";
+            safe = friendly;
           }
+        } else {
+          safe = friendly;
         }
         aiReply = safe;
       }

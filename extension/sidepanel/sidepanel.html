@@ -457,6 +457,17 @@
               <span class="toggle-slider"></span>
             </label>
           </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; border-top:1px solid var(--border-subtle); padding-top:8px;">
+            <div>
+              <div style="font-weight:600; color:var(--text-primary); font-size:14px;">Auto-Switch Model on Token Exhaustion</div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">Automatically switch to another enabled model when the current one runs out of quota</div>
+            </div>
+            <label class="toggle-switch small" title="Toggle Auto-Switch Model">
+              <input type="checkbox" id="settingsAutoSwitchModel" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
         </div>
 
         <div class="usage-stats-card" id="usageStatsCard">
