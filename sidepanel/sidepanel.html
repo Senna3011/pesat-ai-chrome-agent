@@ -468,6 +468,17 @@
               <span class="toggle-slider"></span>
             </label>
           </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; border-top:1px solid var(--border-subtle); padding-top:8px;">
+            <div>
+              <div style="font-weight:600; color:var(--text-primary); font-size:14px;">Live Web Search & Sources</div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">Enable real-time web search (no API key) and attach clickable Sources to answers</div>
+            </div>
+            <label class="toggle-switch small" title="Toggle Live Web Search">
+              <input type="checkbox" id="settingsEnableWebSearch" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
         </div>
 
         <div class="usage-stats-card" id="usageStatsCard">
@@ -1002,6 +1013,7 @@
   <script src="../skills/form-engine.js"></script>
   <script src="../skills/gworkspace-mcp.js"></script>
   <script src="../skills/doc-export.js"></script>
+  <script src="../skills/web-search.js"></script>
   <script src="../skills/skill-registry.js"></script>
   <script src="../memory-engine.js"></script>
   <script src="../ai-engine.js"></script>

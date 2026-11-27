@@ -78,7 +78,13 @@
   }
 
   // Tool contract canonical berada di PesatSkillRegistry; engine hanya mengirim schema OpenAI-compatible.
-  const getAgenticTools = () => globalThis.PesatSkillRegistry?.getAllTools?.() || [];
+  const getAgenticTools = () => {
+    const all = globalThis.PesatSkillRegistry?.getAllTools?.() || [];
+    if (globalThis.__PESAT_ENABLE_WEB_SEARCH__ === false) {
+      return all.filter(t => t?.function?.name !== "web_search");
+    }
+    return all;
+  };
 
   const SYSTEM_AGENTIC_PROMPT = `Kamu adalah Pesat AI Autonomous Crew Agent - Asisten peramban cerdas, teliti, dan mandiri untuk membantu produktivitas tim dan mempermudah pekerjaan manusia di browser.
 

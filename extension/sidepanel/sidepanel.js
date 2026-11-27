@@ -68,6 +68,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const settingsAutoPasteDocs = document.getElementById("settingsAutoPasteDocs");
   const settingsEnableInPageToolbar = document.getElementById("settingsEnableInPageToolbar");
   const settingsAutoSwitchModel = document.getElementById("settingsAutoSwitchModel");
+  const settingsEnableWebSearch = document.getElementById("settingsEnableWebSearch");
   const btnSettingsTest = document.getElementById("btnSettingsTest");
   const settingsTestResult = document.getElementById("settingsTestResult");
   const btnToggleSettingsKey = document.getElementById("btnToggleSettingsKey");
@@ -179,7 +180,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     sessionOnly: false,
     googleClientId: "",
     autoPasteDocs: false,
-    autoSwitchModel: false
+    autoSwitchModel: false,
+    enableWebSearch: true
   };
 
   // Context & File Ingestion State (§ 6, 10, 11 PRD)
@@ -2214,8 +2216,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       autoPasteDocs: !!local.autoPasteDocs,
       autoSwitchModel: !!local.autoSwitchModel,
       enableInPageToolbar: local.enableInPageToolbar !== false,
+      enableWebSearch: local.enableWebSearch !== false,
       maxTokens: local.maxTokens || undefined
     };
+    globalThis.__PESAT_ENABLE_WEB_SEARCH__ = storedSettings.enableWebSearch !== false;
 
     // Sinkronisasi ke form Settings
     if (apiUrlInput) apiUrlInput.value = storedSettings.apiBaseUrl;
@@ -2225,6 +2229,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (settingsAutoPasteDocs) settingsAutoPasteDocs.checked = storedSettings.autoPasteDocs;
     if (settingsEnableInPageToolbar) settingsEnableInPageToolbar.checked = storedSettings.enableInPageToolbar;
     if (settingsAutoSwitchModel) settingsAutoSwitchModel.checked = storedSettings.autoSwitchModel;
+    if (settingsEnableWebSearch) settingsEnableWebSearch.checked = storedSettings.enableWebSearch !== false;
     if (googleClientIdInput) googleClientIdInput.value = storedSettings.googleClientId;
 
     // Sinkronisasi ke form Wizard
@@ -2606,6 +2611,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const autoPasteDocs = !!settingsAutoPasteDocs?.checked;
     const enableInPageToolbar = settingsEnableInPageToolbar ? !!settingsEnableInPageToolbar.checked : true;
     const autoSwitchModel = settingsAutoSwitchModel ? !!settingsAutoSwitchModel.checked : false;
+    const enableWebSearch = settingsEnableWebSearch ? !!settingsEnableWebSearch.checked : (storedSettings.enableWebSearch !== false);
     const base = (apiUrlInput?.value || "").trim() || CFG.DEFAULT_API_BASE_URL;
     const fmt = apiFormatSelect?.value || CFG.DEFAULT_API_FORMAT;
     const googleId = (googleClientIdInput?.value || "").trim();
@@ -2619,8 +2625,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       googleClientId: googleId,
       autoPasteDocs,
       enableInPageToolbar,
-      autoSwitchModel
+      autoSwitchModel,
+      enableWebSearch
     };
+    globalThis.__PESAT_ENABLE_WEB_SEARCH__ = enableWebSearch !== false;
 
     if (sessionOnly) {
       try { await chrome.storage.session.set({ apiKey: rawKey }); } catch (e) {}
@@ -2633,7 +2641,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         googleClientId: googleId,
         autoPasteDocs,
         enableInPageToolbar,
-        autoSwitchModel
+        autoSwitchModel,
+        enableWebSearch
       });
       await chrome.storage.local.remove(["apiKey"]);
     } else {
@@ -2647,7 +2656,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         googleClientId: googleId,
         autoPasteDocs,
         enableInPageToolbar,
-        autoSwitchModel
+        autoSwitchModel,
+        enableWebSearch
       });
       try { await chrome.storage.session.remove(["apiKey"]); } catch (e) {}
     }
@@ -5733,7 +5743,14 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
                   : (isSummarize
                       ? (isSheetsSite ? "### 📊 Ringkasan Lembar Kerja Spreadsheet" : "### 📄 Ringkasan Halaman Web")
                       : "")));
-        const formattedReply = headerTitle ? `${headerTitle}\n\n${aiReply}` : aiReply;
+        let formattedReply = headerTitle ? `${headerTitle}\n\n${aiReply}` : aiReply;
+        if (storedSettings.enableWebSearch !== false && !/##\s*Sources/i.test(formattedReply)) {
+          try {
+            const official = globalThis.PesatSourceResolver?.resolveOfficialSources?.(userPrompt) || [];
+            const sourcesMd = globalThis.PesatSourceResolver?.buildSourcesMarkdown?.(official) || "";
+            if (sourcesMd) formattedReply = `${formattedReply}\n\n${sourcesMd}`;
+          } catch (_) {}
+        }
         addMessageToCurrentSession("assistant", formattedReply, { skipClean: true, artifact });
       }
       appendLog("✅ Jawaban berhasil disajikan.");

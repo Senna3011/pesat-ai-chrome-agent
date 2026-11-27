@@ -107,5 +107,123 @@
     }
   }
 
-  return { resolveSourceUrlFromPrompt };
+  // Registry terkurasi topik -> sumber resmi/berita tepercaya (deterministik).
+  const TOPIC_SOURCES = [
+    {
+      pattern: /\b(ekonomi|economy|global economy|investasi|investment|bank sentral|fed|the fed)\b/i,
+      sources: [
+        { name: "IMF", url: "https://www.imf.org", kind: "official" },
+        { name: "World Bank", url: "https://www.worldbank.org", kind: "official" },
+        { name: "Bank Indonesia", url: "https://www.bi.go.id", kind: "official" },
+        { name: "Reuters Business", url: "https://www.reuters.com/business/", kind: "news" },
+        { name: "Bloomberg", url: "https://www.bloomberg.com", kind: "news" }
+      ]
+    },
+    {
+      pattern: /\b(saham|stock|stocks|pasar modal|capital market|idx|investasi saham)\b/i,
+      sources: [
+        { name: "IDX (Bursa Efek Indonesia)", url: "https://www.idx.co.id", kind: "official" },
+        { name: "Yahoo Finance", url: "https://finance.yahoo.com", kind: "news" },
+        { name: "Investing.com", url: "https://www.investing.com", kind: "news" }
+      ]
+    },
+    {
+      pattern: /\b(kripto|crypto|cryptocurrency|bitcoin|btc|ethereum|eth)\b/i,
+      sources: [
+        { name: "CoinMarketCap", url: "https://coinmarketcap.com", kind: "news" },
+        { name: "CoinGecko", url: "https://www.coingecko.com", kind: "news" },
+        { name: "Bappebti", url: "https://www.bappebti.go.id", kind: "official" }
+      ]
+    },
+    {
+      pattern: /\b(teknologi|technology|ai|artificial intelligence|gadget|smartphone)\b/i,
+      sources: [
+        { name: "The Verge", url: "https://www.theverge.com", kind: "news" },
+        { name: "TechCrunch", url: "https://techcrunch.com", kind: "news" },
+        { name: "Ars Technica", url: "https://arstechnica.com", kind: "news" }
+      ]
+    },
+    {
+      pattern: /\b(kesehatan|health|medis|medical|penyakit|disease|who)\b/i,
+      sources: [
+        { name: "WHO", url: "https://www.who.int", kind: "official" },
+        { name: "Kemenkes RI", url: "https://www.kemkes.go.id", kind: "official" },
+        { name: "CDC", url: "https://www.cdc.gov", kind: "official" }
+      ]
+    },
+    {
+      pattern: /\b(cuaca|weather|iklim|climate|bmkg)\b/i,
+      sources: [
+        { name: "BMKG", url: "https://www.bmkg.go.id", kind: "official" },
+        { name: "Weather.com", url: "https://weather.com", kind: "news" }
+      ]
+    },
+    {
+      pattern: /\b(olahraga|sport|sports|sepak bola|football|basket|nba|premier league)\b/i,
+      sources: [
+        { name: "ESPN", url: "https://www.espn.com", kind: "news" },
+        { name: "Bola.com", url: "https://www.bola.com", kind: "news" },
+        { name: "FIFA", url: "https://www.fifa.com", kind: "official" }
+      ]
+    },
+    {
+      pattern: /\b(politik|politik indonesia|politik global|government|pemerintah|presiden|election|pemilu)\b/i,
+      sources: [
+        { name: "ANTARA News", url: "https://www.antaranews.com", kind: "news" },
+        { name: "Reuters World", url: "https://www.reuters.com/world/", kind: "news" },
+        { name: "Setkab RI", url: "https://setkab.go.id", kind: "official" }
+      ]
+    }
+  ];
+
+  const GENERIC_NEWS_SOURCES = [
+    { name: "Reuters", url: "https://www.reuters.com", kind: "news" },
+    { name: "Associated Press", url: "https://apnews.com", kind: "news" },
+    { name: "BBC News", url: "https://www.bbc.com/news", kind: "news" },
+    { name: "ANTARA News", url: "https://www.antaranews.com", kind: "news" }
+  ];
+
+  // Resolusi sumber resmi/berita terkurasi berdasarkan topik pada prompt.
+  function resolveOfficialSources(prompt = "") {
+    const text = String(prompt || "");
+    const matched = TOPIC_SOURCES.find(t => t.pattern.test(text));
+    const list = matched ? matched.sources.slice() : GENERIC_NEWS_SOURCES.slice();
+    return list.map(s => ({ name: s.name, url: s.url, kind: s.kind }));
+  }
+
+  // Bersihkan URL dari parameter pelacak (utm_*, fbclid, gclid, dsb).
+  function cleanUrl(url = "") {
+    const raw = String(url || "").trim();
+    if (!raw) return "";
+    try {
+      const u = new URL(raw);
+      if (!["http:", "https:"].includes(u.protocol)) return "";
+      const drop = [];
+      for (const key of Array.from(u.searchParams.keys())) {
+        const lower = key.toLowerCase();
+        if (lower.startsWith("utm_") || lower === "fbclid" || lower === "gclid" ||
+            lower === "ref" || lower === "ref_src" || lower === "igshid" ||
+            lower === "mc_cid" || lower === "mc_eid" || lower === "yclid") {
+          drop.push(key);
+        }
+      }
+      drop.forEach(k => u.searchParams.delete(k));
+      u.hash = "";
+      return u.href;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  // Bangun markdown daftar sumber dengan tag [Resmi]/[Live].
+  function buildSourcesMarkdown(list = []) {
+    const items = (Array.isArray(list) ? list : [])
+      .map(s => ({ name: String(s?.name || "").trim(), url: cleanUrl(s?.url), kind: s?.kind === "official" ? "Resmi" : "Live" }))
+      .filter(s => s.name && s.url);
+    if (!items.length) return "";
+    const lines = items.map(s => `- [${s.name}](${s.url}) [${s.kind}]`);
+    return "## Sources\n" + lines.join("\n");
+  }
+
+  return { resolveSourceUrlFromPrompt, resolveOfficialSources, cleanUrl, buildSourcesMarkdown };
 });

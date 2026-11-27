@@ -244,6 +244,7 @@
     if (globalThis.PesatGWorkspaceMCPSkill) SkillRegistry.registerSkill(globalThis.PesatGWorkspaceMCPSkill);
     if (globalThis.PesatDocExportSkill) SkillRegistry.registerSkill(globalThis.PesatDocExportSkill);
     if (globalThis.PesatKnowledgeSkill) SkillRegistry.registerSkill(globalThis.PesatKnowledgeSkill);
+    if (globalThis.PesatWebSearchSkill) SkillRegistry.registerSkill(globalThis.PesatWebSearchSkill);
   }
 
   initAutoRegister();

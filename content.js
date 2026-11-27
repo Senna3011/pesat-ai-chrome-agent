@@ -4674,6 +4674,47 @@ ${tabText}`;
       return true;
     }
 
+    if (request.type === "EXTRACT_WEB_RESULTS" || request.action === "EXTRACT_WEB_RESULTS") {
+      const maxResults = Math.min(Math.max(Number(request.maxResults) || 6, 1), 10);
+      const results = [];
+      const seen = new Set();
+      const decode = (href) => {
+        let h = String(href || "");
+        if (h.startsWith("//")) h = "https:" + h;
+        try {
+          const u = new URL(h, window.location.href);
+          const uddg = u.searchParams.get("uddg");
+          if (uddg) return decodeURIComponent(uddg);
+          return u.href;
+        } catch (_) {
+          return h;
+        }
+      };
+      const push = (title, href, snippet) => {
+        const url = decode(href);
+        const t = String(title || "").trim();
+        if (!t || !/^https?:\/\//i.test(url) || seen.has(url)) return;
+        seen.add(url);
+        results.push({ title: t, url, snippet: String(snippet || "").trim() });
+      };
+      // DuckDuckGo HTML
+      document.querySelectorAll("a.result__a").forEach(a => {
+        const block = a.closest(".result, .web-result") || a.parentElement;
+        const snip = block?.querySelector(".result__snippet")?.textContent || "";
+        push(a.textContent, a.getAttribute("href"), snip);
+      });
+      // Bing
+      if (!results.length) {
+        document.querySelectorAll("li.b_algo").forEach(li => {
+          const a = li.querySelector("h2 a");
+          const snip = li.querySelector(".b_caption p, .b_algo .b_caption")?.textContent || "";
+          if (a) push(a.textContent, a.getAttribute("href"), snip);
+        });
+      }
+      sendResponse({ success: true, results: results.slice(0, maxResults), count: results.length, url: window.location.href });
+      return true;
+    }
+
     if (request.type === "SCAN_DOM") {
       const data = scanInteractiveDOM(request.showOverlay !== false);
       sendResponse({ success: true, data });
