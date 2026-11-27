@@ -2500,8 +2500,10 @@ textarea::placeholder {
 
 		.google-signin-box {
 		  display: flex;
+		  flex-wrap: wrap;
 		  align-items: center;
 		  justify-content: space-between;
+		  gap: 8px;
 		  background: rgba(255, 255, 255, 0.04);
 		  border: 1px solid var(--border-subtle);
 		  border-radius: 10px;
@@ -2513,6 +2515,8 @@ textarea::placeholder {
 		  display: flex;
 		  align-items: center;
 		  gap: 8px;
+		  max-width: 100%;
+		  min-width: 0;
 		  background: rgba(255, 255, 255, 0.08);
 		  border: 1px solid var(--border-strong);
 		  color: var(--text-primary);
@@ -2529,6 +2533,8 @@ textarea::placeholder {
 	}
 
 	.google-status {
+	  margin-left: auto;
+	  white-space: nowrap;
 	  font-size: 14px;
 	  color: var(--text-muted);
 	}

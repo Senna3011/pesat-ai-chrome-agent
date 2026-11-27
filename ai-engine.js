@@ -6,8 +6,8 @@
   function resolveEndpoint(value, path) {
     const baseUrl = String(value || "").trim() || DEFAULT_PESATROUTER;
     let parsed;
-    try { parsed = new URL(baseUrl); } catch (_) { throw new Error("Base URL API tidak valid."); }
-    if (parsed.protocol !== "https:") throw new Error("Base URL API wajib menggunakan HTTPS agar API key tidak bocor.");
+    try { parsed = new URL(baseUrl); } catch (_) { throw new Error("Invalid API Base URL."); }
+    if (parsed.protocol !== "https:") throw new Error("The API Base URL must use HTTPS so the API key is not exposed.");
     const stripped = baseUrl.replace(/\/+$/, "").replace(/\/chat\/completions$/i, "");
     return `${stripped}${path}`;
   }
@@ -31,7 +31,7 @@
       return await fetch(url, { ...options, signal: controller.signal });
     } catch (err) {
       if (err && err.name === "AbortError") {
-        throw Object.assign(new Error(`Waktu koneksi habis (${Math.round(timeoutMs / 1000)} detik tanpa respons). Kemungkinan jaringan memblokir koneksi atau server sedang tidak aktif.`), { name: "TimeoutError" });
+        throw Object.assign(new Error(`Connection timed out (${Math.round(timeoutMs / 1000)} seconds without a response). The network may be blocking the connection or the server is currently down.`), { name: "TimeoutError" });
       }
       throw err;
     } finally {
@@ -41,21 +41,21 @@
 
   function describeHttpError(status, host, model, bodySnippet = "") {
     const detail = bodySnippet ? ` Detail: ${bodySnippet}` : "";
-    if (status === 401 || status === 403) return `API key tidak valid atau tidak punya akses (HTTP ${status}). Periksa ulang key Anda di pesatrouter.com.${detail}`;
-    if (status === 404) return `Endpoint tidak ditemukan (HTTP 404). Pastikan Base URL diakhiri "/v1" — contoh: https://api.pesatrouter.com/v1 — tanpa menambahkan /chat/completions manual.${detail}`;
-    if (status === 429) return `Batas rate limit tercapai (HTTP 429). Tunggu beberapa saat lalu coba lagi.${detail}`;
-    if (status === 400) return `Permintaan ditolak (HTTP 400) — kemungkinan model "${model}" tidak tersedia di endpoint ini.${detail}`;
-    if (status >= 500) return `Server${host ? ` ${host}` : ""} sedang bermasalah (HTTP ${status}). Coba lagi nanti.${detail}`;
-    return `HTTP ${status}:${detail || " respons tidak terduga dari server"}`;
+    if (status === 401 || status === 403) return `Invalid API key or no access (HTTP ${status}). Check your key again at pesatrouter.com.${detail}`;
+    if (status === 404) return `Endpoint not found (HTTP 404). Make sure the Base URL ends with "/v1" — e.g. https://api.pesatrouter.com/v1 — without manually adding /chat/completions.${detail}`;
+    if (status === 429) return `Rate limit reached (HTTP 429). Wait a moment and try again.${detail}`;
+    if (status === 400) return `Request rejected (HTTP 400) — the model "${model}" may not be available at this endpoint.${detail}`;
+    if (status >= 500) return `Server${host ? ` ${host}` : ""} is having issues (HTTP ${status}). Try again later.${detail}`;
+    return `HTTP ${status}:${detail || " unexpected response from the server"}`;
   }
 
   function describeConnectionFailure(err) {
     if (err && err.name === "TimeoutError") return err.message;
     if (err && (err instanceof TypeError || /failed to fetch/i.test(err.message || ""))) {
-      const cause = (err.cause && err.cause.message) ? ` Detail teknis: ${err.cause.message}` : ` Detail teknis: ${err.message}`;
-      return `Koneksi gagal di level jaringan (server tidak merespons sama sekali — API key belum dievaluasi). Periksa: (1) internet aktif, (2) VPN/proxy/antivirus tidak memblokir, (3) Base URL benar. Jika jaringan IPv6 bermasalah, coba nonaktifkan IPv6 atau ganti jaringan, lalu ulangi.${cause}`;
+      const cause = (err.cause && err.cause.message) ? ` Technical detail: ${err.cause.message}` : ` Technical detail: ${err.message}`;
+      return `Network-level connection failed (the server did not respond at all — API key not yet evaluated). Check: (1) internet is active, (2) VPN/proxy/antivirus is not blocking, (3) the Base URL is correct. If your IPv6 network is problematic, try disabling IPv6 or switching networks, then retry.${cause}`;
     }
-    return err.message || "Gagal menghubungi server endpoint";
+    return err.message || "Failed to reach the server endpoint";
   }
 
   const canonicalBackendUrl = () => String(globalThis.PESAT_CONFIG?.CANONICAL_BACKEND_URL || DEFAULT_CF_WORKER).replace(/\/+$/, "");
@@ -144,6 +144,8 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
     getTools() {
       return getAgenticTools();
     },
+    describeHttpError,
+    describeConnectionFailure,
 
     async testConnection(cfg = {}) {
       const apiKey = (cfg.apiKey || "").trim();
@@ -191,7 +193,7 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
           return {
             success: true,
             model: model,
-            message: "Koneksi PesatRouter aktif & terverifikasi"
+            message: "PesatRouter connection active & verified"
           };
         } else {
           const backendToken = await getBackendSessionToken();
@@ -208,7 +210,7 @@ PRINSIP & PROTOKOL INTERAKSI UTAMA:
           return {
             success: true,
             model: "pesat-flash (Free Tier / Cloudflare)",
-            message: "Koneksi Cloudflare Worker siap digunakan"
+            message: "Cloudflare Worker connection ready to use"
           };
         }
       } catch (err) {
@@ -395,8 +397,9 @@ Gunakan hanya tool yang tersedia. Maksimal 10 langkah. Langkah act wajib memilik
           } catch (_) {
             errText = await res.text().catch(() => "");
           }
-          const cleanMsg = errText ? `${res.status} (${errText.slice(0, 160)})` : `${res.status} ${res.statusText}`;
-          throw new Error(`HTTP ${cleanMsg}`);
+          let host = "";
+          try { host = new URL(endpoint).host; } catch (_) {}
+          throw Object.assign(new Error(describeHttpError(res.status, host, model, errText.slice(0, 180))), { httpStatus: res.status });
         }
 
         const data = (typeof res === "object" && res !== null && !(res instanceof Response)) ? res : await res.json();
@@ -446,8 +449,9 @@ Gunakan hanya tool yang tersedia. Maksimal 10 langkah. Langkah act wajib memilik
           } catch (_) {
             errText = await res.text().catch(() => "");
           }
-          const cleanMsg = errText ? `${res.status} (${errText.slice(0, 160)})` : `${res.status} ${res.statusText}`;
-          throw new Error(`HTTP ${cleanMsg}`);
+          let host = "";
+          try { host = new URL(workerEndpoint).host; } catch (_) {}
+          throw Object.assign(new Error(describeHttpError(res.status, host, model, errText.slice(0, 180))), { httpStatus: res.status });
         }
 
         const data = (typeof res === "object" && res !== null && !(res instanceof Response)) ? res : await res.json();

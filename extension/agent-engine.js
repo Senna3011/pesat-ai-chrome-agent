@@ -90,10 +90,10 @@
       schemaVersion: SCHEMA_VERSION
     };
     const errors = [];
-    if (!task.goal) errors.push("goal wajib diisi");
-    if (!MODES.has(task.mode)) errors.push(`mode tidak valid: ${task.mode}`);
-    if (!RISKS.has(task.risk)) errors.push(`risk tidak valid: ${task.risk}`);
-    if (!TASK_STATUSES.has(task.status)) errors.push(`status tidak valid: ${task.status}`);
+    if (!task.goal) errors.push("goal is required");
+    if (!MODES.has(task.mode)) errors.push(`invalid mode: ${task.mode}`);
+    if (!RISKS.has(task.risk)) errors.push(`invalid risk: ${task.risk}`);
+    if (!TASK_STATUSES.has(task.status)) errors.push(`invalid status: ${task.status}`);
     if (errors.length) throw Object.assign(new Error(errors.join("; ")), { code: "INVALID_INPUT", errors });
     return task;
   }
@@ -119,32 +119,32 @@
   function validatePlan(plan, { availableTools = [], maxSteps = 10, taskRisk = "high" } = {}) {
     const rawSteps = Array.isArray(plan) ? plan : plan?.plan;
     const errors = [];
-    if (!Array.isArray(rawSteps) || rawSteps.length === 0) return { valid: false, errors: ["plan harus berisi minimal satu langkah"], plan: [] };
-    if (rawSteps.length > maxSteps) errors.push(`plan melebihi batas ${maxSteps} langkah`);
+    if (!Array.isArray(rawSteps) || rawSteps.length === 0) return { valid: false, errors: ["plan must contain at least one step"], plan: [] };
+    if (rawSteps.length > maxSteps) errors.push(`plan exceeds the limit of ${maxSteps} steps`);
     const steps = rawSteps.slice(0, maxSteps).map(normalizePlanStep);
     const ids = new Set();
     const toolNames = new Set(availableTools.map((tool) => typeof tool === "string" ? tool : tool?.function?.name || tool?.name).filter(Boolean));
     const riskRank = { low: 0, medium: 1, high: 2 };
 
     for (const step of steps) {
-      if (!step.id || ids.has(step.id)) errors.push(`id langkah duplikat/tidak valid: ${step.id}`);
+      if (!step.id || ids.has(step.id)) errors.push(`duplicate/invalid step id: ${step.id}`);
       ids.add(step.id);
-      if (!step.objective) errors.push(`objective kosong pada ${step.id}`);
-      if (!STEP_KINDS.has(step.kind)) errors.push(`kind tidak valid pada ${step.id}`);
-      if (!SIDE_EFFECTS.has(step.sideEffect)) errors.push(`sideEffect tidak valid pada ${step.id}`);
-      if (!RISKS.has(step.risk)) errors.push(`risk tidak valid pada ${step.id}`);
-      if (!STEP_STATUSES.has(step.status)) errors.push(`status tidak valid pada ${step.id}`);
-      if (step.kind === "act" && !step.tool) errors.push(`tool wajib untuk langkah act ${step.id}`);
-      if (step.tool && !toolNames.has(step.tool)) errors.push(`tool tidak tersedia: ${step.tool}`);
-      if ((riskRank[step.risk] ?? 99) > (riskRank[taskRisk] ?? 0)) errors.push(`risk langkah ${step.id} melebihi risk task`);
-      if ((step.kind === "act" || step.kind === "verify") && step.successCriteria.length === 0) errors.push(`successCriteria wajib pada ${step.id}`);
+      if (!step.objective) errors.push(`objective is empty at ${step.id}`);
+      if (!STEP_KINDS.has(step.kind)) errors.push(`invalid kind at ${step.id}`);
+      if (!SIDE_EFFECTS.has(step.sideEffect)) errors.push(`invalid sideEffect at ${step.id}`);
+      if (!RISKS.has(step.risk)) errors.push(`invalid risk at ${step.id}`);
+      if (!STEP_STATUSES.has(step.status)) errors.push(`invalid status at ${step.id}`);
+      if (step.kind === "act" && !step.tool) errors.push(`tool is required for act step ${step.id}`);
+      if (step.tool && !toolNames.has(step.tool)) errors.push(`tool not available: ${step.tool}`);
+      if ((riskRank[step.risk] ?? 99) > (riskRank[taskRisk] ?? 0)) errors.push(`step ${step.id} risk exceeds the task risk`);
+      if ((step.kind === "act" || step.kind === "verify") && step.successCriteria.length === 0) errors.push(`successCriteria is required at ${step.id}`);
     }
 
     const byId = new Map(steps.map((step, index) => [step.id, index]));
     for (const [index, step] of steps.entries()) {
       for (const dependency of step.dependencies) {
-        if (!byId.has(dependency)) errors.push(`dependency tidak ditemukan pada ${step.id}: ${dependency}`);
-        else if (byId.get(dependency) >= index) errors.push(`dependency harus mendahului ${step.id}: ${dependency}`);
+        if (!byId.has(dependency)) errors.push(`dependency not found at ${step.id}: ${dependency}`);
+        else if (byId.get(dependency) >= index) errors.push(`dependency must precede ${step.id}: ${dependency}`);
       }
     }
     return { valid: errors.length === 0, errors, plan: steps };
@@ -152,53 +152,53 @@
 
   function parseStrictJSON(raw, label = "response") {
     if (isObject(raw) || Array.isArray(raw)) return raw;
-    if (typeof raw !== "string") throw Object.assign(new Error(`${label} bukan JSON`), { code: "PARSE_ERROR" });
+    if (typeof raw !== "string") throw Object.assign(new Error(`${label} is not JSON`), { code: "PARSE_ERROR" });
     let text = raw.trim();
     const fenced = text.match(/^```json\s*([\s\S]*?)\s*```$/i);
     if (fenced) text = fenced[1].trim();
     if (!text || (!text.startsWith("{") && !text.startsWith("["))) {
-      throw Object.assign(new Error(`${label} tidak berisi JSON murni`), { code: "PARSE_ERROR" });
+      throw Object.assign(new Error(`${label} does not contain pure JSON`), { code: "PARSE_ERROR" });
     }
     try {
       return JSON.parse(text);
     } catch (error) {
-      throw Object.assign(new Error(`${label} JSON tidak valid: ${error.message}`), { code: "PARSE_ERROR" });
+      throw Object.assign(new Error(`${label} invalid JSON: ${error.message}`), { code: "PARSE_ERROR" });
     }
   }
 
   function validateSchema(value, schema = {}, path = "$") {
     const errors = [];
     if (!schema || Object.keys(schema).length === 0) return errors;
-    if (schema.enum && !schema.enum.some((candidate) => Object.is(candidate, value))) errors.push(`${path} harus salah satu dari enum`);
+    if (schema.enum && !schema.enum.some((candidate) => Object.is(candidate, value))) errors.push(`${path} must be one of the enum values`);
     const type = Array.isArray(value) ? "array" : value === null ? "null" : (Number.isInteger(value) ? "integer" : typeof value);
     const accepted = Array.isArray(schema.type) ? schema.type : (schema.type ? [schema.type] : []);
     if (accepted.length && !accepted.includes(type) && !(type === "integer" && accepted.includes("number"))) {
-      errors.push(`${path} harus bertipe ${accepted.join("|")}`);
+      errors.push(`${path} must be of type ${accepted.join("|")}`);
       return errors;
     }
     if (typeof value === "string") {
-      if (schema.minLength !== undefined && value.length < schema.minLength) errors.push(`${path} terlalu pendek`);
-      if (schema.maxLength !== undefined && value.length > schema.maxLength) errors.push(`${path} terlalu panjang`);
+      if (schema.minLength !== undefined && value.length < schema.minLength) errors.push(`${path} is too short`);
+      if (schema.maxLength !== undefined && value.length > schema.maxLength) errors.push(`${path} is too long`);
       if (schema.pattern) {
-        try { if (!new RegExp(schema.pattern).test(value)) errors.push(`${path} tidak sesuai pattern`); }
-        catch (_) { errors.push(`${path} memiliki schema pattern tidak valid`); }
+        try { if (!new RegExp(schema.pattern).test(value)) errors.push(`${path} does not match the pattern`); }
+        catch (_) { errors.push(`${path} has an invalid schema pattern`); }
       }
     }
     if (typeof value === "number") {
-      if (schema.minimum !== undefined && value < schema.minimum) errors.push(`${path} di bawah minimum`);
-      if (schema.maximum !== undefined && value > schema.maximum) errors.push(`${path} di atas maximum`);
+      if (schema.minimum !== undefined && value < schema.minimum) errors.push(`${path} is below the minimum`);
+      if (schema.maximum !== undefined && value > schema.maximum) errors.push(`${path} is above the maximum`);
     }
     if (Array.isArray(value)) {
-      if (schema.minItems !== undefined && value.length < schema.minItems) errors.push(`${path} kekurangan item`);
-      if (schema.maxItems !== undefined && value.length > schema.maxItems) errors.push(`${path} kelebihan item`);
+      if (schema.minItems !== undefined && value.length < schema.minItems) errors.push(`${path} has too few items`);
+      if (schema.maxItems !== undefined && value.length > schema.maxItems) errors.push(`${path} has too many items`);
       value.forEach((item, index) => errors.push(...validateSchema(item, schema.items || {}, `${path}[${index}]`)));
     }
     if (isObject(value)) {
       const properties = schema.properties || {};
-      for (const required of schema.required || []) if (!hasOwn(value, required)) errors.push(`${path}.${required} wajib diisi`);
+      for (const required of schema.required || []) if (!hasOwn(value, required)) errors.push(`${path}.${required} is required`);
       for (const [key, item] of Object.entries(value)) {
         if (properties[key]) errors.push(...validateSchema(item, properties[key], `${path}.${key}`));
-        else if (schema.additionalProperties === false) errors.push(`${path}.${key} tidak diizinkan`);
+        else if (schema.additionalProperties === false) errors.push(`${path}.${key} is not allowed`);
       }
     }
     return errors;

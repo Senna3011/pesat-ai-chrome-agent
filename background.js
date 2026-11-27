@@ -389,7 +389,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       try {
         const url = String(request.url || "");
         if (!/^https:\/\/docs\.google\.com\/document\/d\/[A-Za-z0-9_-]+\/export\?/i.test(url)) {
-          sendResponse({ ok: false, text: "", error: "URL export Google Docs tidak valid." });
+          sendResponse({ ok: false, text: "", error: "Invalid Google Docs export URL." });
           return;
         }
         const controller = new AbortController();
@@ -723,7 +723,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: true });
       });
     } else {
-      sendResponse({ success: false, error: "tabId tidak valid." });
+      sendResponse({ success: false, error: "Invalid tabId." });
     }
     return true;
   }
@@ -799,7 +799,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
         const base = String(request.backendBaseUrl || "").replace(/\/+$/, "");
         if (!base.startsWith("https://")) {
-          sendResponse({ success: false, errorType: "INVALID_INPUT", error: "Canonical backend HTTPS belum dikonfigurasi." });
+          sendResponse({ success: false, errorType: "INVALID_INPUT", error: "Canonical backend HTTPS is not configured." });
           return;
         }
         const response = await fetch(`${base}/api/auth/google`, {
@@ -887,7 +887,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           }
           try {
             const urlObj = new URL(responseUrl);
-            if (urlObj.searchParams.get("state") !== state) throw new Error("OAuth state tidak valid.");
+            if (urlObj.searchParams.get("state") !== state) throw new Error("Invalid OAuth state.");
             const code = urlObj.searchParams.get("code");
             if (!code) throw new Error(urlObj.searchParams.get("error_description") || "Authorization code Google tidak tersedia.");
             const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -1044,7 +1044,7 @@ ATURAN KETAT:
       try {
         let rawUrl = (request.url || request.value || "").trim();
         if (!rawUrl || rawUrl === "undefined" || rawUrl === "null") {
-          sendResponse({ success: false, error: "URL tujuan navigasi kosong atau tidak valid." });
+          sendResponse({ success: false, error: "Navigation target URL is empty or invalid." });
           return;
         }
 
@@ -1142,12 +1142,13 @@ ATURAN KETAT:
             activeTab = tab;
           }
         } catch (_) {
-          // Tab target spesifik mungkin telah ditutup
+          // Tab target spesifik mungkin telah ditutup — fallback ke tab aktif.
+          console.warn(`[Pesat] Tab target ${explicitTabId} tidak tersedia, fallback ke tab aktif.`);
         }
       }
 
       if (!activeTab) {
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
         if (tabs && tabs.length > 0 && tabs[0].id) {
           activeTab = tabs[0];
         }

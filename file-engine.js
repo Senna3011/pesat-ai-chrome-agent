@@ -1,6 +1,11 @@
 // file-engine.js - File Processing Engine for Prompt Attachments
 (() => {
   const PesatFileEngine = {
+    ALLOWED_EXTS: new Set([
+      "txt", "md", "json", "js", "ts", "html", "css", "py", "sql", "xml",
+      "csv", "xlsx", "xls", "pdf", "docx", "doc", "pptx", "ppt",
+      "png", "jpg", "jpeg", "webp", "gif"
+    ]),
     async processLocalFile(file) {
       if (!file) throw new Error("File tidak ditemukan");
 
@@ -11,6 +16,11 @@
 
       if (size > 10 * 1024 * 1024) {
         throw new Error(`File ${name} melebihi batas 10MB.`);
+      }
+
+      // Batasi format: hanya ekstensi teks/dokumen/gambar yang diizinkan.
+      if (!this.ALLOWED_EXTS.has(ext) && !type.startsWith("text/") && !type.startsWith("image/")) {
+        throw new Error(`Format file "${name}" tidak didukung. Gunakan PDF, DOCX, TXT, MD, CSV, XLSX, atau gambar.`);
       }
 
       if (

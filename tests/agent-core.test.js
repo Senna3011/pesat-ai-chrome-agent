@@ -24,7 +24,7 @@ test('plan validation enforces ordering, tools, criteria, and budget', () => {
     { id: 'later', objective: 'Nanti', kind: 'analyze' }
   ] }, { availableTools: [], maxSteps: 2, taskRisk: 'low' });
   assert.equal(invalid.valid, false);
-  assert.match(invalid.errors.join(' '), /tool tidak tersedia|dependency harus mendahului|successCriteria|risk/);
+  assert.match(invalid.errors.join(' '), /tool not available|dependency must precede|successCriteria|risk/);
 });
 
 test('strict parser fails closed', () => {
@@ -47,7 +47,7 @@ test('JSON schema subset validates nested objects and rejects extras', () => {
   assert.equal(Agent.validateToolArguments({ fields: [{ identifier: 'email', value: 'a@b.co' }] }, schema).valid, true);
   const invalid = Agent.validateToolArguments({ fields: [{ identifier: '', value: 'x', leaked: true }] }, schema);
   assert.equal(invalid.valid, false);
-  assert.match(invalid.errors.join(' '), /terlalu pendek|tidak diizinkan/);
+  assert.match(invalid.errors.join(' '), /too short|not allowed/);
 });
 
 test('registry metadata validates and redacts native tool input', () => {

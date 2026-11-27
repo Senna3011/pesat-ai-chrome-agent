@@ -8,8 +8,8 @@
     AGENT_SCHEMA_VERSION: 1,
     MAX_PLAN_STEPS: 10,
     DEFAULT_MODELS: [
-      { id: "pesat-flash", name: "Pesat Flash (Cepat & Cerdas)", context: "1M", enabled: true, provider: "pesat", badge: "Fast" },
-      { id: "pesat-pro", name: "Pesat Pro (Penalaran Mendalam)", context: "128K", enabled: true, provider: "pesat", badge: "Smart" },
+      { id: "pesat-flash", name: "Pesat Flash (Fast & Smart)", context: "1M", enabled: true, provider: "pesat", badge: "Fast" },
+      { id: "pesat-pro", name: "Pesat Pro (Deep Reasoning)", context: "128K", enabled: true, provider: "pesat", badge: "Smart" },
       { id: "gpt-4o", name: "GPT-4o (OpenAI Flagship)", context: "128K", enabled: true, provider: "openai", badge: "BYOK" },
       { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash (Google)", context: "1M", enabled: true, provider: "google", badge: "BYOK" },
       { id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet (Anthropic)", context: "200K", enabled: true, provider: "anthropic", badge: "BYOK" },

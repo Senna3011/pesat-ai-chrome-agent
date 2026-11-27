@@ -53,7 +53,7 @@ test('401 di /models → pesan key tanpa menyentuh endpoint chat', async () => {
   }, async () => {
     const res = await PesatAIEngine.testConnection(cfg());
     assert.equal(res.success, false);
-    assert.match(res.error, /API key tidak valid/);
+    assert.match(res.error, /Invalid API key/);
     assert.match(res.error, /Key not found or revoked/);
   });
 });
@@ -65,7 +65,7 @@ test('404 di chat (endpoint salah) → panduan Base URL /v1', async () => {
   }, async () => {
     const res = await PesatAIEngine.testConnection(cfg());
     assert.equal(res.success, false);
-    assert.match(res.error, /Endpoint tidak ditemukan/);
+    assert.match(res.error, /Endpoint not found/);
     assert.match(res.error, /\/v1/);
   });
 });
@@ -77,7 +77,7 @@ test('429 → pesan rate limit', async () => {
   }, async () => {
     const res = await PesatAIEngine.testConnection(cfg());
     assert.equal(res.success, false);
-    assert.match(res.error, /rate limit/);
+    assert.match(res.error, /rate limit/i);
   });
 });
 
@@ -88,7 +88,7 @@ test('500 → pesan server bermasalah', async () => {
   }, async () => {
     const res = await PesatAIEngine.testConnection(cfg());
     assert.equal(res.success, false);
-    assert.match(res.error, /sedang bermasalah/);
+    assert.match(res.error, /having issues/);
   });
 });
 
@@ -99,7 +99,7 @@ test('400 → pesan model tidak tersedia', async () => {
   }, async () => {
     const res = await PesatAIEngine.testConnection(cfg());
     assert.equal(res.success, false);
-    assert.match(res.error, /tidak tersedia di endpoint ini/);
+    assert.match(res.error, /may not be available at this endpoint/);
   });
 });
 
@@ -111,7 +111,7 @@ test('gagal jaringan (TypeError "Failed to fetch") → pesan panduan jaringan, b
   }, async () => {
     const res = await PesatAIEngine.testConnection(cfg());
     assert.equal(res.success, false);
-    assert.match(res.error, /level jaringan/);
+    assert.match(res.error, /Network-level/);
     assert.match(res.error, /IPv6|VPN/);
     assert.ok(!/^Failed to fetch$/i.test(res.error), 'tidak boleh hanya "Failed to fetch"');
   });
@@ -130,8 +130,8 @@ test('timeout → pesan habis waktu dengan durasi', async () => {
   }, async () => {
     const res = await PesatAIEngine.testConnection(cfg());
     assert.equal(res.success, false);
-    assert.match(res.error, /Waktu koneksi habis/);
-    assert.match(res.error, /detik/);
+    assert.match(res.error, /timed out/);
+    assert.match(res.error, /seconds/);
   });
 });
 
@@ -139,7 +139,7 @@ test('URL Base URL tidak valid → error validasi dari resolver', async () => {
   await withFetch(async () => new Response('{}', { status: 200 }), async () => {
     const res = await PesatAIEngine.testConnection(cfg({ apiBaseUrl: 'bukan-url' }));
     assert.equal(res.success, false);
-    assert.match(res.error, /tidak valid/);
+    assert.match(res.error, /Invalid/);
   });
 });
 

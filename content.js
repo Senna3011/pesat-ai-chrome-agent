@@ -2534,7 +2534,7 @@ ${tabText}`;
         window.location.href = targetUrl;
         return { success: true, message: `Membuka URL: ${targetUrl}`, stateChanged: true };
       }
-      return { success: false, error: "URL tidak valid. Format wajib: https://", errorType: "NAVIGATION_FAILED" };
+      return { success: false, error: "Invalid URL. Required format: https://", errorType: "NAVIGATION_FAILED" };
     }
 
     if (action === "wait") {
@@ -2548,7 +2548,7 @@ ${tabText}`;
       const x = Number(actionData.x ?? (typeof actionData.coords === "object" ? actionData.coords?.x : NaN));
       const y = Number(actionData.y ?? (typeof actionData.coords === "object" ? actionData.coords?.y : NaN));
       if (!Number.isFinite(x) || !Number.isFinite(y)) {
-        return { success: false, error: "Koordinat x/y tidak valid untuk click_coords.", errorType: "TOOL_INVALID_ARGUMENT" };
+        return { success: false, error: "Invalid x/y coordinates for click_coords.", errorType: "TOOL_INVALID_ARGUMENT" };
       }
       const elAtPoint = document.elementFromPoint(x, y);
       if (!elAtPoint) {
@@ -2569,7 +2569,7 @@ ${tabText}`;
     if (action === "key_combo") {
       const parsed = parseKeyCombo(actionData.keys || actionData.key || value || "");
       if (!parsed) {
-        return { success: false, error: `Format key_combo tidak valid: "${actionData.keys || value}"`, errorType: "TOOL_INVALID_ARGUMENT" };
+        return { success: false, error: `Invalid key_combo format: "${actionData.keys || value}"`, errorType: "TOOL_INVALID_ARGUMENT" };
       }
       let target = null;
       if (actionData.elementId) {
@@ -5016,7 +5016,7 @@ ${tabText}`;
         </div>
       </div>
       <div class="pesat-popover-body">
-        <div class="pesat-popover-loading">Sedang memproses dengan Pesat AI...</div>
+        <div class="pesat-popover-loading">Processing with Pesat AI...</div>
       </div>
     `;
 

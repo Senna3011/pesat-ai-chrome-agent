@@ -278,32 +278,56 @@ document.addEventListener("DOMContentLoaded", async () => {
     s = s.replace(/^\s*#\s+(.*$)/gim, "<h1>$1</h1>");
     s = s.replace(/(?:^|\s)#{1,6}\s+/g, " ");
 
-    // 3.5 Renumber sequential ordered list items cleanly
-    const rawLines = s.split("\n");
-    let currentOlNum = 0;
-    for (let i = 0; i < rawLines.length; i++) {
-      const match = rawLines[i].match(/^(\s*)\d+[\.\)]\s+(.*)/);
-      if (match) {
-        currentOlNum++;
-        rawLines[i] = `${match[1]}${currentOlNum}. ${match[2]}`;
-      } else if (rawLines[i].trim().startsWith("<h") || rawLines[i].trim().startsWith("#")) {
-        currentOlNum = 0;
-      }
-    }
-    s = rawLines.join("\n");
-
     // 3.8 Blockquotes
     s = s.replace(/^\s*>\s*(.*$)/gim, "<blockquote>$1</blockquote>");
     s = s.replace(/<\/blockquote>\s*<blockquote>/g, "<br>");
 
-    // 4. Unordered & Ordered lists
-    s = s.replace(/^\s*[\*\-]\s+(.*$)/gim, "<li>$1</li>");
-    s = s.replace(/(<li>.*<\/li>)/gim, "<ul>$1</ul>");
-    s = s.replace(/<\/ul>\s*<ul>/g, "");
-
-    s = s.replace(/^\s*(\d+)[\.\)]\s+(.*$)/gim, '<ol start="$1"><oli>$2</oli></ol>');
-    s = s.replace(/<\/ol>\s*<ol[^>]*>/g, "");
-    s = s.replace(/<oli>/g, "<li>").replace(/<\/oli>/g, "</li>");
+    // 4. Unordered & Ordered lists — parser berbasis baris (robust untuk list campur & loose list)
+    s = (function parseLists(src) {
+      const lines = src.split("\n");
+      const out = [];
+      let listType = null; // "ul" | "ol"
+      const closeList = () => {
+        if (listType) {
+          out.push(listType === "ul" ? "</ul>" : "</ol>");
+          listType = null;
+        }
+      };
+      const isUlLine = (l) => /^\s*[-*]\s+/.test(l);
+      const isOlLine = (l) => /^\s*\d+[.)]\s+/.test(l);
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const ulMatch = line.match(/^\s*[-*]\s+(.*)$/);
+        const olMatch = line.match(/^\s*(\d+)[.)]\s+(.*)$/);
+        if (ulMatch) {
+          if (listType !== "ul") { closeList(); out.push("<ul>"); listType = "ul"; }
+          out.push(`<li>${ulMatch[1]}</li>`);
+        } else if (olMatch) {
+          if (listType !== "ol") {
+            closeList();
+            const startNum = parseInt(olMatch[1], 10) || 1;
+            out.push(`<ol start="${startNum}">`);
+            listType = "ol";
+          }
+          out.push(`<li>${olMatch[2]}</li>`);
+        } else if (line.trim() === "") {
+          // Loose list: pertahankan list bila baris kosong diikuti item sejenis.
+          let j = i + 1;
+          while (j < lines.length && lines[j].trim() === "") j++;
+          const next = lines[j] || "";
+          if ((listType === "ul" && isUlLine(next)) || (listType === "ol" && isOlLine(next))) {
+            continue;
+          }
+          closeList();
+          out.push(line);
+        } else {
+          closeList();
+          out.push(line);
+        }
+      }
+      closeList();
+      return out.join("\n");
+    })(s);
 
     // 5. Bold & Italic
     s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
@@ -606,6 +630,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     await saveSessions();
     renderCurrentSession();
+    if (typeof showToast === "function") showToast("Sesi chat berhasil dihapus.", "success", 2000);
   }
 
   // ═══════════════════════════════════════════════════
@@ -1508,12 +1533,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 <span class="doc-badge-icon social-badge">📱</span>
                 <div class="doc-card-meta">
                   <div class="doc-card-title">${escapeHtml(postTitle)}</div>
-                  <div class="doc-card-subtitle">Format Thread Twitter/X & Medsos • ${wordCount} kata</div>
+                  <div class="doc-card-subtitle">Twitter/X & Social Thread Format • ${wordCount} words</div>
                 </div>
               </div>
               <div class="doc-card-actions">
-                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi thread"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="12" rx="1.6" fill="#0F172A"/><rect x="10.5" y="6.5" width="5.2" height="1.1" rx="0.55" fill="#fff"/><rect x="10.5" y="9" width="5.2" height="1.1" rx="0.55" fill="#fff"/><rect x="10.5" y="11.5" width="3.4" height="1.1" rx="0.55" fill="#fff"/></svg>Salin Thread</button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Tempel langsung ke kotak postingan X / medsos aktif"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="#0F172A"/><path d="M7.2 7.2l9.6 9.6M16.8 7.2l-9.6 9.6" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></svg>Tempel ke X / Medsos</button>
+                <button class="doc-action-btn" data-artifact-act="copy" title="Copy the entire thread"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="12" rx="1.6" fill="#0F172A"/><rect x="10.5" y="6.5" width="5.2" height="1.1" rx="0.55" fill="#fff"/><rect x="10.5" y="9" width="5.2" height="1.1" rx="0.55" fill="#fff"/><rect x="10.5" y="11.5" width="3.4" height="1.1" rx="0.55" fill="#fff"/></svg>Copy Thread</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Insert directly into the active X / social post box"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="#0F172A"/><path d="M7.2 7.2l9.6 9.6M16.8 7.2l-9.6 9.6" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></svg>Insert to X / Social</button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -1536,16 +1561,16 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </span>
                 <div class="doc-card-meta">
                   <div class="doc-card-title">${escapeHtml(tableTitle)}</div>
-                  <div class="doc-card-subtitle">Format Spreadsheet Excel (.XLS) & Tabel Data (.CSV)</div>
+                  <div class="doc-card-subtitle">Excel Spreadsheet (.XLS) & Data Table (.CSV) Format</div>
                 </div>
               </div>
               <div class="doc-card-actions">
-                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh penjelasan dan teks jawaban biasa"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Salin Teks</button>
-                <button class="doc-action-btn" data-artifact-act="copy_tsv" title="Salin data tabel dalam format baris & kolom untuk Spreadsheet / Excel"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Salin Data Sheet</button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_excel" title="Unduh spreadsheet Excel dengan format tabel visual rapi"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#217346" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#33C481" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Unduh Excel (.xls)</button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_csv" title="Unduh file tabel dalam format data murni .CSV"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>.CSV</button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Sheets baru di tab terpisah dan tempelkan rapi"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Tempel ke Sheet (Tab Baru)</button>
-                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Isikan langsung ke lembar kerja spreadsheet aktif saat ini"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Di Sheet Ini</button>
+                <button class="doc-action-btn" data-artifact-act="copy" title="Copy the full explanation and answer text"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Copy Text</button>
+                <button class="doc-action-btn" data-artifact-act="copy_tsv" title="Copy table data in row & column format for Spreadsheet / Excel"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Copy Sheet Data</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_excel" title="Download Excel spreadsheet with clean visual table format"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#217346" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#33C481" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Download Excel (.xls)</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_csv" title="Download table file in raw data .CSV format"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>.CSV</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Open a new Google Sheets in a separate tab and paste neatly"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>Insert to Sheet (New Tab)</button>
+                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Fill directly into the current active spreadsheet"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A8DAB5" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8.5 10.5h7v1.6h-7zm0 3.2h7v1.6h-7zm0 3.2h4.5v1.6H8.5z"/></svg>In This Sheet</button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -1568,14 +1593,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </span>
                 <div class="doc-card-meta">
                   <div class="doc-card-title">${escapeHtml(docTitle)}</div>
-                  <div class="doc-card-subtitle">Format Dokumen Word (.docx) & Docs • ${wordCount} kata</div>
+                  <div class="doc-card-subtitle">Word Document (.docx) & Docs Format • ${wordCount} words</div>
                 </div>
               </div>
               <div class="doc-card-actions">
-                <button class="doc-action-btn" data-artifact-act="copy" title="Salin seluruh isi artikel"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A1C2FA" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8 11.5h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>Salin Teks</button>
-                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Unduh file dokumen resmi Microsoft Word .docx"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#2B579A" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#41A5EE" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8 11.5h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>Unduh Word (.docx)</button>
-                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Buka Google Docs baru di tab terpisah dan tempelkan rapi"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A1C2FA" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8 11.5h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>Tempel ke Docs (Tab Baru)</button>
-                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Tempelkan langsung di posisi kursor dokumen aktif saat ini"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A1C2FA" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8 11.5h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>Di Kursor Ini</button>
+                <button class="doc-action-btn" data-artifact-act="copy" title="Copy the entire article content"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A1C2FA" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8 11.5h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>Copy Text</button>
+                <button class="doc-action-btn btn-doc-download" data-artifact-act="download_doc" title="Download the official Microsoft Word .docx file"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#2B579A" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#41A5EE" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8 11.5h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>Download Word (.docx)</button>
+                <button class="doc-action-btn btn-doc-paste" data-artifact-act="paste" title="Open a new Google Docs in a separate tab and paste neatly"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A1C2FA" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8 11.5h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>Insert to Docs (New Tab)</button>
+                <button class="doc-action-btn btn-doc-paste-current" data-artifact-act="paste_current" title="Insert directly at the cursor position of the current active document"><svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path fill="#A1C2FA" d="M14 2v4a2 2 0 0 0 2 2h4z"/><path fill="#fff" d="M8 11.5h8v1.6H8zm0 3.2h8v1.6H8zm0 3.2h5v1.6H8z"/></svg>At This Cursor</button>
               </div>
             </div>
             <div class="doc-card-preview-sheet markdown-body">
@@ -1601,13 +1626,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         </div>
       ` : (!msg.artifact && !msg.askUser && !msg.confirmation && msgText.trim() ? `
         <div class="assistant-msg-actions">
-          <button class="assistant-action-btn btn-copy-response" title="Salin seluruh jawaban AI">
+          <button class="assistant-action-btn btn-copy-response" title="Copy the entire AI answer">
             <svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="12" rx="1.6" fill="#0F172A"/><rect x="10.5" y="6.5" width="5.2" height="1.1" rx="0.55" fill="#fff"/><rect x="10.5" y="9" width="5.2" height="1.1" rx="0.55" fill="#fff"/><rect x="10.5" y="11.5" width="3.4" height="1.1" rx="0.55" fill="#fff"/><rect x="4" y="7" width="8" height="14" rx="1.8" fill="#475569" opacity="0.35"/></svg>
-            <span class="btn-copy-text">Salin</span>
+            <span class="btn-copy-text">Copy</span>
           </button>
-          <button class="assistant-action-btn btn-paste-response" title="Tempelkan langsung ke kolom input/editor di tab aktif">
+          <button class="assistant-action-btn btn-paste-response" title="Insert directly into the input/editor field of the active tab">
             <svg class="btn-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5" fill="#0F172A"/><path d="M12 8.5v7M8.5 12h7" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
-            <span class="btn-paste-text">Tempel ke Tab</span>
+            <span class="btn-paste-text">Insert to Tab</span>
           </button>
         </div>
       ` : '')}
@@ -1621,10 +1646,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           await navigator.clipboard.writeText(msgText);
           const textEl = btnCopy.querySelector(".btn-copy-text") || btnCopy;
           const orig = textEl.textContent;
-          textEl.textContent = "✓ Tersalin!";
+          textEl.textContent = "✓ Copied!";
           setTimeout(() => { textEl.textContent = orig; }, 1800);
         } catch (e) {
-          appendLog(`Gagal menyalin teks: ${e.message}`, "WARN");
+          appendLog(`Failed to copy text: ${e.message}`, "WARN");
         }
       });
     }
@@ -1634,22 +1659,22 @@ document.addEventListener("DOMContentLoaded", async () => {
       btnPaste.addEventListener("click", async () => {
         try {
           const textEl = btnPaste.querySelector(".btn-paste-text") || btnPaste;
-          textEl.textContent = "⏳ Menempelkan...";
+          textEl.textContent = "⏳ Inserting...";
           const res = await sendToContentScript({
             type: "EXECUTE_ACTION",
             actionData: { action: "paste_text", value: msgText }
           }, 15000);
           if (res && res.success === false) {
-            throw new Error(res.error || "Gagal menempelkan teks ke tab aktif");
+            throw new Error(res.error || "Failed to insert text into the active tab");
           }
-          textEl.textContent = "✓ Tertempel!";
-          appendLog("⤴️ Teks jawaban AI berhasil ditempelkan ke tab aktif.");
-          setTimeout(() => { textEl.textContent = "Tempel ke Tab"; }, 1800);
+          textEl.textContent = "✓ Inserted!";
+          appendLog("⤴️ AI answer text inserted into the active tab.");
+          setTimeout(() => { textEl.textContent = "Insert to Tab"; }, 1800);
         } catch (err) {
-          appendLog(`Gagal menempelkan teks: ${err.message}`, "WARN");
+          appendLog(`Failed to insert text: ${err.message}`, "WARN");
           const textEl = btnPaste.querySelector(".btn-paste-text") || btnPaste;
-          textEl.textContent = "⚠️ Gagal";
-          setTimeout(() => { textEl.textContent = "Tempel ke Tab"; }, 1800);
+          textEl.textContent = "⚠️ Failed";
+          setTimeout(() => { textEl.textContent = "Insert to Tab"; }, 1800);
         }
       });
     }
@@ -1698,6 +1723,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!btn) return;
         if (!btn._pesatOrig) btn._pesatOrig = Array.from(btn.childNodes);
         btn.textContent = text;
+        // Selalu jadwalkan pemulihan agar tombol tidak macet pada label sementara.
+        clearTimeout(btn._pesatTimer);
+        btn._pesatTimer = setTimeout(() => {
+          const orig = btn._pesatOrig;
+          btn.textContent = "";
+          if (orig) orig.forEach(n => btn.appendChild(n));
+          btn._pesatOrig = null;
+        }, 4000);
       }
       function flashBtnSuccess(btn, text, ms = 1800) {
         if (!btn) return;
@@ -1719,8 +1752,8 @@ document.addEventListener("DOMContentLoaded", async () => {
           try {
             if (act === "copy") {
               await navigator.clipboard.writeText(contentStr);
-              appendLog(`📋 Teks "${a.name}" disalin ke clipboard.`);
-              flashBtnSuccess(btn, "✓ Teks Tersalin!", 1800);
+              appendLog(`📋 Text "${a.name}" copied to clipboard.`);
+              flashBtnSuccess(btn, "✓ Text Copied!", 1800);
             } else if (act === "copy_tsv") {
               let copyPayload = contentStr;
               const tableRows = typeof parseMarkdownTable === "function" ? parseMarkdownTable(contentStr) : null;
@@ -1728,24 +1761,24 @@ document.addEventListener("DOMContentLoaded", async () => {
                 copyPayload = tableRows.map(r => r.join("\t")).join("\r\n");
               }
               await navigator.clipboard.writeText(copyPayload);
-              appendLog(`📊 Data sheet "${a.name}" disalin ke clipboard (format TSV/Excel).`);
-              flashBtnSuccess(btn, "✓ Data Sheet Tersalin!", 1800);
+              appendLog(`📊 Sheet data "${a.name}" copied to clipboard (TSV/Excel format).`);
+              flashBtnSuccess(btn, "✓ Sheet Data Copied!", 1800);
             } else if (act === "download_excel") {
               const xlsName = (a.name || "Tabel-Riset-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "").replace(/\.csv$/, "") + ".xls";
               const xlsContent = generateExcelSpreadsheetHtml(contentStr, xlsName.replace(/\.xls$/, ""));
               await downloadArtifactFile(xlsName, xlsContent, "application/vnd.ms-excel;charset=utf-8");
-              flashBtnSuccess(btn, "✓ Terunduh (.xls)!", 1800);
+              flashBtnSuccess(btn, "✓ Downloaded (.xls)!", 1800);
             } else if (act === "download_csv") {
               const csvName = (a.name || "Tabel-Riset-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "").replace(/\.xls$/, "") + ".csv";
               const csvContent = generateCsvFromMarkdownTable(contentStr);
               await downloadArtifactFile(csvName, "\uFEFF" + csvContent, "text/csv;charset=utf-8");
-              flashBtnSuccess(btn, "✓ Terunduh (.csv)!", 1800);
+              flashBtnSuccess(btn, "✓ Downloaded (.csv)!", 1800);
             } else if (act === "download_doc" || act === "download") {
-              flashBtnLabel(btn, "⏳ Mengunduh...");
+              flashBtnLabel(btn, "⏳ Downloading...");
               const docxName = (a.name || "Dokumen-Pesat-AI").replace(/\.md$/, "").replace(/\.doc$/, "").replace(/\.docx$/, "") + ".docx";
               const docxBytes = generateWordDocx(contentStr, docxName.replace(/\.docx$/, ""));
               const ok = await downloadArtifactFile(docxName, docxBytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-              flashBtnSuccess(btn, ok ? "✓ Terunduh (.docx)!" : "✓ Terunduh!", 2000);
+              flashBtnSuccess(btn, ok ? "✓ Downloaded (.docx)!" : "✓ Downloaded!", 2000);
             } else if (act === "paste" || act === "paste_current") {
               const isSocialArt = a.artifactType === "social" || (a.name && (a.name.startsWith("Thread") || a.name.includes("Sosmed") || a.name.includes("Tweet")));
               setAgentRunning(true);
@@ -1771,10 +1804,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 	                  const r = await sendToContentScript({
 	                    type: "EXECUTE_ACTION",
-	                    actionData: { action: "post_social", text: contentStr }
-	                  }, 15000);
+                    actionData: { action: "post_social", text: contentStr }
+	                  }, 15000, 2, await getActiveTabId());
 
-	                  appendLog(`⤴️ Thread "${a.name}" berhasil ditempel ke kotak postingan.`);
+	                  appendLog(`⤴️ Thread "${a.name}" inserted into the post box.`);
 			                } else if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.endsWith(".xls") || a.name?.includes("Spreadsheet") || a.name?.includes("Tabel")) {
 			                  showStatusIndicator("Mengisikan tabel data ke Google Sheets...");
 			                  appendLog(`📊 Menyiapkan pengisian data tabel "${a.name}" ke Google Sheets...`);
@@ -1787,7 +1820,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 			                  try {
 			                    await navigator.clipboard.writeText(tsvText);
-			                    appendLog("📋 Data tabel berhasil disalin ke clipboard sistem.");
+			                    appendLog("📋 Table data copied to the system clipboard.");
 			                  } catch (_) {}
 
 			                  let currentTab = null;
@@ -1827,7 +1860,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 					                    await sendToContentScript({
 					                      type: "EXECUTE_ACTION",
 					                      actionData: { action: "fill_spreadsheet_grid", value: contentStr, tableData: tableData, tsvText: tsvText, replace: true }
-					                    }, 25000);
+					                    }, 25000, 2, await getActiveTabId());
 					                    appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet.`);
 					                  }
 		                } else {
@@ -1871,14 +1904,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 		                  const r = await sendToContentScript({
 		                    type: "EXECUTE_ACTION",
 		                    actionData: { action: "paste_text", value: contentStr }
-		                  }, 25000);
+		                  }, 25000, 2, await getActiveTabId());
 		                  if (r && r.success === false) {
 		                    throw new Error(r.error || "Gagal menempelkan ke Google Docs");
 		                  }
 		                  appendLog(`⤴️ Dokumen "${a.name}" berhasil ditempelkan ke Google Docs.`);
 		                }
 
-                flashBtnSuccess(btn, "✓ Tertempel!", 2000);
+                flashBtnSuccess(btn, "✓ Inserted!", 2000);
               } catch (pasteErr) {
                 appendLog(`Gagal menempelkan teks: ${pasteErr.message}`, "WARN");
               } finally {
@@ -2032,12 +2065,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         activeModelId = m.id;
         saveModelsConfig();
         renderAllModelLists();
+        if (typeof updateTokenTrackerUI === "function") updateTokenTrackerUI();
       });
 
       // Edit model
       row.querySelector(".btn-edit-model")?.addEventListener("click", async (e) => {
         e.stopPropagation();
-        const newName = await showPrompt("Ubah nama model PesatRouter:", "Ubah Model", m.name);
+        const newName = await showPrompt("Change the PesatRouter model name:", "Edit Model", m.name);
         if (newName && newName.trim()) {
           m.name = newName.trim();
           m.id = newName.trim();
@@ -2050,10 +2084,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       row.querySelector(".btn-del-model")?.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (modelsList.length <= 1) {
-          await showAlert("Minimal harus ada 1 model di daftar.");
+          await showAlert("At least 1 model must remain in the list.");
           return;
         }
-        if (!await showConfirm(`Hapus model "${m.name}"?`)) return;
+        if (!await showConfirm(`Delete model "${m.name}"?`)) return;
         modelsList = modelsList.filter(x => x.id !== m.id);
         if (activeModelId === m.id) {
           const firstEnabled = modelsList.find(x => x.enabled !== false);
@@ -2087,11 +2121,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function handleAddModel() {
-    const name = await showPrompt("Tambahkan model PesatRouter (contoh: pesat-lite, pesat-pro, pesat-flash, pesat-vision):", "Tambah Model");
+    const name = await showPrompt("Add a PesatRouter model (e.g. pesat-lite, pesat-pro, pesat-flash, pesat-vision):", "Add Model");
     if (!name || !name.trim()) return;
     const trimmed = name.trim();
     if (modelsList.some(m => m.id.toLowerCase() === trimmed.toLowerCase())) {
-      await showAlert(`Model "${trimmed}" sudah ada di daftar.`);
+      await showAlert(`Model "${trimmed}" already exists in the list.`);
       return;
     }
     modelsList.push({
@@ -2631,21 +2665,21 @@ document.addEventListener("DOMContentLoaded", async () => {
       googleConnected = !!(res && res.connected);
       if (googleConnected) {
         if (googleStatusEl) {
-          googleStatusEl.textContent = `🟢 Terhubung (${res.email || "Google Workspace"})`;
+          googleStatusEl.textContent = `🟢 Connected (${res.email || "Google Workspace"})`;
           googleStatusEl.className = "google-status connected";
         }
-        if (googleConnectText) googleConnectText.textContent = "Putuskan Akun Google";
+        if (googleConnectText) googleConnectText.textContent = "Disconnect Google Account";
         btnGoogleConnect?.classList.add("connected");
       } else {
         if (googleStatusEl) {
-          googleStatusEl.textContent = "⚪ Belum terhubung";
+          googleStatusEl.textContent = "⚪ Not connected";
           googleStatusEl.className = "google-status disconnected";
         }
-        if (googleConnectText) googleConnectText.textContent = "Masuk dengan Google (API Latar Belakang)";
+        if (googleConnectText) googleConnectText.textContent = "Connect Google (Background API)";
         btnGoogleConnect?.classList.remove("connected");
       }
     } catch (e) {
-      if (googleStatusEl) googleStatusEl.textContent = "⚪ Belum terhubung";
+      if (googleStatusEl) googleStatusEl.textContent = "⚪ Not connected";
     }
   }
 
@@ -2720,8 +2754,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     btnCopyRedirectUri.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(currentRedirectUri);
-        btnCopyRedirectUri.textContent = "✓ Disalin!";
-        setTimeout(() => { btnCopyRedirectUri.textContent = "📋 Salin"; }, 2000);
+        btnCopyRedirectUri.textContent = "✓ Copied!";
+        setTimeout(() => { btnCopyRedirectUri.textContent = "📋 Copy"; }, 2000);
       } catch (e) {}
     });
   }
@@ -2733,7 +2767,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  function sendToContentScript(payload, timeoutMs = 15000, maxRetries = 2) {
+  function sendToContentScript(payload, timeoutMs = 15000, maxRetries = 2, tabId = null) {
+    // Target tab eksplisit: argumen > tab kerja task aktif. Mencegah background
+    // memilih tab/window yang salah (mis. Gmail) saat task berjalan.
+    const resolvedTabId = tabId != null ? tabId : (activeTask?.workTabId != null ? activeTask.workTabId : null);
     return new Promise((resolve) => {
       let resolved = false;
       let retryCount = 0;
@@ -2756,7 +2793,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }, timeoutMs);
 
         chrome.runtime.sendMessage(
-          { action: "EXECUTE_IN_CONTENT", payload },
+          { action: "EXECUTE_IN_CONTENT", payload, targetTabId: resolvedTabId },
           (response) => {
             if (!resolved) {
               clearTimeout(timer);
@@ -2780,6 +2817,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       attemptSend();
     });
+  }
+
+  // Ambil id tab aktif (jendela fokus terakhir) untuk menargetkan aksi konten
+  // secara eksplisit — dipakai alur paste yang membuka tab baru.
+  async function getActiveTabId() {
+    try {
+      const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, lastFocusedWindow: true }, resolve));
+      return tabs && tabs[0]?.id != null ? tabs[0].id : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   function sendToBackground(message, timeoutMs = 15000) {
@@ -2808,7 +2856,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Navigasi URL tab browser secara andal (langsung via chrome.tabs API atau background)
   async function navigateToUrl(destUrl) {
-    if (!destUrl) return { success: false, error: "URL tidak valid" };
+    if (!destUrl) return { success: false, error: "Invalid URL" };
     let dest = String(destUrl).trim();
     if (!/^https?:\/\//i.test(dest)) {
       dest = "https://" + dest;
@@ -3025,6 +3073,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       return resultWrapper;
     } catch (err) {
       if (err.name === "AbortError") throw err;
+      // Jaringan/HTTP mentah → pesan ramah (hindari "Failed to fetch" / body JSON mentah).
+      if (err && (err instanceof TypeError || /failed to fetch/i.test(err.message || ""))) {
+        const friendly = globalThis.PesatAIEngine?.describeConnectionFailure?.(err) || "Koneksi ke server gagal. Periksa internet/VPN/proxy Anda lalu coba lagi.";
+        appendLog(`AI Error (${phase}): ${friendly}`, "ERROR");
+        throw new Error(friendly);
+      }
       appendLog(`AI Error (${phase}): ${err.message}`, "ERROR");
       throw err;
     }
@@ -4260,7 +4314,7 @@ ${topCompStr}
       }
     } catch (err) {
       appendLog(`Error penggantian kata: ${err.message}`, "ERROR");
-      addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat mencoba mengganti kata: ${err.message}`);
+      addMessageToCurrentSession("assistant", `❌ Error while trying to replace the word: ${err.message}`);
     } finally {
       setAgentRunning(false);
       hideStatusIndicator();
@@ -4325,7 +4379,7 @@ ${topCompStr}
       }
     } catch (err) {
       appendLog(`Error penulisan langsung: ${err.message}`, "ERROR");
-      addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat mencoba menuliskan teks: ${err.message}`);
+      addMessageToCurrentSession("assistant", `❌ Error while trying to write the text: ${err.message}`);
     } finally {
       setAgentRunning(false);
       hideStatusIndicator();
@@ -4394,7 +4448,7 @@ ${topCompStr}
       }
     } catch (err) {
       appendLog(`Error buka tab baru: ${err.message}`, "ERROR");
-      addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan saat membuka tab baru: ${err.message}`);
+      addMessageToCurrentSession("assistant", `❌ Error while opening a new tab: ${err.message}`);
     } finally {
       setAgentRunning(false);
       hideStatusIndicator();
@@ -4411,7 +4465,7 @@ ${topCompStr}
 
   async function runPromptToDocsFlow(userPrompt) {
     setAgentRunning(true);
-    showStatusIndicator("Memproses alur kerja lintas layanan (AI ➔ Google Docs)...");
+    showStatusIndicator("Processing cross-service workflow (AI ➔ Google Docs)...");
     appendLog("🚀 Menjalankan otomatisasi lintas layanan: Pemrosesan prompt ➔ Penulisan Google Docs...");
 
     try {
@@ -4439,7 +4493,7 @@ ${topCompStr}
         promptToRun = userPrompt;
       }
 
-      appendLog(`🧠 Memproses konten prompt dengan AI Model (${promptToRun.slice(0, 60)}...)...`);
+      appendLog(`🧠 Processing prompt content with AI Model (${promptToRun.slice(0, 60)}...)...`);
       showStatusIndicator("Menghasilkan konten via AI Engine...");
       const rawResult = await callLLM("chat", `Bertindaklah sebagai asisten profesional. Tolong kerjakan dan hasilkan konten secara lengkap, mendalam, dan rapi sesuai instruksi berikut tanpa basa-basi pengantar atau penutup:\n\n${promptToRun}`);
 
@@ -4472,7 +4526,7 @@ ${topCompStr}
       addMessageToCurrentSession("assistant", reply, { skipClean: true });
     } catch (err) {
       appendLog(`Error pada otomasi lintas layanan: ${err.message}`, "ERROR");
-      addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan pada alur kerja lintas layanan: ${err.message}`);
+      addMessageToCurrentSession("assistant", `❌ Error in the cross-service workflow: ${err.message}`);
     } finally {
       setAgentRunning(false);
       hideStatusIndicator();
@@ -5404,10 +5458,10 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
               aiReply = retrySafe;
               safe = retrySafe;
             } else {
-              safe = "Maaf, layanan AI mengembalikan respons tidak valid (berupa tool-call). Coba lagi atau perjelas perintah Anda.";
+              safe = "Sorry, the AI service returned an invalid response (a tool-call). Try again or clarify your command.";
             }
           } catch (e) {
-            safe = "Maaf, layanan AI mengembalikan respons tidak valid. Coba lagi.";
+            safe = "Sorry, the AI service returned an invalid response. Try again.";
           }
         }
         aiReply = safe;
@@ -5600,7 +5654,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         appendLog("🛑 Analisis dibatalkan.");
       } else {
         appendLog(`Error: ${err.message}`, "ERROR");
-        addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan: ${err.message}`);
+        addMessageToCurrentSession("assistant", `❌ Error: ${err.message}`);
       }
     } finally {
       setAgentRunning(false);
@@ -6225,7 +6279,7 @@ ATURAN KETAT:
         }
       } else {
         appendLog(`Error task: ${err.message}`, "ERROR");
-        addMessageToCurrentSession("assistant", `❌ Terjadi kesalahan: ${err.message}`);
+        addMessageToCurrentSession("assistant", `❌ Error: ${err.message}`);
         if (activeTask) {
           activeTask.status = "FAILED";
           refreshTaskCard();
@@ -6371,7 +6425,7 @@ ${sub.description}
         }
         const validation = globalThis.PesatSkillRegistry?.validateToolCall?.(fnName, fnArgs);
         if (!validation?.valid) {
-          throw Object.assign(new Error(`Tool call '${fnName}' tidak valid: ${(validation?.errors || []).join("; ")}`), { code: "INVALID_INPUT" });
+          throw Object.assign(new Error(`Tool call '${fnName}' is invalid: ${(validation?.errors || []).join("; ")}`), { code: "INVALID_INPUT" });
         }
 
         resObj = {
@@ -6412,7 +6466,7 @@ ${sub.description}
         resObj = parseActionJSON(reply);
         const looksStructured = /^\s*(?:```json\b|[\[{])/i.test(String(reply || ""));
         if (looksStructured && !resObj) {
-          throw Object.assign(new Error("Respons aksi terstruktur tidak valid."), { code: "PARSE_ERROR" });
+          throw Object.assign(new Error("Invalid structured action response."), { code: "PARSE_ERROR" });
         }
         if (!resObj || (!resObj.action && !resObj.actions && !resObj.message && !resObj.question)) {
           resObj = tryParseNaturalLanguageActions(reply, activeTask.goal);
@@ -6675,6 +6729,19 @@ ${sub.description}
         verification: []
       });
       if (receipt) activeTask.receipts.push(receipt);
+
+      // Guard no-progress: hentikan bila terlalu banyak aksi gagal berturut-turut
+      // agar tugas tidak berulang tanpa henti (mis. pada model cepat).
+      if (exec && exec.success === true) {
+        activeTask._noProgressSteps = 0;
+      } else {
+        activeTask._noProgressSteps = (activeTask._noProgressSteps || 0) + 1;
+        if (activeTask._noProgressSteps >= 6) {
+          appendLog("Terlalu banyak tindakan gagal berturut-turut tanpa kemajuan.", "WARN");
+          await finalizeTask("failed", "Tugas dihentikan agar tidak berulang: beberapa tindakan terakhir tidak berhasil. Coba lagi dengan instruksi yang lebih spesifik.");
+          return;
+        }
+      }
 
       // 6. Catat scratchpad
       activeTask.scratchpad.push({
@@ -7214,7 +7281,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     }
     const favUrl = src.metadata?.favIconUrl || src.icon;
     if (favUrl && typeof favUrl === "string" && !favUrl.startsWith("chrome://") && favUrl !== "🌐") {
-      return `<div class="mention-item-icon-wrap"><img src="${escapeHtml(favUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';" /><span class="mention-icon-fallback" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
+      return `<div class="mention-item-icon-wrap"><img class="mention-fav-icon" src="${escapeHtml(favUrl)}" alt="" /><span class="mention-icon-fallback" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
     }
     return `<div class="mention-item-icon-wrap"><span class="mention-icon-fallback"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span></div>`;
   }
@@ -7258,6 +7325,15 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
             <span class="mention-item-sub">${escapeHtml(subText)}</span>
           </div>
         `;
+
+        const favImg = item.querySelector(".mention-fav-icon");
+        if (favImg) {
+          favImg.addEventListener("error", () => {
+            favImg.style.display = "none";
+            const fallback = favImg.nextElementSibling;
+            if (fallback) fallback.style.display = "inline-flex";
+          });
+        }
 
         item.addEventListener("click", () => selectMentionSource(src));
         mentionPickerList.appendChild(item);
@@ -7364,7 +7440,26 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
 
   async function handleIncomingFiles(fileList) {
     if (!fileList || fileList.length === 0) return;
+    const MAX_ATTACHMENTS = Number(storedSettings?.maxAttachments) || 5;
+    const MAX_TOTAL_BYTES = (Number(storedSettings?.maxTotalAttachmentMB) || 25) * 1024 * 1024;
+    const currentTotalBytes = () => attachedContextSources.reduce(
+      (sum, s) => sum + (Number(s?.metadata?.size) || 0), 0
+    );
     for (const file of Array.from(fileList)) {
+      // Batas jumlah lampiran
+      if (attachedContextSources.length >= MAX_ATTACHMENTS) {
+        const msg = `Batas ${MAX_ATTACHMENTS} lampiran tercapai. "${file.name}" tidak ditambahkan.`;
+        appendLog(msg, "WARN");
+        if (typeof showToast === "function") showToast(msg, "error", 3000);
+        break;
+      }
+      // Batas total ukuran
+      if (currentTotalBytes() + (file.size || 0) > MAX_TOTAL_BYTES) {
+        const msg = `Total ukuran lampiran melebihi ${Math.round(MAX_TOTAL_BYTES / 1024 / 1024)}MB. "${file.name}" tidak ditambahkan.`;
+        appendLog(msg, "WARN");
+        if (typeof showToast === "function") showToast(msg, "error", 3000);
+        continue;
+      }
       showStatusIndicator("Membaca file lampiran...");
       try {
         if (typeof PesatFileEngine !== "undefined" && typeof PesatContextEngine !== "undefined") {
@@ -7395,6 +7490,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
         }
       } catch (err) {
         appendLog(`Gagal memproses file ${file.name}: ${err.message}`, "WARN");
+        if (typeof showToast === "function") showToast(`Gagal: ${err.message}`, "error", 3000);
       }
     }
     hideStatusIndicator();
@@ -7407,13 +7503,13 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     if (isActiveTabContextEnabled) {
       btnToggleActiveTabContext.classList.add("active");
       contextIndicatorDot?.classList.add("active");
-      if (activeTabContextStatus) activeTabContextStatus.textContent = "Tab Aktif: ON";
-      btnToggleActiveTabContext.title = tabTitle ? `Konteks Tab Aktif: ON (${tabTitle}). Klik untuk Nonaktifkan.` : "Konteks Tab Aktif: ON. Klik untuk Nonaktifkan.";
+      if (activeTabContextStatus) activeTabContextStatus.textContent = "Active Tab: ON";
+      btnToggleActiveTabContext.title = tabTitle ? `Active Tab Context: ON (${tabTitle}). Click to disable.` : "Active Tab Context: ON. Click to disable.";
     } else {
       btnToggleActiveTabContext.classList.remove("active");
       contextIndicatorDot?.classList.remove("active");
-      if (activeTabContextStatus) activeTabContextStatus.textContent = "Tab Aktif: OFF";
-      btnToggleActiveTabContext.title = "Konteks Tab Aktif: OFF. Klik untuk Aktifkan.";
+      if (activeTabContextStatus) activeTabContextStatus.textContent = "Active Tab: OFF";
+      btnToggleActiveTabContext.title = "Active Tab Context: OFF. Click to enable.";
     }
   }
 
@@ -7430,7 +7526,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       } else {
         updateActiveTabContextUI();
       }
-      appendLog(isActiveTabContextEnabled ? "🌐 Konteks tab aktif dinyalakan (otomatis)." : "⚪ Konteks tab aktif dimatikan.");
+      appendLog(isActiveTabContextEnabled ? "🌐 Active tab context enabled (automatic)." : "⚪ Active tab context disabled.");
     });
   }
 
@@ -7965,6 +8061,8 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
         try {
           await chrome.storage.local.set({ modelName: modelId });
         } catch (_) {}
+        // Perbarui tampilan context window agar sesuai model yang baru dipilih.
+        if (typeof updateTokenTrackerUI === "function") updateTokenTrackerUI();
       }
     });
   }
