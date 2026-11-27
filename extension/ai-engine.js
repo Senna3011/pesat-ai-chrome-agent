@@ -39,14 +39,24 @@
     }
   }
 
+  // Rapikan body error: buang halaman HTML (gateway/Cloudflare) yang tidak informatif,
+  // sisakan teks/JSON singkat satu baris.
+  function cleanErrorDetail(bodySnippet = "") {
+    const raw = String(bodySnippet || "").trim();
+    if (!raw) return "";
+    if (/^<!doctype|^<html|^<\?xml|^<head|^<body|^<div|^<span|^<title/i.test(raw) || /<html[\s>]/i.test(raw)) return "";
+    return raw.replace(/\s+/g, " ").slice(0, 180);
+  }
+
   function describeHttpError(status, host, model, bodySnippet = "") {
-    const detail = bodySnippet ? ` Detail: ${bodySnippet}` : "";
-    if (status === 401 || status === 403) return `Invalid API key or no access (HTTP ${status}). Check your key again at pesatrouter.com.${detail}`;
-    if (status === 404) return `Endpoint not found (HTTP 404). Make sure the Base URL ends with "/v1" — e.g. https://api.pesatrouter.com/v1 — without manually adding /chat/completions.${detail}`;
-    if (status === 429) return `Rate limit reached (HTTP 429). Wait a moment and try again.${detail}`;
-    if (status === 400) return `Request rejected (HTTP 400) — the model "${model}" may not be available at this endpoint.${detail}`;
-    if (status >= 500) return `Server${host ? ` ${host}` : ""} is having issues (HTTP ${status}). Try again later.${detail}`;
-    return `HTTP ${status}:${detail || " unexpected response from the server"}`;
+    const detail = cleanErrorDetail(bodySnippet);
+    const suffix = detail ? ` Detail: ${detail}` : "";
+    if (status === 401 || status === 403) return `Invalid API key or no access (HTTP ${status}). Check your key again at pesatrouter.com.${suffix}`;
+    if (status === 404) return `Endpoint not found (HTTP 404). Make sure the Base URL ends with "/v1" — e.g. https://api.pesatrouter.com/v1 — without manually adding /chat/completions.${suffix}`;
+    if (status === 429) return `Rate limit reached (HTTP 429). Wait a moment and try again.${suffix}`;
+    if (status === 400) return `Request rejected (HTTP 400) — the model "${model}" may not be available at this endpoint.${suffix}`;
+    if (status >= 500) return `Server${host ? ` ${host}` : ""} is having issues (HTTP ${status}). Try again later.${suffix}`;
+    return `HTTP ${status}.${suffix || " Unexpected response from the server."}`;
   }
 
   function describeConnectionFailure(err) {
