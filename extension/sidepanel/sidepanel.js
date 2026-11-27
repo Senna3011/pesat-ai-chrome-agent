@@ -396,14 +396,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ═══════════════════════════════════════════════════
   // STATUS INDICATOR
   // ═══════════════════════════════════════════════════
-  function showStatusIndicator(text = "Sedang mengerjakan...") {
+  function showStatusIndicator(text = "Working on it...") {
     if (agentStatusIndicator && statusIndicatorText) {
       const raw = String(text || "").toLowerCase();
-      const generic = /cari|sumber|baca|ekstrak|ambil data/.test(raw) ? "Mencari sumber..."
-        : /analisis|susun|hasil|respon|materi|dokumen|tabel/.test(raw) ? "Menganalisis..."
-          : /verifikasi|validasi|periksa|cek/.test(raw) ? "Memverifikasi..."
-            : /buka|isi|tulis|tempel|klik|jalan|eksekusi|posting|kirim/.test(raw) ? "Menjalankan tindakan..."
-              : "Sedang mengerjakan...";
+      const generic = /cari|sumber|baca|ekstrak|ambil data/.test(raw) ? "Finding sources..."
+        : /analisis|susun|hasil|respon|materi|dokumen|tabel/.test(raw) ? "Analyzing..."
+          : /verifikasi|validasi|periksa|cek/.test(raw) ? "Verifying..."
+            : /buka|isi|tulis|tempel|klik|jalan|eksekusi|posting|kirim/.test(raw) ? "Running actions..."
+              : "Working on it...";
       statusIndicatorText.textContent = generic;
       agentStatusIndicator.classList.remove("hidden");
     }
@@ -7604,7 +7604,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   // ═══════════════════════════════════════════════════
   function setAgentRunning(running) {
     isAgentRunning = running;
-    agentStatus.textContent = running ? "Bekerja" : "Siap";
+    agentStatus.textContent = running ? "Working" : "Ready";
     if (running) {
       agentStatus.classList.add("working");
       stopBar.classList.remove("hidden");

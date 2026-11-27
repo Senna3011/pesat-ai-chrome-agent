@@ -5067,3 +5067,19 @@ button.destructive:focus-visible,
   .doc-action-btn { font-size: 11px; padding: 4px 7px; }
   .doc-card-title { max-width: 200px; }
 }
+
+
+/* --- UI polish: unified status dot + 2-line textarea (append overrides) --- */
+/* Status pill dot uses the bright green from the removed standalone online dot */
+.status-badge.status-ready::before,
+.status-badge:not(.status-thinking):not(.status-executing):not(.working):not(.status-completed):not(.status-failed)::before {
+  background: var(--status-green, #10B981);
+}
+
+/* Textarea: fit a 2-line placeholder without vertical clipping */
+.composer-card textarea,
+.composer-input {
+  min-height: 48px;
+  padding: 3px 2px;
+  box-sizing: border-box;
+}
