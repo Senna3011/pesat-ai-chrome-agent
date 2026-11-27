@@ -16,7 +16,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  const FRIENDLY_RETRY_MSG = "Maaf, saya belum bisa menyelesaikan perintah ini. Aktifkan Tab Aktif atau tulis perintahnya lebih spesifik.";
+  const FRIENDLY_RETRY_MSG = "Sorry, I couldn't complete this request. Enable Active Tab or write a more specific command.";
 
   // Pola respons refusal / "aku tak punya tool" yang harus dianggap noise
   // dan memicu retry dengan instruksi "jawab langsung".

@@ -20,7 +20,8 @@ const filesToSync = [
   "agent-engine.js",
   "context-engine.js",
   "file-engine.js",
-  "memory-engine.js"
+  "memory-engine.js",
+  "tool-call-noise.js"
 ];
 
 const dirsToSync = [

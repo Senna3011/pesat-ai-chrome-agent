@@ -404,8 +404,10 @@ Gunakan hanya tool yang tersedia. Maksimal 10 langkah. Langkah act wajib memilik
 
         const data = (typeof res === "object" && res !== null && !(res instanceof Response)) ? res : await res.json();
         const choice = data?.choices?.[0] || {};
-        const replyText = (choice.message?.content !== undefined && choice.message?.content !== null && choice.message?.content !== "")
-          ? choice.message.content
+        const rawContent = choice.message?.content;
+        const hasContent = typeof rawContent === "string" ? rawContent.trim().length > 0 : (rawContent !== undefined && rawContent !== null && rawContent !== "");
+        const replyText = hasContent
+          ? rawContent
           : (choice.message?.reasoning_content || data.reply || "");
         const usage = data.usage || this._estimateUsage(promptText, payloadMessages, replyText);
 

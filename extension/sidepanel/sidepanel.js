@@ -4589,9 +4589,26 @@ ${topCompStr}
   // ═══════════════════════════════════════════════════
   // MAIN: TASK EXECUTION LOOP (BYOK Gate Checked)
   // ═══════════════════════════════════════════════════
+  // Deteksi perintah tidak jelas / input tak sengaja (mis. "a", "1", "=", "->").
+  // Gerbang ringan sebelum memanggil LLM agar tidak memicu aksi/ jawaban acak.
+  function isUnclearCommand(text) {
+    const t = String(text || "").trim();
+    if (!t) return false; // kosong sudah ditangani pemanggil
+    if (!/[a-zA-Z0-9]/.test(t)) return true; // hanya simbol/paket non-alfanumerik
+    if (t.length < 2) return true;           // satu karakter alfanumerik saja
+    return false;
+  }
+
   async function handleSend() {
     const userPrompt = promptInput.value.trim();
     if (!userPrompt || isAgentRunning) return;
+
+    // Gerbang perintah tidak jelas: balas ramah tanpa memanggil LLM.
+    if (isUnclearCommand(userPrompt)) {
+      addMessageToCurrentSession("assistant", "Can I help you? Please tell me what you'd like me to do.");
+      promptInput.value = "";
+      return;
+    }
 
     // GERBANG BYOK (PLAN Phase A.3): Cek apakah API key sudah ada
     if (!isConfigured()) {
@@ -5497,29 +5514,31 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
       {
         const noise = globalThis.PesatToolCallNoise;
         const friendly = noise ? noise.FRIENDLY_RETRY_MSG : "Sorry, I couldn't complete this request. Try Active Tab or a more specific command.";
-        // Anggap sebuah teks "bermakna" bila ada isi substansial dan bukan payload tool/refusal.
+        // Anggap teks "bermakna" bila ada isi (walau singkat, mis. "Halo!") dan bukan
+        // payload tool / refusal. Ambang rendah agar sapaan/jawaban pendek tetap tampil.
         const isMeaningful = (t) => {
           const s = String(t || "").trim();
-          if (s.length < 12) return false;
+          if (s.length < 1) return false;
           if (noise && noise.isToolCallPayloadJson(s)) return false;
           if (noise && noise.isRefusalReply(s)) return false;
           return true;
         };
+        const asText = (v) => (typeof v === "string" ? v : String(v ?? ""));
         // 1) Bersihkan tool-call mentah; bila jawaban LLM sudah ada, tampilkan apa adanya.
-        const cleanedFirst = noise ? noise.stripToolCallNoise(typeof aiReply === "string" ? aiReply : String(aiReply ?? "")) : aiReply;
+        const cleanedFirst = noise ? noise.stripToolCallNoise(asText(aiReply)) : asText(aiReply);
         let safe;
         if (isMeaningful(cleanedFirst)) {
           safe = cleanedFirst;
         } else if (!shouldStopAgent) {
           // 2) Jawaban kosong/noise → minta jawaban langsung sekali lagi ke LLM murni.
           try {
-            appendLog("ℹ️ Model mengeluarkan respons kosong/tool-call; meminta jawaban langsung sekali lagi...", "WARN");
+            appendLog(`ℹ️ Empty/tool-call response (len=${asText(aiReply).length}); requesting a direct answer once more...`, "WARN");
             const retryRaw = await callLLM(
               "chat",
               promptPayload + "\n\nIMPORTANT: Answer DIRECTLY in plain text (Markdown) based on the given content. DO NOT output tool calls, XML, <function=...>, or JSON. Write only the final answer/analysis.",
               { image: primaryImage, isSummarize: isSummarize }
             );
-            const cleanedRetry = noise ? noise.stripToolCallNoise(typeof retryRaw === "string" ? retryRaw : String(retryRaw ?? "")) : retryRaw;
+            const cleanedRetry = noise ? noise.stripToolCallNoise(asText(retryRaw)) : asText(retryRaw);
             safe = isMeaningful(cleanedRetry) ? cleanedRetry : friendly;
           } catch (e) {
             safe = friendly;
