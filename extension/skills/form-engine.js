@@ -43,6 +43,10 @@
               submitAfter: {
                 type: "boolean",
                 description: "Whether to submit the form after filling (default: false)."
+              },
+              autoPick: {
+                type: "boolean",
+                description: "When true (or when fields is empty), auto-fill empty text inputs and auto-select the first option of radios, checkboxes, selects, and custom dropdowns (React-Select/Bootstrap)."
               }
             },
             required: ["fields"]
@@ -53,8 +57,9 @@
 
     systemPromptRules: `
 [SKILL: SMART FORM INSPECTION & AUTO-FILL]
-- Gunakan 'inspect_form_fields' saat pengguna meminta mengisi formulir pendaftaran, checkout, survey, atau kontak untuk mengetahui daftar input yang tersedia.
-- Gunakan 'autofill_form_batch' untuk mengisi seluruh field dalam satu langkah efisien, daripada memanggil aksi 'type' berkali-kali.
+- Use 'inspect_form_fields' when the user asks to fill a registration, checkout, survey, or contact form to discover the available inputs.
+- Use 'autofill_form_batch' to fill all fields in one efficient step instead of calling the 'type' action repeatedly.
+- Set autoPick=true (or leave fields empty) to auto-fill empty inputs and auto-select the first option of radios, checkboxes, selects, and custom dropdowns (React-Select/Bootstrap). Hidden custom radios/checkboxes are handled by clicking their visible <label>.
 `,
 
     async execute(toolName, params, ctx = {}) {
@@ -84,8 +89,9 @@
 
       if (toolName === "autofill_form_batch") {
         const fields = Array.isArray(params.fields) ? params.fields : [];
-        if (fields.length === 0) {
-          return { success: false, error: "Daftar fields kosong." };
+        const autoPick = params.autoPick === true;
+        if (fields.length === 0 && !autoPick) {
+          return { success: false, error: "Fields list is empty." };
         }
 
         const fillRes = await ctx.sendToContentScript?.({
@@ -93,14 +99,15 @@
           actionData: {
             action: "autofill_form_batch",
             fields: fields,
-            submitAfter: Boolean(params.submitAfter)
+            submitAfter: Boolean(params.submitAfter),
+            autoPick: autoPick
           }
         });
 
         if (!fillRes || !fillRes.success) {
           return {
             success: false,
-            error: fillRes?.error || "Gagal mengisi field formulir."
+            error: fillRes?.error || "Failed to fill form fields."
           };
         }
 

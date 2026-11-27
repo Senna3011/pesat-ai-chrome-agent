@@ -234,7 +234,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       currentAgentMode = currentAgentMode === "full" ? "planning" : "full";
       updateAgentModeUI();
       await chrome.storage.local.set({ pesat_agent_mode: currentAgentMode });
-      appendLog(`⚙️ Mode eksekusi dialihkan ke: ${currentAgentMode === 'planning' ? 'Planning Mode (Wajib Approval Rencana)' : 'Full Mode (Otomatis Selesai)'}`);
+      appendLog(`⚙️ Execution mode switched to: ${currentAgentMode === 'planning' ? 'Planning Mode (Plan Approval Required)' : 'Full Mode (Auto-complete)'}`);
     });
   }
 
@@ -574,7 +574,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       updateTokenTrackerUI({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
     } catch (_) {}
 
-    appendLog("🧹 Percakapan sesi ini berhasil dibersihkan.");
+    appendLog("🧹 This session's conversation has been cleared.");
   }
 
   function getCurrentSession() {
@@ -1367,7 +1367,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           link.remove();
           try { URL.revokeObjectURL(blobUrl); } catch (_) {}
         }, 30000);
-        appendLog(`⬇️ Dokumen "${cleanFilename}" berhasil diunduh via peramban.`);
+        appendLog(`⬇️ Document "${cleanFilename}" downloaded via browser.`);
         return true;
       } catch (anchorErr) {
         console.warn("[Sidepanel] Anchor download fallback error:", anchorErr);
@@ -1383,7 +1383,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         mimeType
       });
       if (res && res.success) {
-        appendLog(`⬇️ Dokumen "${cleanFilename}" berhasil diunduh via Background worker.`);
+        appendLog(`⬇️ Document "${cleanFilename}" downloaded via background worker.`);
         return true;
       }
     } catch (_) {}
@@ -1547,8 +1547,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       const rt = msg.resumeTask;
       contentHtml = `
         <div class="resume-banner">
-          <span>⏸️ Ada tugas yang belum selesai: <strong>${escapeHtml((rt.goal || "").substring(0, 80))}</strong></span>
-          <button class="confirm-btn confirm-btn-allow" data-resume-task="1">▶ Lanjutkan Task</button>
+          <span>⏸️ Unfinished task: <strong>${escapeHtml((rt.goal || "").substring(0, 80))}</strong></span>
+          <button class="confirm-btn confirm-btn-allow" data-resume-task="1">▶ Resume Task</button>
         </div>
       `;
     } else if (msg.taskCard) {
@@ -1820,8 +1820,8 @@ document.addEventListener("DOMContentLoaded", async () => {
               setAgentRunning(true);
               try {
                 if (isSocialArt) {
-                  showStatusIndicator("Membuka Twitter/X & menempelkan thread...");
-                  appendLog("📱 Menyiapkan navigasi ke Twitter/X untuk menempelkan postingan...");
+                  showStatusIndicator("Opening Twitter/X & pasting thread...");
+                  appendLog("📱 Preparing navigation to Twitter/X to paste the post...");
 
                   let currentTab = null;
                   try {
@@ -1845,8 +1845,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 	                  appendLog(`⤴️ Thread "${a.name}" inserted into the post box.`);
 			                } else if (a.artifactType === "table" || a.name?.endsWith(".csv") || a.name?.endsWith(".xls") || a.name?.includes("Spreadsheet") || a.name?.includes("Tabel")) {
-			                  showStatusIndicator("Mengisikan tabel data ke Google Sheets...");
-			                  appendLog(`📊 Menyiapkan pengisian data tabel "${a.name}" ke Google Sheets...`);
+			                  showStatusIndicator("Filling table data into Google Sheets...");
+			                  appendLog(`📊 Preparing to fill table data "${a.name}" into Google Sheets...`);
 
 			                  const tableData = typeof parseMarkdownTable === "function" ? parseMarkdownTable(contentStr) : null;
 			                  const rows = tableData || [];
@@ -1867,7 +1867,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 					                  const isAlreadySheets = currentTab && (/docs\.google\.com\/spreadsheets/i.test(currentTab.url || "") || /excel\.office\.com/i.test(currentTab.url || ""));
 					                  if (act === "paste" || !isAlreadySheets) {
-					                    appendLog("Membuka Google Sheets baru di tab baru (sheets.new)...");
+					                    appendLog("Opening new Google Sheets in a new tab (sheets.new)...");
 					                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new", newTab: true });
 					                    await new Promise(r => setTimeout(r, 4500));
 					                    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 4000, stableWindowMs: 800 }, 6000).catch(() => {});
@@ -1886,7 +1886,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 					                        });
 					                        if (apiRes && apiRes.success) {
 					                          apiPasted = true;
-					                          appendLog(`⤴️ Data tabel "${a.name}" berhasil disuntikkan ke spreadsheet via Google Sheets API!`);
+					                          appendLog(`⤴️ Table data "${a.name}" injected into spreadsheet via Google Sheets API!`);
 					                        }
 					                      }
 					                    } catch (_) {}
@@ -1897,11 +1897,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 					                      type: "EXECUTE_ACTION",
 					                      actionData: { action: "fill_spreadsheet_grid", value: contentStr, tableData: tableData, tsvText: tsvText, replace: true }
 					                    }, 25000, 2, await getActiveTabId());
-					                    appendLog(`⤴️ Data tabel "${a.name}" berhasil diisikan ke spreadsheet.`);
+					                    appendLog(`⤴️ Table data "${a.name}" filled into spreadsheet.`);
 					                  }
 		                } else {
-		                  showStatusIndicator("Menyiapkan lembar kerja Google Docs...");
-		                  appendLog(`📄 Menyiapkan penempelan dokumen "${a.name}" ke Google Docs...`);
+		                  showStatusIndicator("Preparing Google Docs sheet...");
+		                  appendLog(`📄 Preparing to paste document "${a.name}" into Google Docs...`);
 
 		                  let currentTab = null;
 		                  try {
@@ -1911,8 +1911,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 				                  const isAlreadyDocs = currentTab && (/docs\.google\.com\/document/i.test(currentTab.url || "") || /word\.office\.com/i.test(currentTab.url || ""));
 				                  if (act === "paste" || !isAlreadyDocs) {
-				                    appendLog("Membuka lembar kerja Google Docs baru di tab baru (docs.new)...");
-			                    showStatusIndicator("Membuka Google Docs...");
+				                    appendLog("Opening new Google Docs in a new tab (docs.new)...");
+			                    showStatusIndicator("Opening Google Docs...");
 			                    await sendToBackground({ action: "NAVIGATE_TAB", url: "https://docs.new", newTab: true });
 
 		                    let docsReady = false;
@@ -1922,7 +1922,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 		                        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
 		                        if (tabs && tabs[0]?.url && tabs[0].url.includes("docs.google.com/document")) {
 		                          docsReady = true;
-		                          appendLog(`✓ Google Docs dimuat: ${tabs[0].title || "Dokumen"}`);
+		                          appendLog(`✓ Google Docs loaded: ${tabs[0].title || "Document"}`);
 		                          break;
 		                        }
 		                      } catch (_) {}
@@ -1935,8 +1935,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 		                    await new Promise(r => setTimeout(r, 2500));
 		                  }
 
-		                  showStatusIndicator("Menuliskan teks langsung ke Google Docs...");
-		                  appendLog(`📄 Menuliskan dokumen "${a.name}" ke Google Docs...`);
+		                  showStatusIndicator("Writing text directly to Google Docs...");
+		                  appendLog(`📄 Writing document "${a.name}" to Google Docs...`);
 		                  const r = await sendToContentScript({
 		                    type: "EXECUTE_ACTION",
 		                    actionData: { action: "paste_text", value: contentStr }
@@ -1944,19 +1944,19 @@ document.addEventListener("DOMContentLoaded", async () => {
 		                  if (r && r.success === false) {
 		                    throw new Error(r.error || "Gagal menempelkan ke Google Docs");
 		                  }
-		                  appendLog(`⤴️ Dokumen "${a.name}" berhasil ditempelkan ke Google Docs.`);
+		                  appendLog(`⤴️ Document "${a.name}" pasted into Google Docs.`);
 		                }
 
                 flashBtnSuccess(btn, "✓ Inserted!", 2000);
               } catch (pasteErr) {
-                appendLog(`Gagal menempelkan teks: ${pasteErr.message}`, "WARN");
+                appendLog(`Failed to paste text: ${pasteErr.message}`, "WARN");
               } finally {
                 setAgentRunning(false);
                 hideStatusIndicator();
               }
             }
           } catch (err) {
-            appendLog(`Error aksi dokumen: ${err.message}`, "WARN");
+            appendLog(`Document action error: ${err.message}`, "WARN");
             setAgentRunning(false);
             hideStatusIndicator();
           }
@@ -1972,13 +1972,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function renderTaskCardHtml(taskCard) {
-    const label = taskCard.status === "PLANNING" ? "Menganalisis"
-      : taskCard.status === "VALIDATING" ? "Memverifikasi"
-        : taskCard.status === "WAITING_USER" ? "Menunggu konfirmasi"
-          : taskCard.status === "DONE" ? "Selesai"
-            : taskCard.status === "FAILED" ? "Belum selesai"
-              : "Menjalankan tindakan";
-    return `<div class="task-card"><div class="task-card-header">Progress Tugas</div><div class="task-card-goal">${escapeHtml(label)}</div></div>`;
+    const label = taskCard.status === "PLANNING" ? "Analyzing"
+      : taskCard.status === "VALIDATING" ? "Verifying"
+        : taskCard.status === "WAITING_USER" ? "Awaiting confirmation"
+          : taskCard.status === "DONE" ? "Completed"
+            : taskCard.status === "FAILED" ? "Not completed"
+              : "Running action";
+    return `<div class="task-card"><div class="task-card-header">Task Progress</div><div class="task-card-goal">${escapeHtml(label)}</div></div>`;
   }
 
   function editPromptAt(index) {
@@ -1991,7 +1991,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     session.messages = session.messages.slice(0, index);
     saveSessions();
     renderCurrentSession();
-    appendLog(`Prompt ke-${index + 1} dimuat kembali untuk diedit.`);
+    appendLog(`Prompt #${index + 1} reloaded for editing.`);
   }
 
   function cleanAssistantReply(text) {
@@ -2535,7 +2535,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       } else {
         resultEl.classList.add("error");
         resultEl.textContent = `❌ ${res.error}`;
-        appendLog(`⚠️ Test Connection gagal: ${res.error}`, "WARN");
+        appendLog(`⚠️ Test connection failed: ${res.error}`, "WARN");
       }
     } catch (err) {
       resultEl.classList.add("error");
@@ -2609,7 +2609,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       await loadSettings();
       if (onboardingModal) onboardingModal.classList.add("hidden");
-      appendLog("🎉 API Key pesatrouter.com berhasil dikonfigurasi.");
+      appendLog("🎉 pesatrouter.com API key configured.");
       addMessageToCurrentSession(
         "assistant",
         "✅ **Konfigurasi Berhasil!** Ekstensi terhubung langsung ke akun **pesatrouter.com** Anda. Silakan ketik perintah otomatisasi atau pilih tombol cepat di bawah.",
@@ -2708,9 +2708,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (settingsPanel) {
     settingsPanel.addEventListener("input", scheduleAutoSave);
     settingsPanel.addEventListener("change", scheduleAutoSave);
-    // Klik di area backdrop (luar kartu) menutup panel; perubahan tersimpan otomatis.
     settingsPanel.addEventListener("click", (e) => {
       if (e.target === settingsPanel) { clearTimeout(autoSaveTimer); persistSettings({ close: true, log: false }); }
+    });
+  }
+
+  // Web Search toggle: simpan status boolean seketika ke chrome.storage.local (tanpa menunggu Save).
+  if (settingsEnableWebSearch) {
+    settingsEnableWebSearch.addEventListener("change", async (e) => {
+      const val = !!e.target.checked;
+      storedSettings.enableWebSearch = val;
+      globalThis.__PESAT_ENABLE_WEB_SEARCH__ = val;
+      try { await chrome.storage.local.set({ enableWebSearch: val }); } catch (_) {}
+      appendLog(val ? "🌐 Live Web Search enabled." : "🌐 Live Web Search disabled.");
     });
   }
 
@@ -2807,10 +2817,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           clientId: customId || undefined
         });
         if (res && res.success) {
-          appendLog(`✅ ${res.message || "Google berhasil dihubungkan."}`);
+          appendLog(`✅ ${res.message || "Google connected successfully."}`);
           showGoogleAlert("success", `✅ ${res.message || "Akun Google berhasil dihubungkan!"}`);
         } else {
-          appendLog(`⚠️ Google: ${res?.error || "gagal"}`, "WARN");
+          appendLog(`⚠️ Google: ${res?.error || "failed"}`, "WARN");
           const errText = res?.error || "Operasi Google gagal.";
           if (errText.includes("belum terpasang") || errText.includes("belum diisi")) {
             const detailsEl = document.querySelector(".advanced-google-details");
@@ -2889,7 +2899,7 @@ document.addEventListener("DOMContentLoaded", async () => {
               if (chrome.runtime.lastError) {
                 if (retryCount < maxRetries) {
                   retryCount++;
-                  appendLog(`[Retry ${retryCount}/${maxRetries}] Jalur komunikasi belum siap, mengulang...`, "WARN");
+                  appendLog(`[Retry ${retryCount}/${maxRetries}] Communication channel not ready, retrying...`, "WARN");
                   setTimeout(attemptSend, 800);
                   return;
                 }
@@ -2960,12 +2970,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (tabs && tabs.length > 0 && tabs[0].id) {
           const tabId = tabs[0].id;
           await chrome.tabs.update(tabId, { url: dest });
-          appendLog(`🌐 chrome.tabs.update berhasil membuka tab ${tabId}: ${dest}`);
+          appendLog(`🌐 chrome.tabs.update successfully opened tab ${tabId}: ${dest}`);
           return { success: true, url: dest, message: `Membuka URL: ${dest}` };
         }
       }
     } catch (tabErr) {
-      appendLog(`⚠️ Gagal direct chrome.tabs.update (${tabErr.message}), mencoba fallback background...`, "WARN");
+      appendLog(`⚠️ Failed direct chrome.tabs.update (${tabErr.message}), trying background fallback...`, "WARN");
     }
 
     // 2. Fallback via background script NAVIGATE_TAB
@@ -3100,7 +3110,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (activeTask) {
       activeTask.status = "CANCELLED";
       refreshTaskCard();
-      appendLog(`⛔ Task dibatalkan: ${reason}`, "WARN");
+      appendLog(`⛔ Task cancelled: ${reason}`, "WARN");
       activeTask = null;
       taskCardMsgIndex = -1;
       clearPersistedTask();
@@ -3279,6 +3289,55 @@ document.addEventListener("DOMContentLoaded", async () => {
     const hasEmailVerb = /(?:kirim|kirimkan|tulis|buat|buatkan|compose|send|balas|reply|isi|siapkan|susun|draft|draf|resume|lanjutkan)\b/i.test(text);
     const hasComposeTarget = /(?:email|gmail)\s+(?:ke|pada|kepada|untuk)\b/i.test(text);
     return hasRecipient || hasEmailVerb || hasComposeTarget;
+  }
+
+  // Ekstraksi nilai field formulir dari teks perintah (dipakai alur isi-form deterministik).
+  function extractFormFields(goal = "") {
+    const fields = [];
+    const emailMatch = goal.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+    if (emailMatch) fields.push({ identifier: "email", value: emailMatch[1] });
+    const passMatch = goal.match(/(?:password|pass|sandi|kata sandi)\s*(?:login\s*ini)?\s*(?:dengan|adalah|:)?\s*([^\s,.]+)/i);
+    if (passMatch && !passMatch[1].includes("@")) fields.push({ identifier: "password", value: passMatch[1].trim().replace(/[.,;:]+$/, "") });
+    const nameMatch = goal.match(/(?:nama|name)\s*(?:lengkap)?\s*(?::|adalah|=)?\s*([A-Za-z]+(?:\s+[A-Za-z]+)*)/i);
+    if (nameMatch) {
+      const fullVal = nameMatch[1].trim();
+      fields.push({ identifier: "name", value: fullVal });
+      const parts = fullVal.split(/\s+/);
+      if (parts.length >= 2) {
+        fields.push({ identifier: "firstName", value: parts[0] });
+        fields.push({ identifier: "lastName", value: parts.slice(1).join(" ") });
+      }
+    }
+    const genderMatch = goal.match(/(?:gender|jenis kelamin|sex)\s*(?::|adalah|=)?\s*(Male|Female|Pria|Wanita|Laki-laki|Perempuan|Other)/i);
+    if (genderMatch) fields.push({ identifier: "gender", value: genderMatch[1].trim() });
+    const phoneMatch = goal.match(/(?:hp|handphone|ponsel|telp|telepon|mobile|phone|no(?:\.|\s+)?hp)\s*(?::|adalah|=)?\s*(\+?[0-9\s-]{8,16})/i);
+    if (phoneMatch) fields.push({ identifier: "mobile", value: phoneMatch[1].trim().replace(/\D/g, "") });
+    return fields;
+  }
+
+  // Alur isi-form deterministik: navigasi ke URL lalu autofill, tanpa planner LLM.
+  async function runDeterministicFormFill(url, goal) {
+    showStatusIndicator("Opening form...");
+    await sendToBackground({ action: "NAVIGATE_TAB", url });
+    await new Promise(r => setTimeout(r, 1500));
+    await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 3500, stableWindowMs: 700 }, 6000).catch(() => {});
+    const fields = extractFormFields(goal);
+    const shouldSubmit = !/(?:jangan submit|tanpa submit|don't submit|no submit)/i.test(goal) && /(?:submit|kirim|login|masuk|sign\s*in)/i.test(goal);
+    appendLog(`📝 Filling form fields and selecting options automatically${shouldSubmit ? " and submitting..." : "..."}`);
+    const fillRes = await executeAgentAction({
+      action: "autofill_form_batch",
+      fields,
+      submitAfter: shouldSubmit,
+      autoPick: true,
+      message: shouldSubmit ? "Filling and submitting form" : "Filling form fields"
+    });
+    if (fillRes && fillRes.success && fillRes.filledCount > 0) {
+      const summaryStr = fields.map(f => `${f.identifier}: ${f.value.includes("@") ? f.value : (f.identifier === "password" ? "••••••••" : f.value)}`).join(", ") || "auto-filled choices";
+      addMessageToCurrentSession("assistant", `✅ Filled the form (${fillRes.filledCount} field(s): ${summaryStr})${shouldSubmit ? " and pressed Submit." : "."}`);
+    } else {
+      addMessageToCurrentSession("assistant", `⚠️ Could not fill the form: ${fillRes?.error || "no matching fields found on the page."}`);
+    }
+    hideStatusIndicator();
   }
 
   // Recovery parser natural language (fallback jika LLM jawab teks instruktif)
@@ -3549,7 +3608,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           resolved: false
         }
       });
-      appendLog(`🛡️ Menunggu konfirmasi user untuk aksi: ${resObj.action || "batch"}`, "WARN");
+      appendLog(`🛡️ Awaiting user confirmation for action: ${resObj.action || "batch"}`, "WARN");
     });
   }
 
@@ -3570,7 +3629,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           options: Array.isArray(options) && options.length > 0 ? options : ["Ya, lanjutkan", "Batalkan"]
         }
       });
-      appendLog(`🤔 Task dijeda — menunggu jawaban user: "${question}"`);
+      appendLog(`🤔 Task paused — awaiting user answer: "${question}"`);
     });
   }
 
@@ -3748,7 +3807,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         name: resObj.name || `artifact-${Date.now()}`,
         content: resObj.content || resObj.value || ""
       };
-      addMessageToCurrentSession("assistant", `📦 Artefak **${artifact.name}** berhasil dibuat.`, { skipClean: false, artifact });
+      addMessageToCurrentSession("assistant", `📦 Artifact **${artifact.name}** created successfully.`, { skipClean: false, artifact });
       if (activeTask) {
         activeTask.artifacts.push(artifact);
         persistTask();
@@ -3772,7 +3831,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
 
     // ── Eksekusi Modular Skills (skills.sh Registry) ──
     if (globalThis.PesatSkillRegistry?.findSkillForTool?.(actionType)) {
-      appendLog(`🛠️ Mengeksekusi skill '${actionType}'...`);
+      appendLog(`🛠️ Executing skill '${actionType}'...`);
       const skillParams = { ...resObj };
       delete skillParams.action;
       delete skillParams._toolName;
@@ -3824,14 +3883,14 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
       const isAlreadyOnGmail = currentTab && /mail\.google\.com/i.test(currentTab.url || "");
 
       if (!isAlreadyOnGmail) {
-        appendLog("Membuka halaman Gmail...");
-        showStatusIndicator("Membuka formulir Tulis Gmail...");
+        appendLog("Opening Gmail page...");
+        showStatusIndicator("Opening Gmail compose...");
         await sendToBackground({ action: "NAVIGATE_TAB", url: "https://mail.google.com/mail/u/0/#inbox?compose=new" });
         await new Promise(r => setTimeout(r, 4500));
         await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 3000, stableWindowMs: 600 }, 5000).catch(() => {});
       }
 
-      showStatusIndicator("Mengisi formulir email di Gmail...");
+      showStatusIndicator("Filling email form in Gmail...");
       const r = await sendToContentScript({
         type: "EXECUTE_ACTION",
         actionData: {
@@ -3865,7 +3924,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
 
       const isAlreadyOnSocial = currentTab && targetPlatform.domainCheck.test(currentTab.url || "");
       if (!isAlreadyOnSocial) {
-        appendLog(`Navigasi ke ${targetPlatform.name}...`);
+        appendLog(`Navigating to ${targetPlatform.name}...`);
         showStatusIndicator(`Membuka halaman ${targetPlatform.name}...`);
         await sendToBackground({ action: "NAVIGATE_TAB", url: targetPlatform.url });
         await new Promise(r => setTimeout(r, 4500));
@@ -3996,7 +4055,10 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         fileName: resObj.fileName,
         contentText: resObj.contentText,
         contentBase64: resObj.contentBase64,
-        mimeType: resObj.mimeType
+        mimeType: resObj.mimeType,
+        fields: resObj.fields,
+        submitAfter: resObj.submitAfter,
+        autoPick: resObj.autoPick
       };
     }
 
@@ -4155,7 +4217,7 @@ Respon HANYA dalam format JSON valid:
 
     // Jika targetDomain atau keyword belum lengkap diekstrak oleh regex, gunakan fast LLM extraction
     if (!targetDomain || !keyword) {
-      appendLog("🔍 Mengurai domain dan keyword target pencarian...");
+      appendLog("🔍 Parsing target domain and search keyword...");
       try {
         const parsePrompt = `Dari perintah pengguna berikut, ekstrak targetDomain dan keyword pencarian Google secara presisi dalam format JSON:\n"${goal}"\n\nJawab HANYA JSON: {"targetDomain": "domain.com", "keyword": "kata kunci"}`;
         const jsonRes = await callLLM("chat", parsePrompt);
@@ -4166,22 +4228,22 @@ Respon HANYA dalam format JSON valid:
     }
 
     if (!keyword) {
-      appendLog("⚠️ Keyword pencarian tidak terdeteksi dari perintah.", "ERROR");
-      addMessageToCurrentSession("assistant", "⚠️ Tidak dapat mendeteksi kata kunci (keyword) yang ingin dicari. Mohon sertakan format: *'Cek website domain.com dengan keyword kata kunci'*.");
+      appendLog("⚠️ Search keyword not detected from the command.", "ERROR");
+      addMessageToCurrentSession("assistant", "⚠️ Cannot detect the keyword to search. Please use the format: *'Check website domain.com with keyword keyword'.");
       setAgentRunning(false);
       hideStatusIndicator();
       return;
     }
 
     if (!targetDomain) {
-      appendLog("⚠️ Domain target tidak terdeteksi dari perintah.", "ERROR");
-      addMessageToCurrentSession("assistant", "⚠️ Tidak dapat mendeteksi nama website/domain target. Mohon sertakan nama website yang ingin dicek (contoh: *filterairgadingserpong.com*).");
+      appendLog("⚠️ Target domain not detected from the command.", "ERROR");
+      addMessageToCurrentSession("assistant", "⚠️ Cannot detect the target website/domain name. Please include the website name to check (e.g. *filterairgadingserpong.com*).");
       setAgentRunning(false);
       hideStatusIndicator();
       return;
     }
 
-    appendLog(`🚀 Memulai pengecekan SERP Google untuk keyword "${keyword}" (Mencari: ${targetDomain}, Max: ${maxPages} Halaman)...`);
+    appendLog(`🚀 Starting Google SERP check for keyword "${keyword}" (Searching: ${targetDomain}, Max: ${maxPages} Pages)...`);
     showStatusIndicator(`Mengecek SERP: "${keyword}"...`);
 
     let foundResult = null;
@@ -4190,14 +4252,14 @@ Respon HANYA dalam format JSON valid:
 
     for (let page = 1; page <= maxPages; page++) {
       if (shouldStopAgent) {
-        appendLog("🛑 Pengecekan SERP dihentikan oleh pengguna.", "WARN");
+        appendLog("🛑 SERP check stopped by user.", "WARN");
         break;
       }
 
       const startOffset = (page - 1) * 10;
       const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(keyword)}${startOffset > 0 ? `&start=${startOffset}` : ""}`;
 
-      appendLog(`🔎 [Halaman ${page}/${maxPages}] Membuka Google Search (Hasil #${startOffset + 1} - #${startOffset + 10})...`);
+      appendLog(`🔎 [Page ${page}/${maxPages}] Opening Google Search (Results #${startOffset + 1} - #${startOffset + 10})...`);
       showStatusIndicator(`Mengecek Google Halaman ${page}/${maxPages}...`);
 
       try {
@@ -4205,7 +4267,7 @@ Respon HANYA dalam format JSON valid:
         await new Promise(r => setTimeout(r, 1800));
         await sendToContentScript({ type: "WAIT_FOR_DOM_STABLE", maxWaitMs: 3500, stableWindowMs: 500 });
       } catch (navErr) {
-        appendLog(`Navigasi halaman ${page} terhambat: ${navErr.message}`, "WARN");
+        appendLog(`Page ${page} navigation stalled: ${navErr.message}`, "WARN");
       }
 
       // Ambil data SERP dari halaman
@@ -4221,7 +4283,7 @@ Respon HANYA dalam format JSON valid:
         page1TopResults = items.slice(0, 5);
       }
 
-      appendLog(`📄 Halaman ${page}: Berhasil membaca ${items.length} hasil organik.`);
+      appendLog(`📄 Page ${page}: Successfully read ${items.length} organic results.`);
 
       // Periksa apakah targetDomain ada di antara hasil pada halaman ini
       for (const item of items) {
@@ -4248,13 +4310,13 @@ Respon HANYA dalam format JSON valid:
       }
 
       if (foundResult) {
-        appendLog(`🎉 TARGET DITEMUKAN! Website "${targetDomain}" berada di Halaman ${foundResult.page}, Peringkat #${foundResult.absoluteRank}!`);
+        appendLog(`🎉 TARGET FOUND! Website "${targetDomain}" is on Page ${foundResult.page}, Rank #${foundResult.absoluteRank}!`);
         break;
       }
 
       // Jika belum ditemukan dan masih ada halaman berikutnya, beri informasi log dan lanjut
       if (page < maxPages) {
-        appendLog(`ℹ️ Halaman ${page} selesai diperiksa (${items.length} hasil). Website "${targetDomain}" belum ditemukan di sini. Otomatis melanjutkan ke Halaman ${page + 1}...`);
+        appendLog(`ℹ️ Page ${page} checked (${items.length} results). Website "${targetDomain}" not found here. Automatically continuing to Page ${page + 1}...`);
         await new Promise(r => setTimeout(r, 1000));
       }
     }
@@ -4363,13 +4425,13 @@ ${topCompStr}
     const isDirectSelection = !!params?.isDirectSelection;
 
     if (!replaceText) {
-      addMessageToCurrentSession("assistant", "⚠️ Mohon sertakan kata penggantinya. Format: *'Ganti kata yang ditandai menjadi \"rangkuman\"'* atau *'Ganti kata \"laporan\" menjadi \"rangkuman\"'*.");
+      addMessageToCurrentSession("assistant", "⚠️ Please provide the replacement word. Format: *'Replace the marked word with \"summary\"'* or *'Replace the word \"report\" with \"summary\"'*.");
       return;
     }
 
     setAgentRunning(true);
     showStatusIndicator(isDirectSelection ? `Mengganti kata yang ditandai menjadi "${replaceText}"...` : `Mengganti kata "${findText}" menjadi "${replaceText}"...`);
-    appendLog(`📝 Menjalankan penggantian kata: "${findText}" ➔ "${replaceText}"...`);
+    appendLog(`📝 Running word replacement: "${findText}" ➔ "${replaceText}"...`);
 
     try {
       // 1) Jika ini dokumen Google Docs, utamakan REST API (replaceAllText) — andal
@@ -4387,7 +4449,7 @@ ${topCompStr}
               matchCase: false
             });
             if (apiRes && apiRes.success && apiRes.occurrencesChanged > 0) {
-              appendLog(`✅ Teks berhasil diganti via Google Docs API → "${replaceText}" (${apiRes.occurrencesChanged} kemunculan).`);
+              appendLog(`✅ Text replaced via Google Docs API → "${replaceText}" (${apiRes.occurrencesChanged} occurrences).`);
               const reply = `### ✏️ Penggantian Teks Berhasil (Google Docs API)\n\n` +
                 `- **Teks Cari:** \`${findText}\`\n` +
                 `- **Teks Pengganti:** \`${replaceText}\`\n` +
@@ -4397,11 +4459,11 @@ ${topCompStr}
               return;
             }
             if (apiRes && apiRes.success && apiRes.occurrencesChanged === 0) {
-              appendLog(`⚠️ Teks "${findText}" tidak ditemukan di dokumen via API.`, "WARN");
-              addMessageToCurrentSession("assistant", `⚠️ **Tidak dapat mengganti:** teks \`${findText}\` tidak ditemukan di dokumen yang sedang dibuka.`);
+              appendLog(`⚠️ Text "${findText}" not found in document via API.`, "WARN");
+              addMessageToCurrentSession("assistant", `⚠️ **Cannot replace:** text \`${findText}\` not found in the currently open document.`);
               return;
             }
-            appendLog(`ℹ️ Google Docs API tidak tersedia (${apiRes?.error || "gagal"}), beralih ke mode DOM.`, "WARN");
+            appendLog(`ℹ️ Google Docs API unavailable (${apiRes?.error || "failed"}), switching to DOM mode.`, "WARN");
           }
         } catch (apiErr) {
           appendLog(`ℹ️ Abaikan jalur API, lanjut DOM: ${apiErr.message}`, "WARN");
@@ -4420,7 +4482,7 @@ ${topCompStr}
       });
 
       if (res && res.success) {
-        appendLog(`✅ Kata berhasil diganti menjadi "${replaceText}".`);
+        appendLog(`✅ Word replaced with "${replaceText}".`);
         const targetLabel = isDirectSelection || res.directSelection ? `Kata yang Ditandai (Seleksi Langsung)` : `\`${findText}\``;
         const reply = `### ✏️ Penggantian Kata Berhasil\n\n` +
           `- **Target Penggantian:** ${targetLabel}\n` +
@@ -4429,11 +4491,11 @@ ${topCompStr}
           `💡 _Kata telah langsung diganti secara presisi tanpa memunculkan dialog opsi._`;
         addMessageToCurrentSession("assistant", reply, { skipClean: true });
       } else {
-        appendLog(`⚠️ Penggantian kata gagal: ${res?.error || "Kata tidak ditemukan"}`, "WARN");
-        addMessageToCurrentSession("assistant", `⚠️ **Tidak dapat mengganti kata:**\n${res?.error || `Kata "${findText}" tidak ditemukan di dokumen yang sedang dibuka.`}`);
+        appendLog(`⚠️ Word replacement failed: ${res?.error || "Word not found"}`, "WARN");
+        addMessageToCurrentSession("assistant", `⚠️ **Cannot replace word:**\n${res?.error || `Word "${findText}" not found in the currently open document.`}`);
       }
     } catch (err) {
-      appendLog(`Error penggantian kata: ${err.message}`, "ERROR");
+      appendLog(`Word replacement error: ${err.message}`, "ERROR");
       addMessageToCurrentSession("assistant", `❌ Error while trying to replace the word: ${err.message}`);
     } finally {
       setAgentRunning(false);
@@ -4474,7 +4536,7 @@ ${topCompStr}
 
     setAgentRunning(true);
     showStatusIndicator(`Menuliskan "${insertText}" ke Google Docs...`);
-    appendLog(`✍️ Menuliskan langsung teks "${insertText}" ke Google Docs aktif...`);
+    appendLog(`✍️ Writing text "${insertText}" directly to the active Google Docs...`);
 
     try {
       const res = await sendToContentScript({
@@ -4487,15 +4549,15 @@ ${topCompStr}
       });
 
       if (res && res.success !== false) {
-        appendLog(`✅ Teks "${insertText}" berhasil dituliskan ke dokumen.`);
+        appendLog(`✅ Text "${insertText}" written to document.`);
         const reply = `### ✍️ Teks Berhasil Dituliskan\n\n` +
           `- **Teks:** \`${insertText}\`\n` +
           `- **Status:** Sukses disisipkan langsung ke posisi kursor dokumen aktif.\n\n` +
           `💡 _Teks dituliskan secara presisi tanpa merangkum atau mengubah isi dokumen lainnya._`;
         addMessageToCurrentSession("assistant", reply, { skipClean: true });
       } else {
-        appendLog(`⚠️ Penulisan teks gagal: ${res?.error || "Gagal menyisipkan teks"}`, "WARN");
-        addMessageToCurrentSession("assistant", `⚠️ **Tidak dapat menuliskan teks:**\n${res?.error || "Gagal menyisipkan teks ke Google Docs."}`);
+        appendLog(`⚠️ Text writing failed: ${res?.error || "Failed to insert text"}`, "WARN");
+        addMessageToCurrentSession("assistant", `⚠️ **Cannot write text:**\n${res?.error || "Failed to insert text into Google Docs."}`);
       }
     } catch (err) {
       appendLog(`Error penulisan langsung: ${err.message}`, "ERROR");
@@ -4552,22 +4614,22 @@ ${topCompStr}
     const destUrl = params?.url || "https://www.google.com";
     setAgentRunning(true);
     showStatusIndicator(`Membuka tab baru: ${destUrl}...`);
-    appendLog(`🌐 Membuka tab baru menuju: ${destUrl}...`);
+    appendLog(`🌐 Opening new tab to: ${destUrl}...`);
 
     try {
       const res = await sendToBackground({ action: "NEW_TAB", url: destUrl });
       if (res && res.success !== false) {
-        appendLog(`✅ Tab baru berhasil dibuka: ${destUrl}`);
+        appendLog(`✅ New tab opened: ${destUrl}`);
         const reply = `### 🌐 Tab Baru Berhasil Dibuka\n\n` +
           `- **URL Tujuan:** [${destUrl}](${destUrl})\n` +
           `- **Status:** Tab baru telah dibuka dan diarahkan ke tautan yang diperintahkan.`;
         addMessageToCurrentSession("assistant", reply, { skipClean: true });
       } else {
-        appendLog(`⚠️ Gagal membuka tab baru: ${res?.error || "Gagal membuka tab"}`, "WARN");
-        addMessageToCurrentSession("assistant", `⚠️ **Gagal membuka tab baru:**\n${res?.error || "Peramban menolak pembuatan tab baru."}`);
+        appendLog(`⚠️ Failed to open new tab: ${res?.error || "Failed to open tab"}`, "WARN");
+        addMessageToCurrentSession("assistant", `⚠️ **Failed to open new tab:**\n${res?.error || "Browser refused to create a new tab."}`);
       }
     } catch (err) {
-      appendLog(`Error buka tab baru: ${err.message}`, "ERROR");
+      appendLog(`Open new tab error: ${err.message}`, "ERROR");
       addMessageToCurrentSession("assistant", `❌ Error while opening a new tab: ${err.message}`);
     } finally {
       setAgentRunning(false);
@@ -4593,11 +4655,11 @@ ${topCompStr}
       const isClaudeTab = /buka\s+claude/i.test(userPrompt);
       const isGptTab = /buka\s+(?:chatgpt|gpt)/i.test(userPrompt);
       if (isClaudeTab) {
-        appendLog("🌐 Membuka tab baru Claude (claude.ai)...");
+        appendLog("🌐 Opening new Claude tab (claude.ai)...");
         await sendToBackground({ action: "NEW_TAB", url: "https://claude.ai" });
         await new Promise(r => setTimeout(r, 800));
       } else if (isGptTab) {
-        appendLog("🌐 Membuka tab baru ChatGPT (chatgpt.com)...");
+        appendLog("🌐 Opening new ChatGPT tab (chatgpt.com)...");
         await sendToBackground({ action: "NEW_TAB", url: "https://chatgpt.com" });
         await new Promise(r => setTimeout(r, 800));
       }
@@ -4614,14 +4676,14 @@ ${topCompStr}
       }
 
       appendLog(`🧠 Processing prompt content with AI Model (${promptToRun.slice(0, 60)}...)...`);
-      showStatusIndicator("Menghasilkan konten via AI Engine...");
+      showStatusIndicator("Generating content via AI Engine...");
       const rawResult = await callLLM("chat", `Bertindaklah sebagai asisten profesional. Tolong kerjakan dan hasilkan konten secara lengkap, mendalam, dan rapi sesuai instruksi berikut tanpa basa-basi pengantar atau penutup:\n\n${promptToRun}`);
 
       const cleanContent = sanitizeDocInsertText(rawResult);
 
       // 3. Alihkan kembali fokus ke tab Google Docs
-      appendLog("📄 Menemukan tab Google Docs aktif dan menyisipkan konten...");
-      showStatusIndicator("Menuliskan hasil ke Google Docs...");
+      appendLog("📄 Found active Google Docs tab and inserting content...");
+      showStatusIndicator("Writing results to Google Docs...");
       await sendToBackground({ action: "SWITCH_TAB", matchUrl: "docs.google.com/document" });
       await new Promise(r => setTimeout(r, 800));
 
@@ -4637,7 +4699,7 @@ ${topCompStr}
         await executeAgentAction({ action: "paste_text", value: cleanContent });
       }
 
-      appendLog("✅ Alur kerja lintas layanan sukses diselesaikan!");
+      appendLog("✅ Cross-service workflow completed successfully!");
       const reply = `### 🚀 Otomasi Lintas Layanan Berhasil Dijalankan\n\n` +
         `1. **Pemrosesan AI:** Prompt berhasil diproses secara cerdas.\n` +
         `2. **Penyisipan Dokumen:** Teks bersih telah langsung disalin dan ditempelkan ke tab Google Docs Anda.\n\n` +
@@ -4645,7 +4707,7 @@ ${topCompStr}
 
       addMessageToCurrentSession("assistant", reply, { skipClean: true });
     } catch (err) {
-      appendLog(`Error pada otomasi lintas layanan: ${err.message}`, "ERROR");
+      appendLog(`Cross-service automation error: ${err.message}`, "ERROR");
       addMessageToCurrentSession("assistant", `❌ Error in the cross-service workflow: ${err.message}`);
     } finally {
       setAgentRunning(false);
@@ -4687,7 +4749,7 @@ ${topCompStr}
     try {
       const savedMem = await globalThis.PesatMemoryEngine?.detectAndSaveExplicitMemory?.(userPrompt);
       if (savedMem) {
-        appendLog(`🧠 Memori tersimpan: "${savedMem.text}" (${savedMem.category})`);
+        appendLog(`🧠 Memory saved: "${savedMem.text}" (${savedMem.category})`);
       }
     } catch (_) {}
 
@@ -4819,11 +4881,11 @@ ${topCompStr}
       if (!targetSite.includes(".")) targetSite += ".com";
       if (!targetSite.startsWith("http")) targetSite = "https://" + targetSite;
 
-      appendLog(`🔄 Koreksi pengguna diterima: mengarahkan kembali ke ${targetSite}`);
+      appendLog(`🔄 User correction received: redirecting back to ${targetSite}`);
       showStatusIndicator(`Membuka kembali ${targetSite}...`);
       await navigateToUrl(targetSite);
       await new Promise(r => setTimeout(r, 1200));
-      addMessageToCurrentSession("assistant", `✅ Mengerti, saya telah mengarahkan kembali ke **${targetSite}**. Silakan beritahu apa yang ingin dicari atau dikerjakan di sini.`);
+      addMessageToCurrentSession("assistant", `✅ Understood, I have redirected back to **${targetSite}**. Please tell me what you'd like to search or do here.`);
       return;
     }
 
@@ -4914,13 +4976,24 @@ ${topCompStr}
     // multi-langkah / email / mutasi tetap diteruskan ke agent loop.
     const resolvedSourceUrl = resolveSourceUrlFromPrompt(userPrompt);
     if (needsAgentLoop && isBrowseAndSearchIntent && resolvedSourceUrl && !isMultiStepGoal && !isEmailIntent) {
-      appendLog("🧭 Mode hybrid: membaca sumber secara deterministik di tab latar (tautan ter-resolusi).");
+      appendLog("🧭 Hybrid mode: deterministically reading source in background tab (resolved link).");
       await runAnalysisFlow(userPrompt, contextSourcesToSend);
       return;
     }
 
     if (!needsAgentLoop) {
       await runAnalysisFlow(userPrompt, contextSourcesToSend);
+      return;
+    }
+
+    // ── INTERPUTSI DETERMINISTIK ISI-FORM (hindari planner LLM salah pilih email) ──
+    // Bila perintah adalah isi form dengan URL target non-Google, isi langsung tanpa planner.
+    const formUrlMatch = userPrompt.match(/https?:\/\/[^\s]+/i);
+    const isFormFillGoal = /(?:isi|fill|masukkan|input|autofill)\s+(?:seluruh\s+|semua\s+)?(?:form|formulir|field|kolom)/i.test(userPrompt);
+    const formTargetIsNonGoogle = formUrlMatch && !/(?:mail\.google\.com|gmail\.com|docs\.google\.com|google\.com)/i.test(formUrlMatch[0]);
+    if (isFormFillGoal && formTargetIsNonGoogle) {
+      appendLog("🧭 Deterministic mode: filling the form directly, skipping the LLM planner.");
+      await runDeterministicFormFill(formUrlMatch[0], userPrompt);
       return;
     }
 
@@ -4982,14 +5055,14 @@ ${topCompStr}
   async function runAnalysisFlow(userPrompt, contextSources = []) {
     // Guard: Jika ada proses analisis/task yang sedang berjalan, tolak pemanggilan ganda
     if (isAgentRunning) {
-      appendLog("⚠️ Analisis sudah berjalan, permintaan duplikat diabaikan.", "WARN");
+      appendLog("⚠️ Analysis already running, duplicate request ignored.", "WARN");
       return;
     }
     let workTabId = null;
     try {
       setAgentRunning(true);
       showStatusIndicator();
-      appendLog("Mengambil data halaman web untuk menjawab...");
+      appendLog("Fetching web page data to answer...");
 
       let activeTabInfo = null;
       try {
@@ -5021,8 +5094,8 @@ ${topCompStr}
           if (activeTask) activeTask.workTabId = workTabId;
 
           if (!activeAlreadyOnSource) {
-            appendLog(`🌐 Menelusuri sumber di tab aktif Anda: ${detectedSourceUrl}...`);
-            showStatusIndicator("Membuka sumber...");
+            appendLog(`🌐 Browsing source in your active tab: ${detectedSourceUrl}...`);
+            showStatusIndicator("Opening source...");
             try { await sendToBackground({ action: "NAVIGATE_TAB", url: detectedSourceUrl, targetTabId: workTabId }); } catch (_) {}
           }
 
@@ -5031,10 +5104,10 @@ ${topCompStr}
             workTabData = { text: srcRes.text.trim(), title: srcRes.title || "", url: srcRes.url || detectedSourceUrl };
             appendLog(`✓ Sumber siap: "${workTabData.title || detectedSourceUrl}" (${workTabData.text.length} karakter).`);
           } else {
-            appendLog(`⚠️ Tab sumber belum memuat teks yang cukup; melanjutkan dengan konteks lain.`, "WARN");
+            appendLog(`⚠️ Source tab has not loaded enough text; continuing with other context.`, "WARN");
           }
         } else {
-          appendLog(`⚠️ Tidak ada tab aktif yang bisa ditelusuri.`, "WARN");
+          appendLog(`⚠️ No active tab available to inspect.`, "WARN");
         }
       }
 
@@ -5046,14 +5119,14 @@ ${topCompStr}
           const content = f.content || f.metadata?.content || f.metadata?.extractedText || f.metadata?.fullText || "";
           return `[DOKUMEN TERLAMPIR #${idx + 1}: ${f.name || f.title || "File"} (${f.metadata?.sizeFormatted || f.type})]\n${content}`;
         }).join("\n\n");
-        appendLog(`📎 Mengikutsertakan ${attachedFiles.length} file terlampir ke dalam analisis: ${attachedFiles.map(f => f.name || f.title).join(", ")}`);
+        appendLog(`📎 Including ${attachedFiles.length} attached file(s) in the analysis: ${attachedFiles.map(f => f.name || f.title).join(", ")}`);
       }
 
       // Deteksi gambar terlampir untuk analisis multimodal visual
       const attachedImages = attachedFiles.filter(f => (f.type === "Image" || f.metadata?.fileType === "image" || /\.(png|jpe?g|webp|gif)$/i.test(f.name || f.title || "")) && (f.dataUrl || f.metadata?.dataUrl));
       const primaryImage = attachedImages.length > 0 ? (attachedImages[0].dataUrl || attachedImages[0].metadata?.dataUrl) : null;
       if (primaryImage) {
-        appendLog(`🖼️ Mempersiapkan gambar lampiran untuk analisis visual: ${attachedImages[0].name || attachedImages[0].title || "Gambar"}`);
+        appendLog(`🖼️ Preparing attachment image for visual analysis: ${attachedImages[0].name || attachedImages[0].title || "Image"}`);
       }
 
       // 1. Cek apakah ada referensi BrowserTab yang dilampirkan atau di-mention
@@ -5085,7 +5158,7 @@ ${topCompStr}
         for (const refTab of referencedTabs) {
           const tId = refTab.metadata?.tabId || refTab.tabId;
           const rTitle = refTab.metadata?.title || refTab.title || refTab.name || "Tab";
-          appendLog(`📖 Membaca konten referensi dari [${rTitle}]...`);
+          appendLog(`📖 Reading reference content from [${rTitle}]...`);
           try {
 	            const tabTextRes = await sendToBackground({
 	              action: "GET_READABLE_TEXT",
@@ -5100,10 +5173,10 @@ ${topCompStr}
 	              const subtabLabel = subtabMatch ? ` [Subtab: "${subtabMatch[1]}"]` : "";
 	              appendLog(`✓ Berhasil membaca ${tText.trim().length} karakter dari tab "${rTitle}"${subtabLabel}.`);
 	            } else {
-	              appendLog(`⚠️ Tab "${rTitle}" tidak memuat teks yang cukup.`, "WARN");
+	              appendLog(`⚠️ Tab "${rTitle}" does not contain enough text.`, "WARN");
 	            }
 	          } catch (e) {
-	            appendLog(`Gagal membaca tab "${rTitle}": ${e.message}`, "WARN");
+	            appendLog(`Failed to read tab "${rTitle}": ${e.message}`, "WARN");
 	          }
 	        }
 	        cleanText = cleanText.trim();
@@ -5121,9 +5194,9 @@ ${topCompStr}
 	          const subtabSource = webText.match(/Sumber Deteksi Tab:\s*(\S+)/i);
 	          if (subtabMatch) {
 	            const src = subtabSource ? ` via ${subtabSource[1]}` : "";
-	            appendLog(`📑 Dokumen Google Docs terdeteksi — Subtab aktif: "${subtabMatch[1]}"${src}.`);
+	            appendLog(`📑 Google Docs detected — Active subtab: "${subtabMatch[1]}"${src}.`);
 	            if (subtabMatch[1] === "Tidak terdeteksi") {
-	              appendLog("⚠️ ID tab aktif tidak ditemukan. Pastikan Anda sudah berpindah tab di Google Docs setelah halaman dimuat ulang, lalu coba lagi.", "WARN");
+	              appendLog("⚠️ Active tab ID not found. Make sure you have switched tabs in Google Docs after the page reloaded, then try again.", "WARN");
 	            }
 	          }
 	          appendLog(`✓ Berhasil membaca ${webText.trim().length} karakter dari tab aktif "${pageTitle}".`);
@@ -5543,7 +5616,7 @@ Instruksi:
 Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggunakan bahasa Indonesia yang baik dalam format Markdown yang rapi.`;
       }
 
-      showStatusIndicator("Menghasilkan respon instan...");
+      showStatusIndicator("Generating instant response...");
 
       let streamBubble = null;
       let streamContainer = null;
@@ -5646,8 +5719,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
 
       if (isDocsOutput && shouldAutoPasteDocs && (isDocsSite || isExplicitNavigateDocs)) {
         if (!isDocsSite && isExplicitNavigateDocs) {
-          appendLog("Membuka lembar kerja Google Docs baru di tab baru (docs.new)...");
-          showStatusIndicator("Membuka lembar kerja Google Docs...");
+          appendLog("Opening new Google Docs in a new tab (docs.new)...");
+          showStatusIndicator("Opening Google Docs sheet...");
           await sendToBackground({ action: "NAVIGATE_TAB", url: "https://docs.new", newTab: true });
 
           let docsReady = false;
@@ -5657,7 +5730,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
               const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
               if (tabs && tabs[0]?.url && tabs[0].url.includes("docs.google.com/document")) {
                 docsReady = true;
-                appendLog(`✓ Google Docs dimuat: ${tabs[0].title || "Dokumen"}`);
+                appendLog(`✓ Google Docs loaded: ${tabs[0].title || "Document"}`);
                 break;
               }
             } catch (_) {}
@@ -5672,20 +5745,20 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
 
         const isReplaceDocIntent = /(?:ganti\s+isi|timpa\s+isi|hapus\s+semua|bersihkan\s+dokumen|replace\s+all)/i.test(userPrompt);
 
-        showStatusIndicator("Menuliskan dokumen langsung ke Google Docs...");
-        appendLog("📄 Menuliskan dokumen ke Google Docs...");
+        showStatusIndicator("Writing document directly to Google Docs...");
+        appendLog("📄 Writing document to Google Docs...");
         const cleanInsert = sanitizeDocInsertText(aiReply);
         const docsWrite = await executeAgentAction({ action: "paste_text", value: cleanInsert, replace: isReplaceDocIntent, message: "Menulis hasil analisis ke Google Docs" });
         if (!docsWrite?.success) throw new Error(docsWrite?.error || "Penulisan Google Docs gagal atau tidak disetujui.");
 
-        addMessageToCurrentSession("assistant", `### 📝 Dokumen Berhasil Dibuat & Dituliskan ke Google Docs\n\n${aiReply}`, {
+        addMessageToCurrentSession("assistant", `### 📝 Document Created & Written to Google Docs\n\n${aiReply}`, {
           skipClean: true,
           artifact
         });
       } else if (isSpreadsheetTask && shouldAutoPasteSheets && !isSummarize && (isSheetsSite || isExplicitNavigateSheets)) {
         if (!isSheetsSite && isExplicitNavigateSheets) {
-          appendLog("Membuka lembar kerja Google Sheets baru di tab baru (sheets.new)...");
-          showStatusIndicator("Membuka lembar kerja Google Sheets...");
+          appendLog("Opening new Google Sheets in a new tab (sheets.new)...");
+          showStatusIndicator("Opening Google Sheets...");
           await sendToBackground({ action: "NAVIGATE_TAB", url: "https://sheets.new", newTab: true });
 
           // Polling hingga tab aktif ter-redirect ke docs.google.com/spreadsheets (maksimal 20 detik)
@@ -5696,7 +5769,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
               const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
               if (tabs && tabs[0]?.url && tabs[0].url.includes("docs.google.com/spreadsheets")) {
                 sheetsReady = true;
-                appendLog(`✓ Google Sheets dimuat: ${tabs[0].title || "Spreadsheet"}`);
+                appendLog(`✓ Google Sheets loaded: ${tabs[0].title || "Spreadsheet"}`);
                 break;
               }
             } catch (_) {}
@@ -5730,7 +5803,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
               });
               if (apiRes && apiRes.success) {
                 filledViaApi = true;
-                appendLog(`✅ ${apiRes.message || "Data spreadsheet berhasil dimodifikasi via Google Sheets API!"}`);
+                appendLog(`✅ ${apiRes.message || "Spreadsheet data modified via Google Sheets API!"}`);
               }
             }
           } catch (apiErr) {
@@ -5739,8 +5812,8 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         }
 
         if (!filledViaApi) {
-          showStatusIndicator("Mengisikan data tabel langsung ke Google Sheets...");
-          appendLog("📊 Mengisikan baris & kolom data langsung ke Google Sheets...");
+          showStatusIndicator("Filling table data directly into Google Sheets...");
+          appendLog("📊 Filling rows & columns of data directly into Google Sheets...");
 
           const fillResult = await executeAgentAction({
             action: "fill_spreadsheet_grid",
@@ -5751,7 +5824,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
           });
 
           if (!fillResult.success) {
-            appendLog(`⚠️ Peringatan pengisian sel: ${fillResult.error || "Gagal mengisi sel otomatis"}`, "WARN");
+            appendLog(`⚠️ Cell fill warning: ${fillResult.error || "Failed to auto-fill cell"}`, "WARN");
           }
         }
 
@@ -5766,18 +5839,18 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         isArticle ||
         /(?:tulis|buatkan|ketik|tempel|masukkan|isi|paragraf|artikel|draf|tabel|susun|ke docs|di docs)/i.test(userPrompt)
       )) {
-        showStatusIndicator("Menuliskan teks langsung ke Google Dokumen / editor...");
-        appendLog("📄 Menuliskan teks langsung ke Google Dokumen / Lembar kerja aktif...");
+        showStatusIndicator("Writing text directly to Google Docs / editor...");
+        appendLog("📄 Writing text directly to the active Google Doc / sheet...");
         const cleanInsert = sanitizeDocInsertText(aiReply);
         const editorWrite = await executeAgentAction({ action: "paste_text", value: cleanInsert, message: "Menulis teks ke editor eksternal" });
         if (!editorWrite?.success) throw new Error(editorWrite?.error || "Penulisan editor gagal atau tidak disetujui.");
-        addMessageToCurrentSession("assistant", `### 📝 Teks Berhasil Dibuat & Dituliskan ke Dokumen\n\n${aiReply}`, {
+        addMessageToCurrentSession("assistant", `### 📝 Text Created & Written to Document\n\n${aiReply}`, {
           skipClean: true,
           artifact
         });
       } else if ((isSocialSite || userSocialFillIntent) && (isSocialThread || userSocialFillIntent)) {
         showStatusIndicator("Menempelkan draf ke postingan media sosial...");
-        appendLog("📱 Menempelkan teks draf ke postingan media sosial aktif...");
+        appendLog("📱 Pasting draft text into the active social media post...");
         const editorWrite = await executeAgentAction({ action: "post_social", text: aiReply, message: "Menulis draf ke media sosial" });
         if (!editorWrite?.success) throw new Error(editorWrite?.error || "Penulisan postingan gagal atau tidak disetujui.");
         addMessageToCurrentSession("assistant", `### 📱 Thread Media Sosial Berhasil Dibuat & Diisikan ke Postingan\n\n${aiReply}`, {
@@ -5813,10 +5886,10 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         }
         addMessageToCurrentSession("assistant", formattedReply, { skipClean: true, artifact });
       }
-      appendLog("✅ Jawaban berhasil disajikan.");
+      appendLog("✅ Answer delivered successfully.");
     } catch (err) {
       if (err.name === "AbortError" || shouldStopAgent) {
-        appendLog("🛑 Analisis dibatalkan.");
+        appendLog("🛑 Analysis cancelled.");
       } else {
         appendLog(`Error: ${err.message}`, "ERROR");
         addMessageToCurrentSession("assistant", `❌ Error: ${err.message}`);
@@ -5848,7 +5921,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         : /santai|bebas|nonformal|akrab/i.test(goal)
           ? "santai, akrab, dan bebas"
           : "jelas dan sesuai konteks";
-      showStatusIndicator("Menyusun isi email...");
+      showStatusIndicator("Composing email body...");
       appendLog(`✍️ Menyusun isi email (${tone})...`);
       const composePrompt = `Tulis HANYA isi/body sebuah email ${tone}.
 
@@ -5862,7 +5935,7 @@ ${emailParams.subject && emailParams.subject !== "Pesan Baru" ? `[SUBJEK]\n${ema
         const generated = await callLLM("chat", composePrompt);
         if (generated && generated.trim().length > 0) body = generated.trim();
       } catch (e) {
-        appendLog(`Gagal menyusun isi via AI: ${e.message}`, "WARN");
+        appendLog(`Failed to compose content via AI: ${e.message}`, "WARN");
       }
     }
 
@@ -5936,7 +6009,7 @@ ${emailParams.subject && emailParams.subject !== "Pesan Baru" ? `[SUBJEK]\n${ema
 	              src.metadata.extractedText = tabRes.text.slice(0, 6000);
 		              const subtabMatch = tabRes.text.match(/Subtab Aktif Saat Ini:\s*"([^"]+)"/i);
 		              const subtabLabel = subtabMatch ? ` [Subtab: "${subtabMatch[1]}"]` : "";
-		              appendLog(`📖 Referensi "${src.title || src.name}" berhasil diekstrak di latar belakang (${src.metadata.extractedText.length} karakter)${subtabLabel}.`);
+		              appendLog(`📖 Reference "${src.title || src.name}" extracted in the background (${src.metadata.extractedText.length} characters)${subtabLabel}.`);
 		            }
 	          } catch (e) {}
 	        }
@@ -5951,7 +6024,7 @@ ${emailParams.subject && emailParams.subject !== "Pesan Baru" ? `[SUBJEK]\n${ema
 
 	      // 1.4.0. FAST PATH EMAIL: buat/isi/kirim email ditangani lebih dulu sebelum routing analisis/draf/form.
 	      if (detectEmailIntent(goal)) {
-	        appendLog("📧 Instruksi email terdeteksi. Mengalihkan ke Email Automation Engine...");
+	        appendLog("📧 Email instruction detected. Routing to Email Automation Engine...");
 	        await runEmailFlow(goal, contextSources);
 	        return;
 	      }
@@ -5975,7 +6048,7 @@ ${emailParams.subject && emailParams.subject !== "Pesan Baru" ? `[SUBJEK]\n${ema
       ) && !/(?:klik|click|isi\s+form|login|register|checkout|pesan|scroll|ketik\s+di|input\s+ke|centang|select|tekan)/i.test(goal));
 
       if (isAnalysisOrSummaryGoal) {
-        appendLog("🔍 Mengalihkan ke Intelligence & Analysis Engine...");
+							        appendLog("🔍 Routing to Intelligence & Analysis Engine...");
         setAgentRunning(false);
         if (activeTask) {
           activeTask.status = "COMPLETED";
@@ -6016,8 +6089,8 @@ ${emailParams.subject && emailParams.subject !== "Pesan Baru" ? `[SUBJEK]\n${ema
       const targetOtherSource = (contextSources || []).find(s => s.type === "BrowserTab" && s.metadata?.tabId);
 
       if (storedSettings.autoPasteDocs && isCopywritingTask && isEditorTab(activeTabInfo)) {
-        appendLog(`📝 Tab editor dokumen (${activeTabInfo.title}) aktif. Menyusun draf dan menulis langsung ke dokumen...`);
-        showStatusIndicator("Menyusun teks & menulis ke Google Docs...");
+	        appendLog(`📝 Document editor tab (${activeTabInfo.title}) active. Composing draft and writing directly to the document...`);
+        showStatusIndicator("Composing text & writing to Google Docs...");
         const aiText = await callLLM("chat", `Tolong tuliskan konten/teks berikut secara lengkap, mendalam, dan rapi sesuai instruksi:\n\n[PERINTAH]\n${goal}\n\n[KONTEKS DOKUMEN]\nJudul: ${activeTabInfo.title || ""}\nURL: ${activeTabInfo.url || ""}`);
         if (aiText) {
           const writeResult = await executeAgentAction({ action: "paste_text", value: aiText, message: "Menulis konten ke dokumen eksternal" });
@@ -6027,7 +6100,7 @@ ${emailParams.subject && emailParams.subject !== "Pesan Baru" ? `[SUBJEK]\n${ema
             name: `Draf-${(goal || "Dokumen").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`,
             content: aiText
           };
-          addMessageToCurrentSession("assistant", `### 📝 Teks Berhasil Dituliskan ke Dokumen\n\n${aiText}`, {
+          addMessageToCurrentSession("assistant", `### 📝 Text Written to Document\n\n${aiText}`, {
             skipClean: true,
             artifact
           });
@@ -6036,12 +6109,12 @@ ${emailParams.subject && emailParams.subject !== "Pesan Baru" ? `[SUBJEK]\n${ema
         }
       } else if (!isSocialPostingGoal && targetEditorSource && targetEditorSource.metadata?.tabId) {
         showStatusIndicator();
-        appendLog(`🔄 Berpindah ke tab editor: ${targetEditorSource.name} (tabId: ${targetEditorSource.metadata.tabId})`);
+        appendLog(`🔄 Switching to editor tab: ${targetEditorSource.name} (tabId: ${targetEditorSource.metadata.tabId})`);
         await sendToBackground({ action: "SWITCH_TAB", tabId: targetEditorSource.metadata.tabId });
         await new Promise(r => setTimeout(r, 600));
       } else if (!isCopywritingTask && !isSocialPostingGoal && targetOtherSource && targetOtherSource.metadata?.tabId) {
         showStatusIndicator();
-        appendLog(`🔄 Berpindah otomatis ke tab target: ${targetOtherSource.name} (tabId: ${targetOtherSource.metadata.tabId})`);
+        appendLog(`🔄 Automatically switching to target tab: ${targetOtherSource.name} (tabId: ${targetOtherSource.metadata.tabId})`);
         await sendToBackground({ action: "SWITCH_TAB", tabId: targetOtherSource.metadata.tabId });
         await new Promise(r => setTimeout(r, 600));
         sendToContentScript({
@@ -6053,7 +6126,7 @@ ${emailParams.subject && emailParams.subject !== "Pesan Baru" ? `[SUBJEK]\n${ema
       // ══ FAST PATH FOR POSTING DRAFT TO SOCIAL MEDIA (X / Twitter, Threads, LinkedIn) ══
       if (isSocialPostingGoal) {
         const targetPlatform = detectTargetSocialPlatform(goal, activeTabInfo?.url || "");
-        appendLog(`📱 Mendeteksi instruksi posting ke ${targetPlatform.name}...`);
+        appendLog(`📱 Detected post instruction to ${targetPlatform.name}...`);
         showStatusIndicator(`Mempersiapkan materi postingan untuk ${targetPlatform.name}...`);
 
         let draftReferenceText = "";
@@ -6087,7 +6160,7 @@ ATURAN KETAT:
 
         const extractedPostText = await callLLM("chat", tweetExtractorPrompt);
         if (extractedPostText && extractedPostText.trim().length > 5) {
-          appendLog(`🚀 Membuka ${targetPlatform.name} dan mengisi postingan (${extractedPostText.trim().length} karakter)...`);
+          appendLog(`🚀 Opening ${targetPlatform.name} and filling the post (${extractedPostText.trim().length} characters)...`);
           showStatusIndicator(`Membuka ${targetPlatform.name} & mengisi postingan...`);
 
           const socialRes = await executeAgentAction({
@@ -6172,7 +6245,7 @@ ATURAN KETAT:
 
 						      const isDocsGoal = isDocsSiteGoal || /(?:(?:google|goole|g)\s*docs?|docs\.new|docs\.google\.com|gdocs?|(?:buka|ke|di|dalam|pada|simpan\s+ke|isi\s+ke|masukkan\s+ke|tulis\s+ke)\s+(?:(?:google|goole|g)\s*)?docs?|(?:google|goole)\s*dokumen|lembar\s*kerja\s*dokumen|editor\s*dokumen)/i.test(goal);
 						      if (isDocsGoal && !isMultiStepGoal && !/(?:spreadsheet|sheets\.new|google sheets?)/i.test(goal)) {
-					        appendLog("📄 Mengalihkan ke Document Writing Engine (Google Docs)...");
+					        appendLog("📄 Routing to Document Writing Engine (Google Docs)...");
 					        setAgentRunning(false);
 					        if (activeTask) {
 					          activeTask.status = "COMPLETED";
@@ -6185,7 +6258,7 @@ ATURAN KETAT:
 
 						      const isSpreadsheetGoal = isSheetsSiteGoal || /(?:spreadsheet|google sheets?|sheets\.new|ke dalam spreadsheet|ke spreadsheet|di spreadsheet|isi spreadsheet|tabel spreadsheet|buatkan tabel|buat tabel|tabel komparasi|tabel data|data penjualan)/i.test(goal);
 						      if (isSpreadsheetGoal) {
-						        appendLog("📊 Mengalihkan ke Spreadsheet Automation Engine...");
+						        appendLog("📊 Routing to Spreadsheet Automation Engine...");
 						        setAgentRunning(false);
 						        if (activeTask) {
 						          activeTask.status = "COMPLETED";
@@ -6202,7 +6275,7 @@ ATURAN KETAT:
 							        /\?/.test(goal)
 							      ) && !/(?:klik|click|isi\s+form|login|register|checkout|pesan|scroll|ketik|input|buka\s+https?:\/\/)/i.test(goal);
 							      if (isGeneralAnalysisGoal) {
-							        appendLog("🔍 Mengalihkan ke Intelligence & Analysis Engine...");
+							        appendLog("🔍 Routing to Intelligence & Analysis Engine...");
 							        setAgentRunning(false);
 							        if (activeTask) {
 							          activeTask.status = "COMPLETED";
@@ -6229,7 +6302,7 @@ ATURAN KETAT:
 		          addMessageToCurrentSession("assistant", `✅ Berhasil membuka [${dest}](${dest})`);
 		          await finalizeTask("done", `✅ Berhasil membuka ${dest}`);
 		        } else {
-		          addMessageToCurrentSession("assistant", `❌ Gagal membuka ${dest}: ${navRes?.error || "Gagal navigasi tab"}`);
+		        addMessageToCurrentSession("assistant", `❌ Failed to open ${dest}: ${navRes?.error || "Tab navigation failed"}`);
 		          await finalizeTask("error", `Gagal membuka ${dest}`);
 		        }
 		        return;
@@ -6298,8 +6371,8 @@ ATURAN KETAT:
 
 				        if (extractedFields.length > 0) {
 				          const shouldSubmit = !/(?:jangan submit|tanpa submit|don't submit|no submit)/i.test(goal) && /(?:login|masuk|sign\s*in|submit|kirim)/i.test(goal);
-				          showStatusIndicator("Mengisi formulir web...");
-				          appendLog(`📝 Mengisi ${extractedFields.length} field formulir secara otomatis${shouldSubmit ? " dan menekan tombol submit..." : "..."}`);
+				          showStatusIndicator("Filling web form...");
+				          appendLog(`📝 Filling ${extractedFields.length} form field(s) automatically${shouldSubmit ? " and pressing submit..." : "..."}`);
 					          const fillRes = await executeAgentAction({
 					            action: "autofill_form_batch",
 					            fields: extractedFields,
@@ -6316,7 +6389,7 @@ ATURAN KETAT:
 				              await finalizeTask("done", `Berhasil mengisi formulir web (${fillRes.filledCount} field).`);
 				              return;
 				            } else {
-				              appendLog("⏳ Menunggu proses formulir (1.8s) untuk memproses instruksi lanjutan...");
+				              appendLog("⏳ Waiting for form processing (1.8s) to handle the follow-up instruction...");
 				              await new Promise(r => setTimeout(r, 1800));
 				            }
 				          }
@@ -6362,7 +6435,7 @@ ATURAN KETAT:
 		            showStatusIndicator(`Mencari "${rawSearchQuery}" di Google...`);
 		            await navigateToUrl(googleUrl);
 		            await new Promise(r => setTimeout(r, 1200));
-		            addMessageToCurrentSession("assistant", `🔍 Telah membuka pencarian Google untuk: **${rawSearchQuery}**`);
+		            addMessageToCurrentSession("assistant", `🔍 Opened Google search for: **${rawSearchQuery}**`);
 		            await finalizeTask("done", `Pencarian Google selesai.`);
 		            return;
 		          } else {
@@ -6371,7 +6444,7 @@ ATURAN KETAT:
 		            const siteSearchUrl = `https://${hostName}/search?q=${encodeURIComponent(rawSearchQuery)}`;
 		            await navigateToUrl(siteSearchUrl);
 		            await new Promise(r => setTimeout(r, 1500));
-		            addMessageToCurrentSession("assistant", `🔍 Telah membuka hasil pencarian di **${hostName}** untuk: **${rawSearchQuery}**`);
+		            addMessageToCurrentSession("assistant", `🔍 Opened search results on **${hostName}** for: **${rawSearchQuery}**`);
 		            await finalizeTask("done", `Pencarian di ${hostName} selesai.`);
 		            return;
 		          }
@@ -6395,12 +6468,12 @@ ATURAN KETAT:
         refreshTaskCard();
         await persistTask();
 
-        appendLog(`🚀 Mengeksekusi otomatisasi langsung: ${fastAction.message || fastAction.action}`);
+	        appendLog(`🚀 Executing direct automation: ${fastAction.message || fastAction.action}`);
         const execRes = await executeAgentAction(fastAction);
         if (execRes && execRes.success) {
           (activeTask.plan || []).forEach(s => s.status = "done");
           refreshTaskCard();
-          await finalizeTask("done", execRes.message || "Tugas berhasil diselesaikan secara tuntas.");
+          await finalizeTask("done", execRes.message || "Task completed successfully.");
           return;
         }
       }
@@ -6408,7 +6481,7 @@ ATURAN KETAT:
       // Initial planner hanya untuk tugas kompleks; direct task tetap tanpa round-trip tambahan.
       const usePlanner = globalThis.PesatAgentEngine?.shouldUsePlanner?.(goal, contextSources) === true;
       if (usePlanner) {
-        showStatusIndicator("Menganalisis...");
+        showStatusIndicator("Analyzing...");
         const availableTools = getAvailableAgentTools();
         const plannerReply = await callLLM("plan", `Susun rencana eksekusi tervalidasi untuk tujuan berikut:\n${goal}\n\nTool tersedia: ${availableTools.map(t => t.function?.name).filter(Boolean).join(", ")}`);
         const plannerData = globalThis.PesatAgentEngine.parseStrictJSON(String(plannerReply), "rencana");
@@ -6441,7 +6514,7 @@ ATURAN KETAT:
       await executeTaskLoop();
     } catch (err) {
       if (err.name === "AbortError" || shouldStopAgent) {
-        appendLog("🛑 Task dibatalkan oleh pengguna.");
+	        appendLog("🛑 Task cancelled by user.");
         if (activeTask) {
           activeTask.status = "CANCELLED";
           refreshTaskCard();
@@ -6499,8 +6572,8 @@ ATURAN KETAT:
       // Fast path untuk Google Docs saat subtask meminta membuat / menyisipkan tabel
       const isDocsPage = pageData?.url?.includes("docs.google.com") && !pageData?.url?.includes("/spreadsheets");
       if (storedSettings.autoPasteDocs && isDocsPage && /(?:tabel|table|sisipkan.*tabel|buat.*tabel|isi.*tabel)/i.test(sub.description || activeTask.goal)) {
-        appendLog(`📄 Menyusun tabel terstruktur dan menuliskan langsung ke Google Docs...`);
-        showStatusIndicator("Menuliskan tabel ke Google Docs...");
+        appendLog(`📄 Composing structured table and writing directly to Google Docs...`);
+        showStatusIndicator("Writing table to Google Docs...");
         const tablePrompt = `Tolong buatkan dokumen dengan tabel yang rapi, lengkap, dan berbobot sesuai permintaan berikut:\n\n[PERINTAH]\n${activeTask.goal}\n\nSubtask: ${sub.description}\n\nFormat tabel dalam Markdown table standar dengan header jelas dan baris data lengkap.`;
         const tableContent = await callLLM("chat", tablePrompt);
         if (tableContent) {
@@ -6565,7 +6638,7 @@ ${sub.description}
       } catch (err) {
         if (err.name === "AbortError" || shouldStopAgent) break;
         appendLog(`Navigator error: ${err.message}`, "ERROR");
-        addMessageToCurrentSession("assistant", `❌ Gagal menghubungi AI Engine: ${err.message}`);
+	        addMessageToCurrentSession("assistant", `❌ Failed to reach AI Engine: ${err.message}`);
         await finalizeTask("failed", `Gagal menghubungi AI Engine: ${err.message}`);
         return;
       } finally {
@@ -6582,7 +6655,7 @@ ${sub.description}
       // 1. Cek Native Tool Calls (OpenAI standard format)
       if (reply && reply.tool_calls && Array.isArray(reply.tool_calls) && reply.tool_calls.length > 0) {
         if (reply.tool_calls.length > 1) {
-          appendLog(`⚠️ Model mengembalikan ${reply.tool_calls.length} tool calls sekaligus. Menjalankan hanya yang pertama per step (protokol satu-aksi).`, "WARN");
+          appendLog(`⚠️ Model returned ${reply.tool_calls.length} tool calls at once. Running only the first per step (single-action protocol).`, "WARN");
         }
         const tc = reply.tool_calls[0];
         const fnName = tc.function?.name;
@@ -6655,14 +6728,14 @@ ${sub.description}
       if (stepNum > activeTask.maxReActSteps) {
         if (stepNum <= 20) {
           const extendChoice = await requestAskUser(
-            `Tugas telah berjalan ${stepNum - 1} langkah. Apakah Anda ingin mengizinkan 8 langkah lanjutan agar tugas selesai tuntas?`,
-            ["Ya, Lanjutkan 8 Langkah Lagi", "Selesai Sekarang"]
+            `The task has run ${stepNum - 1} steps. Allow 8 more steps to finish the task?`,
+            ["Yes, continue 8 more steps", "Finish now"]
           );
-          if (extendChoice && extendChoice.includes("Lanjutkan")) {
+          if (extendChoice && extendChoice.includes("continue")) {
             activeTask.maxReActSteps += 8;
-            appendLog(`User mengizinkan penambahan langkah (Batas baru: ${activeTask.maxReActSteps} langkah). Melanjutkan...`);
+	            appendLog(`User allowed adding steps (New limit: ${activeTask.maxReActSteps} steps). Continuing...`);
           } else {
-            appendLog("Pengguna menghentikan tugas pada batas langkah.", "INFO");
+            appendLog("User stopped the task at the step limit.", "INFO");
             await finalizeTask("cancelled", "Tugas dihentikan sebelum hasil dapat diverifikasi.");
             return;
           }
@@ -6682,7 +6755,7 @@ ${sub.description}
         // Anti-Loop Khusus Komposer Media Sosial / Editor: Cegah pengetikan berulang pada elemen textbox yang sama
         if (isTypingAction && isSocialPage) {
           if (activeTask._socialComposerFilled) {
-            appendLog(`📱 Komposer media sosial sudah terisi. Menyelesaikan tugas draf postingan.`, "INFO");
+            appendLog(`📱 Social media composer is filled. Completing the post draft task.`, "INFO");
             (activeTask.plan || []).forEach(p => { p.status = "done"; });
             refreshTaskCard();
             await persistTask();
@@ -6697,7 +6770,7 @@ ${sub.description}
           const typeSig = `${resObj.elementId || resObj.targetText || ""}::${String(resObj.text || resObj.value || "").length}`;
           if (!activeTask._filledTextboxSigs) activeTask._filledTextboxSigs = new Set();
           if (activeTask._filledTextboxSigs.has(typeSig)) {
-            appendLog("Input yang sama terdeteksi berulang. Mencoba strategi lain.", "WARN");
+            appendLog("Same input detected repeatedly. Trying a different strategy.", "WARN");
             await tryReplanOrFail(sub, "Input identik terdeteksi berulang tanpa bukti hasil.");
             continue;
           }
@@ -6712,7 +6785,7 @@ ${sub.description}
                                       (pageData.reducedDOM || "").includes("Subject");
 
           if (isTargetingCompose && isComposeDialogOpen) {
-            appendLog(`✉️ Formulir Compose Gmail sudah terbuka di layar. Mengarahkan agen langsung mengisi penerima, subjek, & pesan.`, "INFO");
+	            appendLog(`✉️ Gmail compose form is open on screen. Directing the agent to fill recipient, subject, & message.`, "INFO");
             const goalText = activeTask.goal || "";
             const toM = goalText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
             const subM = goalText.match(/(?:subjek|subject|judul)\s*[:=]?\s*[`"']?([^`"'\n,]+?)(?=\s+(?:pesan|isi|body|dengan isi)|[`"']|$)/i);
@@ -6737,7 +6810,7 @@ ${sub.description}
         }
 
         if (activeTask.repeatActionCount >= 3) {
-          appendLog(`Aksi "${resObj.action}" terdeteksi berulang tanpa bukti hasil. Mencoba strategi lain.`, "WARN");
+          appendLog(`Action "${resObj.action}" detected repeatedly without evidence of result. Trying a different strategy.`, "WARN");
           activeTask.repeatActionCount = 0;
           activeTask.lastActionSig = null;
           await tryReplanOrFail(sub, `Aksi ${resObj.action} berulang tiga kali tanpa bukti hasil.`);
@@ -6768,7 +6841,7 @@ ${sub.description}
           )
         );
         if (tabSource && tabSource.metadata?.tabId) {
-          appendLog(`💡 Intent recovery: Mendeteksi aksi switch_tab ke ${tabSource.name} (tabId: ${tabSource.metadata.tabId})`);
+          appendLog(`💡 Intent recovery: Detected switch_tab action to ${tabSource.name} (tabId: ${tabSource.metadata.tabId})`);
           resObj = { action: "switch_tab", tabId: tabSource.metadata.tabId, matchTitle: tabSource.name };
         }
       }
@@ -6782,7 +6855,7 @@ ${sub.description}
 
         if (isEmailAction) {
           const emailParams = extractEmailParameters(activeTask.goal || sub.description || "");
-          appendLog(`📧 Mengonversi draf ke aksi automasi email fisik ke ${emailParams.to || "penerima"}...`);
+	          appendLog(`📧 Converting draft to physical email automation action to ${emailParams.to || "recipient"}...`);
           resObj = {
             action: "send_email",
             to: emailParams.to,
@@ -6791,7 +6864,7 @@ ${sub.description}
             sendNow: /(?:kirim sekarang|langsung kirim|auto send)/i.test(activeTask.goal)
           };
         } else if (isSocialAction) {
-          appendLog(`📱 Mengonversi draf ke aksi postingan fisik di Twitter/X / Media Sosial...`);
+	          appendLog(`📱 Converting draft to physical post action on Twitter/X / Social Media...`);
           resObj = {
             action: "post_social",
             text: reply || activeTask.goal,
@@ -6804,7 +6877,7 @@ ${sub.description}
             ? `Tabel-${(activeTask.goal || "Data").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.csv`
             : `Draf-${(activeTask.goal || "Copywriting").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.docx`;
 
-          appendLog(`✍️ Model berhasil menghasilkan ${isTable ? "tabel data riset/komparasi" : "draf tulisan"} (${reply.length} karakter).`);
+	          appendLog(`✍️ Model successfully generated ${isTable ? "research/comparison data table" : "written draft"} (${reply.length} characters).`);
           const artifact = {
             artifactType: artType,
             name: artTitle,
@@ -6825,7 +6898,7 @@ ${sub.description}
           if (storedSettings.autoPasteDocs && isExplicitWriteIntent) {
             if (isSheets && !activeTask._sheetWritten) {
               activeTask._sheetWritten = true;
-              showStatusIndicator("Mengisikan data tabel ke Google Sheets...");
+              showStatusIndicator("Filling table data into Google Sheets...");
               await executeAgentAction({ action: "fill_spreadsheet_grid", value: reply });
             } else if (isDocs && !activeTask._articleWritten) {
               activeTask._articleWritten = true;
@@ -6872,7 +6945,7 @@ ${sub.description}
       }
 
       // 5. Eksekusi aksi + structured receipt
-      showStatusIndicator("Menjalankan tindakan...");
+      showStatusIndicator("Running action...");
       const currentActionType = resObj?.action || resObj?.type || (Array.isArray(resObj?.actions) ? "batch" : "unknown");
       appendLog(`▶ [Step ${stepNum}] ${(Array.isArray(resObj.actions) ? `batch(${resObj.actions.length})` : currentActionType)} ${resObj.elementId ? `[${resObj.elementId}]` : ""} ${resObj.url ? resObj.url : ""}`);
       const receiptStartedAt = new Date().toISOString();
@@ -6914,7 +6987,7 @@ ${sub.description}
       } else {
         activeTask._noProgressSteps = (activeTask._noProgressSteps || 0) + 1;
         if (activeTask._noProgressSteps >= 6) {
-          appendLog("Terlalu banyak tindakan gagal berturut-turut tanpa kemajuan.", "WARN");
+          appendLog("Too many consecutive failed actions without progress.", "WARN");
           await finalizeTask("failed", "Tugas dihentikan agar tidak berulang: beberapa tindakan terakhir tidak berhasil. Coba lagi dengan instruksi yang lebih spesifik.");
           return;
         }
@@ -6949,7 +7022,7 @@ ${sub.description}
             action: execActionType,
             elementId: resObj.elementId || (Array.isArray(resObj.actions) ? resObj.actions.map(a => a.elementId).join(",") : ""),
             description: resObj.message || exec.message || `Mengeksekusi ${execActionType}`,
-            status: exec.success ? "Selesai" : "Gagal",
+            status: exec.success ? "Completed" : "Failed",
             screenshot: thumbDataUrl
           },
           validator: null
@@ -6975,7 +7048,7 @@ ${sub.description}
         const pendingSubs = (activeTask.plan || []).filter(s => s.id !== sub.id && s.status === "pending");
         const isTrivialPending = pendingSubs.every(s => /tunggu|verifikasi|konfirmasi|selesai|cek/i.test(s.description || ""));
         if (pendingSubs.length > 0 && stepNum <= 2 && !isTrivialPending) {
-          appendLog(`⚠️ Navigator memanggil 'finish' terlalu dini pada langkah ke-${stepNum} (masih ada ${pendingSubs.length} subtask pending). Melanjutkan subtask.`, "WARN");
+          appendLog(`⚠️ Navigator called 'finish' too early at step ${stepNum} (still ${pendingSubs.length} pending subtasks). Continuing subtasks.`, "WARN");
           activeTask.scratchpad.push({
             step: stepNum,
             subtask: sub.id,
@@ -6995,7 +7068,7 @@ ${sub.description}
       if (!exec.stateChanged && activeTask.lastPageHash === currentPageHash && execActionType !== "type_text" && execActionType !== "type" && execActionType !== "press_key") {
         activeTask.stuckCounter = (activeTask.stuckCounter || 0) + 1;
         if (activeTask.stuckCounter >= 5) {
-          appendLog("🛑 STUCK DETECTED: Halaman tidak berubah setelah 5 aksi berturut-turut. Mencoba strategi baru.", "WARN");
+          appendLog("🛑 STUCK DETECTED: Page did not change after 5 consecutive actions. Trying a new strategy.", "WARN");
           activeTask.stuckCounter = 0;
           await tryReplanOrFail(sub, "Stuck detected: kondisi halaman web tidak merespon aksi agen.");
           continue;
@@ -7008,7 +7081,7 @@ ${sub.description}
       // 9. Kegagalan → retry / replan
       if (!exec.success) {
         if (exec.errorType === "PERMISSION_DENIED") {
-          appendLog(`⛔ Tugas dihentikan: ${exec.error || "Tindakan dibatalkan pengguna."}`);
+	        appendLog(`⛔ Task stopped: ${exec.error || "Action cancelled by user."}`);
           await finalizeTask("failed", exec.error || "Tindakan dibatalkan pengguna.");
           return;
         }
@@ -7026,13 +7099,13 @@ ${sub.description}
           await tryReplanOrFail(sub, `Subtask #${sub.id} gagal: ${exec.message || 'Eksekusi DOM tidak berhasil'}`);
           continue;
         }
-        appendLog(`⚠️ Step ${stepNum} gagal (${activeTask.retries[retryKey]}/${CFG.MAX_RETRIES_PER_SUBTASK}): ${exec.message || ""}`, "WARN");
+	        appendLog(`⚠️ Step ${stepNum} failed (${activeTask.retries[retryKey]}/${CFG.MAX_RETRIES_PER_SUBTASK}): ${exec.message || ""}`, "WARN");
         await new Promise(r => setTimeout(r, 600));
         continue;
       }
 
       // 10. VALIDATE
-      showStatusIndicator("Memverifikasi...");
+      showStatusIndicator("Verifying...");
       setAgentRunning(true);
       const after = await scanPage(false);
       const verdict = await runValidator({ ...resObj, ...exec }, exec.success ? "success" : "failed", after, pageData);
@@ -7076,8 +7149,8 @@ ${sub.description}
         const remainingSubs = (activeTask.plan || []).filter(s => s.status !== "done");
         if (remainingSubs.length === 0) {
           const finalMsg = isNavOrMenuIntent
-            ? `✅ Menu target telah berhasil dibuka.`
-            : `✅ Seluruh langkah tugas telah berhasil diselesaikan secara tuntas.`;
+            ? `✅ Target menu opened.`
+            : `✅ All task steps have been completed successfully.`;
           await finalizeTask("done", finalMsg);
           return;
         }
@@ -7184,7 +7257,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     } catch (err) {
       appendLog(`Re-plan error: ${err.message}`, "ERROR");
     }
-    appendLog(`Strategi alternatif gagal: ${reason}`, "ERROR");
+	        appendLog(`Alternative strategy failed: ${reason}`, "ERROR");
     await finalizeTask("failed", "Tugas belum dapat diselesaikan. Coba lagi atau gunakan perintah yang lebih spesifik.");
   }
 
@@ -7203,8 +7276,8 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       } catch (_) {}
     }
     const isCancelled = activeTask.status === "CANCELLED";
-    const heading = isSuccess ? "✅ **Selesai**" : (isCancelled ? "⏹️ **Dihentikan**" : "⚠️ **Belum selesai**");
-    const resultText = String(message || (isSuccess ? "Tugas selesai." : "Tugas belum dapat diselesaikan.")).trim();
+    const heading = isSuccess ? "✅ **Completed**" : (isCancelled ? "⏹️ **Stopped**" : "⚠️ **Not completed**");
+    const resultText = String(message || (isSuccess ? "Task completed." : "Task could not be completed.")).trim();
 
     const curSession = getCurrentSession();
     const lastMsg = curSession?.messages?.[curSession.messages.length - 1];
@@ -7252,7 +7325,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       taskCardMsgIndex = -1;
       setAgentRunning(true);
       showStatusIndicator();
-      appendLog(`▶ Melanjutkan task tersimpan: "${activeTask.goal}" (${activeTask.stepsUsed}/${activeTask.stepBudget} langkah)`);
+	      appendLog(`▶ Resuming saved task: "${activeTask.goal}" (${activeTask.stepsUsed}/${activeTask.stepBudget} steps)`);
       await executeTaskLoop();
     } catch (err) {
       appendLog(`Resume error: ${err.message}`, "ERROR");
@@ -7637,7 +7710,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
         if (typeof showToast === "function") showToast(msg, "error", 3000);
         continue;
       }
-      showStatusIndicator("Membaca file lampiran...");
+      showStatusIndicator("Reading attachment file...");
       try {
         if (typeof PesatFileEngine !== "undefined" && typeof PesatContextEngine !== "undefined") {
           const processed = await PesatFileEngine.processLocalFile(file);
@@ -7663,10 +7736,10 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
             }
           });
           attachedContextSources.push(source);
-          appendLog(`📎 File berhasil dilampirkan: ${file.name} (${sizeFormatted})`);
+	          appendLog(`📎 File attached: ${file.name} (${sizeFormatted})`);
         }
       } catch (err) {
-        appendLog(`Gagal memproses file ${file.name}: ${err.message}`, "WARN");
+	        appendLog(`Failed to process file ${file.name}: ${err.message}`, "WARN");
         if (typeof showToast === "function") showToast(`Gagal: ${err.message}`, "error", 3000);
       }
     }
@@ -7793,7 +7866,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
 
     if (msg && msg.action === "DOWNLOAD_COMPLETED_EVENT" && msg.downloadItem) {
       const item = msg.downloadItem;
-      appendLog(`⬇️ Download terdeteksi selesai: ${item.filename} (${item.fileSize} bytes)`);
+	      appendLog(`⬇️ Download detected complete: ${item.filename} (${item.fileSize} bytes)`);
       if (typeof PesatContextEngine !== "undefined") {
         const downloadSource = PesatContextEngine.createContextSource({
           type: "Download",
@@ -7925,7 +7998,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     if (activeTask) {
       activeTask.status = "PAUSED";
       refreshTaskCard();
-      appendLog(`🛑 Task dihentikan: ${reason}`, "WARN");
+	      appendLog(`🛑 Task stopped: ${reason}`, "WARN");
       persistTask();
       activeTask = null;
       taskCardMsgIndex = -1;
@@ -7988,7 +8061,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     btnClearCurrentChat.addEventListener("click", () => {
       const s = getCurrentSession();
       if (!s || s.messages.length === 0) {
-        appendLog("Sesi obrolan saat ini sudah bersih.");
+        appendLog("Current chat session is already clean.");
         return;
       }
       if (clearChatModal) clearChatModal.classList.remove("hidden");
@@ -8234,7 +8307,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
         modelDropdownList.querySelectorAll(".model-option-btn").forEach(b => b.classList.remove("active"));
         optBtn.classList.add("active");
         if (composerModelDropdown) composerModelDropdown.classList.add("hidden");
-        appendLog(`Model AI dialihkan ke: ${modelId}`);
+        appendLog(`AI model switched to: ${modelId}`);
         try {
           await chrome.storage.local.set({ modelName: modelId });
         } catch (_) {}
@@ -8316,7 +8389,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
-      appendLog("📥 Riwayat percakapan berhasil diekspor.");
+	      appendLog("📥 Conversation history exported successfully.");
     });
   }
 
@@ -8379,7 +8452,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     message = "",
     defaultValue = "",
     okLabel = "OK",
-    cancelLabel = "Batal",
+    cancelLabel = "Dismiss",
     destructive = false
   } = {}) {
     return new Promise((resolve) => {

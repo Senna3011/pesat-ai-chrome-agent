@@ -191,7 +191,7 @@ test.describe('Phase 5 — Validation & Comprehensive Verification (UI/UX Spec v
       window.setAgentRunning(false);
       window.setAgentStatus('completed');
     });
-    await expect(statusBadge).toHaveText('Selesai');
+    await expect(statusBadge).toHaveText('Completed');
     await expect(statusBadge).toHaveClass(/status-completed/);
     await page.screenshot({ path: path.join(screenshotDir, 'state-5-completed.png') });
 

@@ -103,7 +103,7 @@ test.describe('Phase 3 — Agent Experience Verification (UI/UX Spec v1.0 § 6)'
 
     // 4. Completed state
     await page.evaluate(() => window.setAgentStatus('completed'));
-    await expect(statusBadge).toHaveText('Selesai');
+    await expect(statusBadge).toHaveText('Completed');
     await expect(statusBadge).toHaveClass(/status-completed/);
 
     // 5. Failed state
@@ -217,7 +217,7 @@ test.describe('Phase 3 — Agent Experience Verification (UI/UX Spec v1.0 § 6)'
 
     const card = page.locator('.agent-status-card.state-completed');
     await expect(card).toBeVisible();
-    await expect(card.locator('.agent-status-badge')).toHaveText('Selesai');
+    await expect(card.locator('.agent-status-badge')).toHaveText('Completed');
     await expect(card.locator('.agent-status-badge')).toHaveClass(/badge-success/);
 
     // Stop button should NOT be rendered when task is done

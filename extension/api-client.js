@@ -1,5 +1,26 @@
 // api-client.js - Resilient Network Fetcher with Exponential Backoff & Circuit Timeout
 (() => {
+  // Format API error body into a clean, human-readable message (no raw JSON dumps).
+  function formatApiError(status, body, statusText) {
+    let detail = "";
+    const raw = String(body || "").trim();
+    if (raw) {
+      try {
+        const j = JSON.parse(raw);
+        detail = j?.error?.message || j?.message || j?.error?.code || "";
+      } catch (_) {
+        detail = raw.slice(0, 180);
+      }
+    }
+    if (!detail && statusText) detail = String(statusText);
+    if (status === 401 || status === 403) {
+      return `Invalid API key (HTTP ${status}). ${detail || "Check your key at pesatrouter.com."}`;
+    }
+    if (status === 429) return `Rate limit reached (HTTP 429). ${detail || "Please try again shortly."}`;
+    if (status === 404) return `Endpoint not found (HTTP 404). ${detail || "Check the Base URL ends with /v1."}`.trim();
+    if (status >= 500) return `Server error (HTTP ${status}). ${detail || "Please try again later."}`.trim();
+    return `API error (HTTP ${status}). ${detail}`.trim();
+  }
   /**
    * Resilient Fetch with Exponential Backoff and Timeout
    * @param {string} url - API Endpoint URL
@@ -28,10 +49,10 @@
           // Retry on Rate Limit (429) or Server Errors (5xx)
           if (response.status === 429 || response.status >= 500) {
             const errBody = await response.text().catch(() => "");
-            throw new Error(`HTTP_${response.status}: ${errBody || response.statusText}`);
+            throw new Error(formatApiError(response.status, errBody, response.statusText));
           }
           const errBody = await response.text().catch(() => "");
-          throw new Error(`API_ERROR: ${response.status} - ${errBody || response.statusText}`);
+          throw new Error(formatApiError(response.status, errBody, response.statusText));
         }
 
         const contentType = response.headers.get("content-type") || "";
@@ -73,7 +94,7 @@
     const response = await fetch(url, fetchOptions);
     if (!response.ok) {
       const errBody = await response.text().catch(() => "");
-      throw new Error(`HTTP_${response.status}: ${errBody || response.statusText}`);
+      throw new Error(formatApiError(response.status, errBody, response.statusText));
     }
 
     if (!response.body) {

@@ -1205,7 +1205,7 @@ ATURAN KETAT:
         if (actionName === "finish_task" || actionName === "finish") {
           actionHistoryPerTab.delete(activeTabId);
           persistSWState();
-          bgLog("ACTION", "FINISH_TASK", `finish_task dieksekusi: ${actData.message || 'Selesai'}`, actData, activeTabId);
+          bgLog("ACTION", "FINISH_TASK", `finish_task executed: ${actData.message || 'Completed'}`, actData, activeTabId);
           sendResponse({
             success: true,
             isFinished: true,

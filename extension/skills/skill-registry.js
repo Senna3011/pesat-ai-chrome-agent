@@ -205,6 +205,19 @@
       const tool = registeredTools.get(toolName);
       const skill = this.findSkillForTool(toolName);
       if (!tool || !skill) return null;
+      // Gate: blokir skill Web Search / SERP bila toggle Web Search OFF.
+      if (toolName === "web_search" || toolName === "check_serp_ranking") {
+        let enabled = globalThis.__PESAT_ENABLE_WEB_SEARCH__;
+        if (enabled === undefined && typeof chrome !== "undefined" && chrome.storage?.local?.get) {
+          try {
+            const r = await chrome.storage.local.get("enableWebSearch");
+            enabled = r?.enableWebSearch !== false;
+          } catch (_) { enabled = true; }
+        }
+        if (enabled === false) {
+          return { success: false, errorType: "DISABLED", error: "Live Web Search is disabled by the user." };
+        }
+      }
       const validation = this.validateToolCall(toolName, params);
       if (!validation.valid) {
         return { success: false, errorType: "INVALID_INPUT", error: validation.errors.join("; ") };

@@ -1633,7 +1633,7 @@ ${tabText}`;
       const ecommerceData = extractEcommerceProductListings();
       if (ecommerceData && ecommerceData.length > 50) {
         if (showVisual) {
-          showReadingHUD(`✓ Selesai mengekstrak data katalog produk`, true);
+          showReadingHUD(`✓ Finished extracting product catalog data`, true);
         }
         return ecommerceData;
       }
@@ -1743,7 +1743,7 @@ ${tabText}`;
       }
 
       if (showVisual && resultText && resultText.length > 30) {
-        showReadingHUD(`✓ Selesai membaca artikel (${resultText.length} karakter)`, true);
+        showReadingHUD(`✓ Finished reading article (${resultText.length} characters)`, true);
       }
 
       return maskSensitiveDLP(resultText.substring(0, 20000).trim());
@@ -2224,6 +2224,20 @@ ${tabText}`;
         }
       }
     } else if (el instanceof HTMLInputElement || el.tagName === "INPUT") {
+      // Guard: jangan tulis nilai yang tidak sesuai tipe input (hindari error format Chrome).
+      const t = (el.type || "text").toLowerCase();
+      if (["time", "date", "datetime-local", "month", "week", "range", "number", "color"].includes(t)) {
+        const ok =
+          t === "number" ? /^-?\d+(\.\d+)?$/.test(value) :
+          t === "time" ? /^\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?$/.test(value) :
+          t === "date" ? /^\d{4}-\d{2}-\d{2}$/.test(value) :
+          t === "datetime-local" ? /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value) :
+          t === "month" ? /^\d{4}-\d{2}$/.test(value) :
+          t === "week" ? /^\d{4}-W\d{2}$/.test(value) :
+          t === "color" ? /^#[0-9a-f]{3,8}$/i.test(value) :
+          true;
+        if (!ok) return;
+      }
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
       if (setter) {
         setter.call(el, value);
@@ -3400,6 +3414,90 @@ ${tabText}`;
         sel.dispatchEvent(new Event("change", { bubbles: true }));
         filledCount++;
       });
+
+      // Auto-pick pilihan (radio/checkbox/select) & isi teks contoh saat diminta "isi bebas".
+      const autoPick = actionData.autoPick === true || fields.length === 0;
+      if (autoPick) {
+        // Radio: pilih opsi pertama tiap grup yang belum terpilih.
+        const radioGroups = {};
+        allElements.filter(e => e.type === "radio" && !e.disabled).forEach(r => {
+          const key = r.name || r.id || "__group__";
+          (radioGroups[key] = radioGroups[key] || []).push(r);
+        });
+        Object.values(radioGroups).forEach(group => {
+          if (!group.some(r => r.checked)) {
+            const t = group[0];
+            t.checked = true;
+            t.dispatchEvent(new Event("change", { bubbles: true }));
+            t.click();
+            const lbl = t.closest("label") || document.querySelector(`label[for="${t.id}"]`);
+            if (lbl) lbl.click();
+            filledCount++;
+          }
+        });
+        // Checkbox: centang opsi pertama tiap grup yang belum tercentang.
+        const chkGroups = {};
+        allElements.filter(e => e.type === "checkbox" && !e.disabled).forEach(c => {
+          const key = c.name || c.id || "__group__";
+          (chkGroups[key] = chkGroups[key] || []).push(c);
+        });
+        Object.values(chkGroups).forEach(group => {
+          if (!group.some(c => c.checked)) {
+            const t = group[0];
+            t.checked = true;
+            t.dispatchEvent(new Event("change", { bubbles: true }));
+            t.click();
+            const lbl = t.closest("label") || document.querySelector(`label[for="${t.id}"]`);
+            if (lbl) lbl.click();
+            filledCount++;
+          }
+        });
+        // Input teks/email/tel/textarea kosong: isi nilai contoh.
+        const textControls = allElements.filter(e => {
+          if (e.disabled || e.offsetParent === null) return false;
+          if (e.tagName === "TEXTAREA") return true;
+          if (e.tagName === "INPUT") return ["text", "email", "tel", "number", ""].includes((e.type || "text").toLowerCase());
+          return false;
+        });
+        textControls.forEach(e => {
+          if (!String(e.value || "").trim()) {
+            const type = (e.type || "text").toLowerCase();
+            const sample = type === "email" ? "test@example.com" : (type === "tel" ? "08123456789" : (type === "number" ? "1" : "Test"));
+            setNativeInputValue(e, sample);
+            filledCount++;
+          }
+        });
+
+        // React-Select / custom div dropdown (non-<select>, role=combobox / [class*='-control'])
+        const customControls = Array.from(document.querySelectorAll("[role='combobox'], [class*='-control']"));
+        for (const ctrl of customControls) {
+          if (!ctrl || ctrl.tagName === "SELECT" || ctrl.disabled) continue;
+          try {
+            ctrl.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+            ctrl.click?.();
+            await new Promise(r => setTimeout(r, 150));
+            const opt = document.querySelector("[class*='-option'], [role='option']");
+            if (opt) {
+              opt.click();
+              filledCount++;
+              await new Promise(r => setTimeout(r, 120));
+            }
+          } catch (_) {}
+        }
+
+        // Autocomplete input (mis. Subjects): isi nilai lalu pilih chip via Enter.
+        const acInputs = Array.from(document.querySelectorAll("input[aria-autocomplete], input.autocomplete, input[class*='autocomplete']"));
+        for (const inp of acInputs) {
+          if (!inp || inp.disabled || inp.offsetParent === null) continue;
+          try {
+            setNativeInputValue(inp, "Test");
+            inp.dispatchEvent(new Event("input", { bubbles: true }));
+            await new Promise(r => setTimeout(r, 150));
+            inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true }));
+            filledCount++;
+          } catch (_) {}
+        }
+      }
 
       if (actionData.submitAfter) {
         // Tunggu reactive frameworks (React, Vue, Formik, React Hook Form) menuntaskan validasi input
