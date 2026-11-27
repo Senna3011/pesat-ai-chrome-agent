@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { resolveOfficialSources, cleanUrl, buildSourcesMarkdown } = require('../source-resolver.js');
+const { resolveOfficialSources, cleanUrl, buildSourcesMarkdown, stripSourcesSection } = require('../source-resolver.js');
 
 test('cleanUrl strips tracking params and hash', () => {
   const out = cleanUrl('https://example.com/a?utm_source=x&id=7&fbclid=z#section');
@@ -38,4 +38,10 @@ test('buildSourcesMarkdown tags Resmi/Live and renders links', () => {
 test('buildSourcesMarkdown empty for no valid items', () => {
   assert.equal(buildSourcesMarkdown([]), '');
   assert.equal(buildSourcesMarkdown([{ name: '', url: '' }]), '');
+});
+
+test('stripSourcesSection removes markdown and plain Sources footers', () => {
+  assert.equal(stripSourcesSection('Jawaban.\n\n## Sources\n- [Example](https://example.com)'), 'Jawaban.');
+  assert.equal(stripSourcesSection('Jawaban.\n\n**Sources:**\nhttps://example.com'), 'Jawaban.');
+  assert.equal(stripSourcesSection('Jawaban tanpa sumber.'), 'Jawaban tanpa sumber.');
 });

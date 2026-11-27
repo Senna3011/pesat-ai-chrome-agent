@@ -225,5 +225,16 @@
     return "## Sources\n" + lines.join("\n");
   }
 
-  return { resolveSourceUrlFromPrompt, resolveOfficialSources, cleanUrl, buildSourcesMarkdown };
+  function stripSourcesSection(text = "") {
+    const markdown = String(text || "");
+    const lines = markdown.split(/\r?\n/);
+    const sourceIndex = lines.findIndex((line) => {
+      let heading = line.trim().replace(/^#{1,6}\s*/, "");
+      heading = heading.replace(/^(?:\*\*|__)(.*?)(?:\*\*|__)$/, "$1").trim();
+      return /^sources?(?:\s*:.*)?$/i.test(heading);
+    });
+    return sourceIndex < 0 ? markdown : lines.slice(0, sourceIndex).join("\n").trimEnd();
+  }
+
+  return { resolveSourceUrlFromPrompt, resolveOfficialSources, cleanUrl, buildSourcesMarkdown, stripSourcesSection };
 });

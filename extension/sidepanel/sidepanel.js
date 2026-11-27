@@ -2030,7 +2030,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       textContent = content.text || content.message || content.content || content.reply || JSON.stringify(content);
     }
 
-    const cleanContent = role === "assistant" && !extras.skipClean ? cleanAssistantReply(textContent) : textContent;
+    let cleanContent = role === "assistant" && !extras.skipClean ? cleanAssistantReply(textContent) : textContent;
+    if (role === "assistant" && globalThis.__PESAT_ENABLE_WEB_SEARCH__ === false && typeof cleanContent === "string") {
+      cleanContent = globalThis.PesatSourceResolver?.stripSourcesSection?.(cleanContent) ?? cleanContent;
+    }
     const msgObj = { role, content: cleanContent, timestamp: Date.now(), ...extras };
     session.messages.push(msgObj);
 
@@ -2206,7 +2209,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       "modelName",
       "sessionOnly",
       "googleClientId",
-      "pesat_models"
+      "pesat_models",
+      "enableWebSearch"
     ]);
 
     if (Array.isArray(local.pesat_models) && local.pesat_models.length > 0) {
@@ -2717,9 +2721,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (settingsEnableWebSearch) {
     settingsEnableWebSearch.addEventListener("change", async (e) => {
       const val = !!e.target.checked;
+      const previousValue = storedSettings.enableWebSearch !== false;
       storedSettings.enableWebSearch = val;
       globalThis.__PESAT_ENABLE_WEB_SEARCH__ = val;
-      try { await chrome.storage.local.set({ enableWebSearch: val }); } catch (_) {}
+      try {
+        await chrome.storage.local.set({ enableWebSearch: val });
+      } catch (error) {
+        storedSettings.enableWebSearch = previousValue;
+        globalThis.__PESAT_ENABLE_WEB_SEARCH__ = previousValue;
+        settingsEnableWebSearch.checked = previousValue;
+        appendLog(`Failed to save Live Web Search setting: ${error.message}`, "ERROR");
+        if (typeof showToast === "function") showToast("Gagal menyimpan pengaturan Live Web Search.", "error", 3000);
+        return;
+      }
       appendLog(val ? "🌐 Live Web Search enabled." : "🌐 Live Web Search disabled.");
     });
   }
@@ -3807,7 +3821,7 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
         name: resObj.name || `artifact-${Date.now()}`,
         content: resObj.content || resObj.value || ""
       };
-      addMessageToCurrentSession("assistant", `📦 Artefak **${artifact.name}** berhasil dibuat.`, { skipClean: false, artifact });
+      addMessageToCurrentSession("assistant", `📦 Artifact **${artifact.name}** created successfully.`, { skipClean: false, artifact });
       if (activeTask) {
         activeTask.artifacts.push(artifact);
         persistTask();
@@ -4229,7 +4243,7 @@ Respon HANYA dalam format JSON valid:
 
     if (!keyword) {
       appendLog("⚠️ Search keyword not detected from the command.", "ERROR");
-      addMessageToCurrentSession("assistant", "⚠️ Tidak dapat mendeteksi kata kunci (keyword) yang ingin dicari. Mohon sertakan format: *'Cek website domain.com dengan keyword kata kunci'*.");
+      addMessageToCurrentSession("assistant", "⚠️ Cannot detect the keyword to search. Please use the format: *'Check website domain.com with keyword keyword'.");
       setAgentRunning(false);
       hideStatusIndicator();
       return;
@@ -4237,7 +4251,7 @@ Respon HANYA dalam format JSON valid:
 
     if (!targetDomain) {
       appendLog("⚠️ Target domain not detected from the command.", "ERROR");
-      addMessageToCurrentSession("assistant", "⚠️ Tidak dapat mendeteksi nama website/domain target. Mohon sertakan nama website yang ingin dicek (contoh: *filterairgadingserpong.com*).");
+      addMessageToCurrentSession("assistant", "⚠️ Cannot detect the target website/domain name. Please include the website name to check (e.g. *filterairgadingserpong.com*).");
       setAgentRunning(false);
       hideStatusIndicator();
       return;
@@ -4425,7 +4439,7 @@ ${topCompStr}
     const isDirectSelection = !!params?.isDirectSelection;
 
     if (!replaceText) {
-      addMessageToCurrentSession("assistant", "⚠️ Mohon sertakan kata penggantinya. Format: *'Ganti kata yang ditandai menjadi \"rangkuman\"'* atau *'Ganti kata \"laporan\" menjadi \"rangkuman\"'*.");
+      addMessageToCurrentSession("assistant", "⚠️ Please provide the replacement word. Format: *'Replace the marked word with \"summary\"'* or *'Replace the word \"report\" with \"summary\"'*.");
       return;
     }
 
@@ -4460,7 +4474,7 @@ ${topCompStr}
             }
             if (apiRes && apiRes.success && apiRes.occurrencesChanged === 0) {
               appendLog(`⚠️ Text "${findText}" not found in document via API.`, "WARN");
-              addMessageToCurrentSession("assistant", `⚠️ **Tidak dapat mengganti:** teks \`${findText}\` tidak ditemukan di dokumen yang sedang dibuka.`);
+              addMessageToCurrentSession("assistant", `⚠️ **Cannot replace:** text \`${findText}\` not found in the currently open document.`);
               return;
             }
             appendLog(`ℹ️ Google Docs API unavailable (${apiRes?.error || "failed"}), switching to DOM mode.`, "WARN");
@@ -4492,7 +4506,7 @@ ${topCompStr}
         addMessageToCurrentSession("assistant", reply, { skipClean: true });
       } else {
         appendLog(`⚠️ Word replacement failed: ${res?.error || "Word not found"}`, "WARN");
-        addMessageToCurrentSession("assistant", `⚠️ **Tidak dapat mengganti kata:**\n${res?.error || `Kata "${findText}" tidak ditemukan di dokumen yang sedang dibuka.`}`);
+        addMessageToCurrentSession("assistant", `⚠️ **Cannot replace word:**\n${res?.error || `Word "${findText}" not found in the currently open document.`}`);
       }
     } catch (err) {
       appendLog(`Word replacement error: ${err.message}`, "ERROR");
@@ -4557,7 +4571,7 @@ ${topCompStr}
         addMessageToCurrentSession("assistant", reply, { skipClean: true });
       } else {
         appendLog(`⚠️ Text writing failed: ${res?.error || "Failed to insert text"}`, "WARN");
-        addMessageToCurrentSession("assistant", `⚠️ **Tidak dapat menuliskan teks:**\n${res?.error || "Gagal menyisipkan teks ke Google Docs."}`);
+        addMessageToCurrentSession("assistant", `⚠️ **Cannot write text:**\n${res?.error || "Failed to insert text into Google Docs."}`);
       }
     } catch (err) {
       appendLog(`Error penulisan langsung: ${err.message}`, "ERROR");
@@ -4626,7 +4640,7 @@ ${topCompStr}
         addMessageToCurrentSession("assistant", reply, { skipClean: true });
       } else {
         appendLog(`⚠️ Failed to open new tab: ${res?.error || "Failed to open tab"}`, "WARN");
-        addMessageToCurrentSession("assistant", `⚠️ **Gagal membuka tab baru:**\n${res?.error || "Peramban menolak pembuatan tab baru."}`);
+        addMessageToCurrentSession("assistant", `⚠️ **Failed to open new tab:**\n${res?.error || "Browser refused to create a new tab."}`);
       }
     } catch (err) {
       appendLog(`Open new tab error: ${err.message}`, "ERROR");
@@ -4885,7 +4899,7 @@ ${topCompStr}
       showStatusIndicator(`Membuka kembali ${targetSite}...`);
       await navigateToUrl(targetSite);
       await new Promise(r => setTimeout(r, 1200));
-      addMessageToCurrentSession("assistant", `✅ Mengerti, saya telah mengarahkan kembali ke **${targetSite}**. Silakan beritahu apa yang ingin dicari atau dikerjakan di sini.`);
+      addMessageToCurrentSession("assistant", `✅ Understood, I have redirected back to **${targetSite}**. Please tell me what you'd like to search or do here.`);
       return;
     }
 
@@ -5751,7 +5765,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         const docsWrite = await executeAgentAction({ action: "paste_text", value: cleanInsert, replace: isReplaceDocIntent, message: "Menulis hasil analisis ke Google Docs" });
         if (!docsWrite?.success) throw new Error(docsWrite?.error || "Penulisan Google Docs gagal atau tidak disetujui.");
 
-        addMessageToCurrentSession("assistant", `### 📝 Dokumen Berhasil Dibuat & Dituliskan ke Google Docs\n\n${aiReply}`, {
+        addMessageToCurrentSession("assistant", `### 📝 Document Created & Written to Google Docs\n\n${aiReply}`, {
           skipClean: true,
           artifact
         });
@@ -5844,7 +5858,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
         const cleanInsert = sanitizeDocInsertText(aiReply);
         const editorWrite = await executeAgentAction({ action: "paste_text", value: cleanInsert, message: "Menulis teks ke editor eksternal" });
         if (!editorWrite?.success) throw new Error(editorWrite?.error || "Penulisan editor gagal atau tidak disetujui.");
-        addMessageToCurrentSession("assistant", `### 📝 Teks Berhasil Dibuat & Dituliskan ke Dokumen\n\n${aiReply}`, {
+        addMessageToCurrentSession("assistant", `### 📝 Text Created & Written to Document\n\n${aiReply}`, {
           skipClean: true,
           artifact
         });
@@ -5867,23 +5881,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
                   : (isSummarize
                       ? (isSheetsSite ? "### 📊 Ringkasan Lembar Kerja Spreadsheet" : "### 📄 Ringkasan Halaman Web")
                       : "")));
-        let formattedReply = headerTitle ? `${headerTitle}\n\n${aiReply}` : aiReply;
-        const webSearchOn = globalThis.__PESAT_ENABLE_WEB_SEARCH__ !== false;
-        if (!webSearchOn) {
-          // Web Search OFF: jangan tampilkan blok Sources (termasuk yang ditulis model sendiri).
-          formattedReply = formattedReply.replace(/\n*#{1,6}\s*Sources\b[\s\S]*$/i, "").trimEnd();
-        } else {
-          // Hanya untuk jawaban info/obrolan — bukan artikel, tabel, ringkasan, atau artefak.
-          const isInfoAnswer = !(isSummarize || isArticle || isDocsOutput || isGeneralTableTask ||
-            isProductResearch || isSocialThread || isSpreadsheetTask || isExplicitExcelOrCsv || artifact);
-          if (isInfoAnswer && !/##\s*Sources/i.test(formattedReply)) {
-            try {
-              const official = globalThis.PesatSourceResolver?.resolveOfficialSources?.(userPrompt) || [];
-              const sourcesMd = globalThis.PesatSourceResolver?.buildSourcesMarkdown?.(official) || "";
-              if (sourcesMd) formattedReply = `${formattedReply}\n\n${sourcesMd}`;
-            } catch (_) {}
-          }
-        }
+        const formattedReply = headerTitle ? `${headerTitle}\n\n${aiReply}` : aiReply;
         addMessageToCurrentSession("assistant", formattedReply, { skipClean: true, artifact });
       }
       appendLog("✅ Answer delivered successfully.");
@@ -6100,7 +6098,7 @@ ${emailParams.subject && emailParams.subject !== "Pesan Baru" ? `[SUBJEK]\n${ema
             name: `Draf-${(goal || "Dokumen").slice(0, 24).replace(/[^a-zA-Z0-9]/g, "_")}.doc`,
             content: aiText
           };
-          addMessageToCurrentSession("assistant", `### 📝 Teks Berhasil Dituliskan ke Dokumen\n\n${aiText}`, {
+          addMessageToCurrentSession("assistant", `### 📝 Text Written to Document\n\n${aiText}`, {
             skipClean: true,
             artifact
           });
@@ -6302,7 +6300,7 @@ ATURAN KETAT:
 		          addMessageToCurrentSession("assistant", `✅ Berhasil membuka [${dest}](${dest})`);
 		          await finalizeTask("done", `✅ Berhasil membuka ${dest}`);
 		        } else {
-		          addMessageToCurrentSession("assistant", `❌ Gagal membuka ${dest}: ${navRes?.error || "Gagal navigasi tab"}`);
+		        addMessageToCurrentSession("assistant", `❌ Failed to open ${dest}: ${navRes?.error || "Tab navigation failed"}`);
 		          await finalizeTask("error", `Gagal membuka ${dest}`);
 		        }
 		        return;
@@ -6435,7 +6433,7 @@ ATURAN KETAT:
 		            showStatusIndicator(`Mencari "${rawSearchQuery}" di Google...`);
 		            await navigateToUrl(googleUrl);
 		            await new Promise(r => setTimeout(r, 1200));
-		            addMessageToCurrentSession("assistant", `🔍 Telah membuka pencarian Google untuk: **${rawSearchQuery}**`);
+		            addMessageToCurrentSession("assistant", `🔍 Opened Google search for: **${rawSearchQuery}**`);
 		            await finalizeTask("done", `Pencarian Google selesai.`);
 		            return;
 		          } else {
@@ -6444,7 +6442,7 @@ ATURAN KETAT:
 		            const siteSearchUrl = `https://${hostName}/search?q=${encodeURIComponent(rawSearchQuery)}`;
 		            await navigateToUrl(siteSearchUrl);
 		            await new Promise(r => setTimeout(r, 1500));
-		            addMessageToCurrentSession("assistant", `🔍 Telah membuka hasil pencarian di **${hostName}** untuk: **${rawSearchQuery}**`);
+		            addMessageToCurrentSession("assistant", `🔍 Opened search results on **${hostName}** for: **${rawSearchQuery}**`);
 		            await finalizeTask("done", `Pencarian di ${hostName} selesai.`);
 		            return;
 		          }
@@ -6638,7 +6636,7 @@ ${sub.description}
       } catch (err) {
         if (err.name === "AbortError" || shouldStopAgent) break;
         appendLog(`Navigator error: ${err.message}`, "ERROR");
-        addMessageToCurrentSession("assistant", `❌ Gagal menghubungi AI Engine: ${err.message}`);
+	        addMessageToCurrentSession("assistant", `❌ Failed to reach AI Engine: ${err.message}`);
         await finalizeTask("failed", `Gagal menghubungi AI Engine: ${err.message}`);
         return;
       } finally {
@@ -8382,14 +8380,55 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   const btnExportHistory = document.getElementById("btnExportHistory");
   if (btnExportHistory) {
     btnExportHistory.addEventListener("click", () => {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(sessions, null, 2));
-      const downloadAnchor = document.createElement("a");
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `pesat_agent_history_${Date.now()}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-	      appendLog("📥 Conversation history exported successfully.");
+      const formatTimestamp = (value) => {
+        if (value === undefined || value === null || value === "") return "";
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+      };
+      const history = sessions
+        .filter((session) => Array.isArray(session.messages) && session.messages.length > 0)
+        .map((session) => {
+          const title = String(session.title || "Percakapan tanpa judul").replace(/\s+/g, " ").trim();
+          const sessionId = String(session.id || "").replace(/`/g, "\\`");
+          const lastActivity = formatTimestamp(session.timestamp);
+          const messages = session.messages.map((message) => {
+            const role = message.role === "user" ? "Pengguna" : (message.role === "assistant" ? "Asisten" : String(message.role || "Lainnya"));
+            const timestamp = formatTimestamp(message.timestamp);
+            const content = typeof message.content === "string"
+              ? message.content
+              : (message.content == null ? "" : JSON.stringify(message.content, null, 2));
+            return `### ${role}${timestamp ? ` — ${timestamp}` : ""}\n\n${content || "_(Pesan kosong)_"}`;
+          });
+          return [
+            `## ${title}`,
+            sessionId ? `- **ID sesi:** \`${sessionId}\`` : "",
+            lastActivity ? `- **Aktivitas terakhir:** ${lastActivity}` : "",
+            "",
+            messages.join("\n\n---\n\n")
+          ].filter(Boolean).join("\n");
+        });
+      const markdown = [
+        "# Riwayat Percakapan Pesat AI",
+        "",
+        history.length ? history.join("\n\n---\n\n") : "Belum ada riwayat percakapan."
+      ].join("\n");
+      let downloadUrl = "";
+      try {
+        const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+        downloadUrl = URL.createObjectURL(blob);
+        const downloadAnchor = document.createElement("a");
+        downloadAnchor.href = downloadUrl;
+        downloadAnchor.download = `pesat_agent_history_${Date.now()}.md`;
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+        appendLog("📥 Conversation history exported as Markdown.");
+      } catch (error) {
+        if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+        appendLog(`Conversation history export failed: ${error.message}`, "ERROR");
+        if (typeof showToast === "function") showToast("Gagal mengekspor riwayat percakapan.", "error", 3000);
+      }
     });
   }
 

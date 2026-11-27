@@ -2030,7 +2030,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       textContent = content.text || content.message || content.content || content.reply || JSON.stringify(content);
     }
 
-    const cleanContent = role === "assistant" && !extras.skipClean ? cleanAssistantReply(textContent) : textContent;
+    let cleanContent = role === "assistant" && !extras.skipClean ? cleanAssistantReply(textContent) : textContent;
+    if (role === "assistant" && globalThis.__PESAT_ENABLE_WEB_SEARCH__ === false && typeof cleanContent === "string") {
+      cleanContent = globalThis.PesatSourceResolver?.stripSourcesSection?.(cleanContent) ?? cleanContent;
+    }
     const msgObj = { role, content: cleanContent, timestamp: Date.now(), ...extras };
     session.messages.push(msgObj);
 
@@ -2206,7 +2209,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       "modelName",
       "sessionOnly",
       "googleClientId",
-      "pesat_models"
+      "pesat_models",
+      "enableWebSearch"
     ]);
 
     if (Array.isArray(local.pesat_models) && local.pesat_models.length > 0) {
@@ -2717,9 +2721,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (settingsEnableWebSearch) {
     settingsEnableWebSearch.addEventListener("change", async (e) => {
       const val = !!e.target.checked;
+      const previousValue = storedSettings.enableWebSearch !== false;
       storedSettings.enableWebSearch = val;
       globalThis.__PESAT_ENABLE_WEB_SEARCH__ = val;
-      try { await chrome.storage.local.set({ enableWebSearch: val }); } catch (_) {}
+      try {
+        await chrome.storage.local.set({ enableWebSearch: val });
+      } catch (error) {
+        storedSettings.enableWebSearch = previousValue;
+        globalThis.__PESAT_ENABLE_WEB_SEARCH__ = previousValue;
+        settingsEnableWebSearch.checked = previousValue;
+        appendLog(`Failed to save Live Web Search setting: ${error.message}`, "ERROR");
+        if (typeof showToast === "function") showToast("Gagal menyimpan pengaturan Live Web Search.", "error", 3000);
+        return;
+      }
       appendLog(val ? "🌐 Live Web Search enabled." : "🌐 Live Web Search disabled.");
     });
   }
@@ -5867,23 +5881,7 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
                   : (isSummarize
                       ? (isSheetsSite ? "### 📊 Ringkasan Lembar Kerja Spreadsheet" : "### 📄 Ringkasan Halaman Web")
                       : "")));
-        let formattedReply = headerTitle ? `${headerTitle}\n\n${aiReply}` : aiReply;
-        const webSearchOn = globalThis.__PESAT_ENABLE_WEB_SEARCH__ !== false;
-        if (!webSearchOn) {
-          // Web Search OFF: jangan tampilkan blok Sources (termasuk yang ditulis model sendiri).
-          formattedReply = formattedReply.replace(/\n*#{1,6}\s*Sources\b[\s\S]*$/i, "").trimEnd();
-        } else {
-          // Hanya untuk jawaban info/obrolan — bukan artikel, tabel, ringkasan, atau artefak.
-          const isInfoAnswer = !(isSummarize || isArticle || isDocsOutput || isGeneralTableTask ||
-            isProductResearch || isSocialThread || isSpreadsheetTask || isExplicitExcelOrCsv || artifact);
-          if (isInfoAnswer && !/##\s*Sources/i.test(formattedReply)) {
-            try {
-              const official = globalThis.PesatSourceResolver?.resolveOfficialSources?.(userPrompt) || [];
-              const sourcesMd = globalThis.PesatSourceResolver?.buildSourcesMarkdown?.(official) || "";
-              if (sourcesMd) formattedReply = `${formattedReply}\n\n${sourcesMd}`;
-            } catch (_) {}
-          }
-        }
+        const formattedReply = headerTitle ? `${headerTitle}\n\n${aiReply}` : aiReply;
         addMessageToCurrentSession("assistant", formattedReply, { skipClean: true, artifact });
       }
       appendLog("✅ Answer delivered successfully.");
@@ -8382,14 +8380,55 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
   const btnExportHistory = document.getElementById("btnExportHistory");
   if (btnExportHistory) {
     btnExportHistory.addEventListener("click", () => {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(sessions, null, 2));
-      const downloadAnchor = document.createElement("a");
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `pesat_agent_history_${Date.now()}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-	      appendLog("📥 Conversation history exported successfully.");
+      const formatTimestamp = (value) => {
+        if (value === undefined || value === null || value === "") return "";
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+      };
+      const history = sessions
+        .filter((session) => Array.isArray(session.messages) && session.messages.length > 0)
+        .map((session) => {
+          const title = String(session.title || "Percakapan tanpa judul").replace(/\s+/g, " ").trim();
+          const sessionId = String(session.id || "").replace(/`/g, "\\`");
+          const lastActivity = formatTimestamp(session.timestamp);
+          const messages = session.messages.map((message) => {
+            const role = message.role === "user" ? "Pengguna" : (message.role === "assistant" ? "Asisten" : String(message.role || "Lainnya"));
+            const timestamp = formatTimestamp(message.timestamp);
+            const content = typeof message.content === "string"
+              ? message.content
+              : (message.content == null ? "" : JSON.stringify(message.content, null, 2));
+            return `### ${role}${timestamp ? ` — ${timestamp}` : ""}\n\n${content || "_(Pesan kosong)_"}`;
+          });
+          return [
+            `## ${title}`,
+            sessionId ? `- **ID sesi:** \`${sessionId}\`` : "",
+            lastActivity ? `- **Aktivitas terakhir:** ${lastActivity}` : "",
+            "",
+            messages.join("\n\n---\n\n")
+          ].filter(Boolean).join("\n");
+        });
+      const markdown = [
+        "# Riwayat Percakapan Pesat AI",
+        "",
+        history.length ? history.join("\n\n---\n\n") : "Belum ada riwayat percakapan."
+      ].join("\n");
+      let downloadUrl = "";
+      try {
+        const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+        downloadUrl = URL.createObjectURL(blob);
+        const downloadAnchor = document.createElement("a");
+        downloadAnchor.href = downloadUrl;
+        downloadAnchor.download = `pesat_agent_history_${Date.now()}.md`;
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+        appendLog("📥 Conversation history exported as Markdown.");
+      } catch (error) {
+        if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+        appendLog(`Conversation history export failed: ${error.message}`, "ERROR");
+        if (typeof showToast === "function") showToast("Gagal mengekspor riwayat percakapan.", "error", 3000);
+      }
     });
   }
 

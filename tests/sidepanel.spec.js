@@ -1,10 +1,25 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
+const fs = require('fs');
 
 test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
   test.beforeEach(async ({ page }) => {
     // Mock chrome extension APIs before loading sidepanel
     await page.addInitScript(() => {
+      const localStorageData = {
+        apiKey: 'sk-test-mock-key',
+        apiBaseUrl: 'https://api.pesatrouter.com/v1',
+        apiFormat: 'openai-chat',
+        modelName: 'pesat-flash',
+        pesat_models: [
+          { id: 'pesat-flash', label: 'Pesat Flash', contextLimit: '128k', enabled: true },
+          { id: 'pesat-pro', label: 'Pesat Pro', contextLimit: '200k', enabled: true },
+        ],
+        pesat_sessions: [],
+        googleClientId: '',
+        enableWebSearch: false,
+      };
+      window.__mockChromeLocalStorage = localStorageData;
       window.chrome = {
         runtime: {
           sendMessage: (msg, cb) => {
@@ -20,22 +35,20 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
         storage: {
           local: {
             get: (keys, cb) => {
-              const data = {
-                apiKey: 'sk-test-mock-key',
-                apiBaseUrl: 'https://api.pesatrouter.com/v1',
-                apiFormat: 'openai-chat',
-                modelName: 'pesat-flash',
-                pesat_models: [
-                  { id: 'pesat-flash', label: 'Pesat Flash', contextLimit: '128k', enabled: true },
-                  { id: 'pesat-pro', label: 'Pesat Pro', contextLimit: '200k', enabled: true },
-                ],
-                pesat_sessions: [],
-                googleClientId: '',
-              };
+              const requestedKeys = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(localStorageData));
+              const data = Object.fromEntries(requestedKeys
+                .filter(key => Object.prototype.hasOwnProperty.call(localStorageData, key))
+                .map(key => [key, localStorageData[key]]));
               if (cb) cb(data);
               return Promise.resolve(data);
             },
             set: (items, cb) => {
+              Object.assign(localStorageData, items);
+              if (cb) cb();
+              return Promise.resolve();
+            },
+            remove: (keys, cb) => {
+              for (const key of (Array.isArray(keys) ? keys : [keys])) delete localStorageData[key];
               if (cb) cb();
               return Promise.resolve();
             },
@@ -107,6 +120,66 @@ test.describe('Pesat AI Extension - Sidepanel UI & Interaction Tests', () => {
     // Close settings
     await page.locator('#btnCancelSettings').click();
     await expect(settingsPanel).not.toBeVisible();
+  });
+
+  test('should preserve Live Web Search toggle state after saving and reopening Settings', async ({ page }) => {
+    const settingsPanel = page.locator('#settingsPanel');
+    const settingsToggle = page.locator('#settingsEnableWebSearch');
+    const toggleLabel = page.locator('label[title="Toggle Live Web Search"]');
+    await page.locator('#btnMoreMenu').click();
+    await page.locator('#btnOpenSettingsFromDrawer').click();
+    await expect(settingsToggle).not.toBeChecked();
+
+    await toggleLabel.click();
+    await expect(settingsToggle).toBeChecked();
+    await page.locator('#btnSaveSettings').click();
+    await expect(settingsPanel).not.toBeVisible();
+
+    await page.locator('#btnMoreMenu').click();
+    await page.locator('#btnOpenSettingsFromDrawer').click();
+    await expect(settingsToggle).toBeChecked();
+
+    await toggleLabel.click();
+    await expect(settingsToggle).not.toBeChecked();
+    await page.locator('#btnSaveSettings').click();
+    await expect(settingsPanel).not.toBeVisible();
+
+    await page.locator('#btnMoreMenu').click();
+    await page.locator('#btnOpenSettingsFromDrawer').click();
+    await expect(settingsToggle).not.toBeChecked();
+  });
+
+  test('should export conversation history as a readable Markdown file', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.assign(window.__mockChromeLocalStorage, {
+        agent_sessions: [{
+          id: 'qa-session',
+          title: 'QA Conversation',
+          timestamp: 1735689600000,
+          messages: [
+            { role: 'user', content: 'Halo', timestamp: 1735689600000 },
+            { role: 'assistant', content: 'Hai, ada yang bisa saya bantu?', timestamp: 1735689601000 },
+          ],
+        }],
+        current_session_id: 'qa-session',
+      });
+    });
+    await page.reload();
+    await page.locator('#btnHistory').click();
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.locator('#btnExportHistory').click();
+    const download = await downloadPromise;
+
+    expect(download.suggestedFilename()).toMatch(/^pesat_agent_history_\d+\.md$/);
+    const filePath = await download.path();
+    const content = fs.readFileSync(filePath, 'utf8');
+    expect(content).toContain('# Riwayat Percakapan Pesat AI');
+    expect(content).toContain('## QA Conversation');
+    expect(content).toContain('### Pengguna');
+    expect(content).toContain('Halo');
+    expect(content).toContain('### Asisten');
+    expect(content).toContain('Hai, ada yang bisa saya bantu?');
   });
 
   test('should open and close History Drawer', async ({ page }) => {
