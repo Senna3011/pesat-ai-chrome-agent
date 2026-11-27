@@ -32,9 +32,7 @@
       }
     ],
 
-    getSystemPromptAdditions() {
-      return "\n- Gunakan tool `web_search` bila pengguna meminta informasi terkini/real-time (berita hari ini, harga/kurs terbaru, data resmi terupdate). Sajikan bagian **Sources** dengan link bersih yang bisa diklik. Jangan mengarang bila data tidak diperoleh.";
-    },
+    systemPromptRules: "- Use the `web_search` tool when the user asks for up-to-date/real-time info (today's news, latest prices/rates, updated official data). Present a **Sources** section with clean clickable links. Never fabricate data you could not retrieve.",
 
     async execute(toolName, params, ctx = {}) {
       if (toolName !== "web_search") {

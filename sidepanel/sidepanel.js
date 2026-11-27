@@ -376,13 +376,31 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // 7. Paragraphs / linebreaks (preserving block HTML)
+    //    Newline tunggal antar-baris non-kosong = soft wrap (spasi), bukan <br>.
+    //    Hanya baris kosong yang memisahkan paragraf. Mencegah teks "menjalar kebawah"
+    //    dan titik/koma yatim di awal baris.
     const blockTags = /<\/?(h[1-6]|ul|ol|li|table|thead|tbody|tr|th|td|div|p|pre|blockquote|hr|button|span|img)/i;
-    s = s.split("\n").map(line => {
-      const trimmed = line.trim();
-      if (!trimmed) return "<br>";
-      if (blockTags.test(trimmed)) return trimmed;
-      return trimmed + "<br>";
-    }).join("\n");
+    s = (function buildParagraphs(src) {
+      const out = [];
+      let para = [];
+      const flush = () => {
+        if (para.length) {
+          let joined = para.join(" ");
+          // Rapikan tanda baca yatim di awal paragraf (mis. ". Siklus" -> "Siklus")
+          joined = joined.replace(/^[\s.,;:]+/, "");
+          out.push(joined + "<br>");
+          para = [];
+        }
+      };
+      for (const line of src.split("\n")) {
+        const t = line.trim();
+        if (!t) { flush(); continue; }
+        if (blockTags.test(t)) { flush(); out.push(t); continue; }
+        para.push(t);
+      }
+      flush();
+      return out.join("\n");
+    })(s);
 
     // 8. Restore code blocks & inline code
     inlineCodes.forEach((c, idx) => { s = s.replace(`__INLINE_CODE_${idx}__`, c); });
@@ -401,6 +419,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     return s;
   }
   window.parseMarkdown = parseMarkdown;
+
+  // Tool yang tersedia untuk planner/validator/agent, menghormati toggle Web Research.
+  // Saat enableWebSearch OFF, tool `web_search` disembunyikan agar tidak direncanakan/dieksekusi.
+  function getAvailableAgentTools() {
+    const all = globalThis.PesatSkillRegistry?.getAllTools?.() || [];
+    if (globalThis.__PESAT_ENABLE_WEB_SEARCH__ === false) {
+      return all.filter(t => t?.function?.name !== "web_search");
+    }
+    return all;
+  }
 
   function parseIncrementalMarkdown(text) {
     if (!text) return "";
@@ -2605,7 +2633,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  btnSaveSettings.addEventListener("click", async () => {
+  async function persistSettings({ close = true, log = true } = {}) {
     const rawKey = (apiKeyInput?.value || "").trim();
     const sessionOnly = !!settingsSessionOnly?.checked;
     const autoPasteDocs = !!settingsAutoPasteDocs?.checked;
@@ -2662,10 +2690,29 @@ document.addEventListener("DOMContentLoaded", async () => {
       try { await chrome.storage.session.remove(["apiKey"]); } catch (e) {}
     }
 
-    await loadSettings();
-    settingsPanel.classList.add("hidden");
-    appendLog("✅ PesatRouter API settings saved.");
-  });
+    if (log) appendLog("✅ PesatRouter API settings saved.");
+    if (close) {
+      await loadSettings();
+      settingsPanel.classList.add("hidden");
+    }
+  }
+
+  btnSaveSettings.addEventListener("click", () => persistSettings({ close: true, log: true }));
+
+  // Auto-save: perubahan tersimpan otomatis (debounce) tanpa perlu klik Save.
+  let autoSaveTimer = null;
+  const scheduleAutoSave = () => {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => { persistSettings({ close: false, log: false }); }, 600);
+  };
+  if (settingsPanel) {
+    settingsPanel.addEventListener("input", scheduleAutoSave);
+    settingsPanel.addEventListener("change", scheduleAutoSave);
+    // Klik di area backdrop (luar kartu) menutup panel; perubahan tersimpan otomatis.
+    settingsPanel.addEventListener("click", (e) => {
+      if (e.target === settingsPanel) { clearTimeout(autoSaveTimer); persistSettings({ close: true, log: false }); }
+    });
+  }
 
   const btnOpenShortcuts = document.getElementById("btnOpenShortcuts");
   if (btnOpenShortcuts) {
@@ -3844,6 +3891,10 @@ ${d.reducedDOM || "(Tidak ada elemen interaktif)"}
     }
 
     // ── Aksi via background / direct tabs ──
+    if (actionType === "blocked_web_search") {
+      return { success: true, action: "blocked_web_search", message: resObj.message || "Live Web Search is disabled by the user." };
+    }
+
     if (actionType === "navigate") {
       const r = await navigateToUrl(resObj.url || resObj.value);
       result.success = !!r.success;
@@ -5744,12 +5795,21 @@ Jawablah pertanyaan/instruksi pengguna secara langsung, jelas, dan ramah menggun
                       ? (isSheetsSite ? "### 📊 Ringkasan Lembar Kerja Spreadsheet" : "### 📄 Ringkasan Halaman Web")
                       : "")));
         let formattedReply = headerTitle ? `${headerTitle}\n\n${aiReply}` : aiReply;
-        if (storedSettings.enableWebSearch !== false && !/##\s*Sources/i.test(formattedReply)) {
-          try {
-            const official = globalThis.PesatSourceResolver?.resolveOfficialSources?.(userPrompt) || [];
-            const sourcesMd = globalThis.PesatSourceResolver?.buildSourcesMarkdown?.(official) || "";
-            if (sourcesMd) formattedReply = `${formattedReply}\n\n${sourcesMd}`;
-          } catch (_) {}
+        const webSearchOn = globalThis.__PESAT_ENABLE_WEB_SEARCH__ !== false;
+        if (!webSearchOn) {
+          // Web Search OFF: jangan tampilkan blok Sources (termasuk yang ditulis model sendiri).
+          formattedReply = formattedReply.replace(/\n*#{1,6}\s*Sources\b[\s\S]*$/i, "").trimEnd();
+        } else {
+          // Hanya untuk jawaban info/obrolan — bukan artikel, tabel, ringkasan, atau artefak.
+          const isInfoAnswer = !(isSummarize || isArticle || isDocsOutput || isGeneralTableTask ||
+            isProductResearch || isSocialThread || isSpreadsheetTask || isExplicitExcelOrCsv || artifact);
+          if (isInfoAnswer && !/##\s*Sources/i.test(formattedReply)) {
+            try {
+              const official = globalThis.PesatSourceResolver?.resolveOfficialSources?.(userPrompt) || [];
+              const sourcesMd = globalThis.PesatSourceResolver?.buildSourcesMarkdown?.(official) || "";
+              if (sourcesMd) formattedReply = `${formattedReply}\n\n${sourcesMd}`;
+            } catch (_) {}
+          }
         }
         addMessageToCurrentSession("assistant", formattedReply, { skipClean: true, artifact });
       }
@@ -6268,7 +6328,13 @@ ATURAN KETAT:
 		      const currentUrl = activeTabInfo?.url || "";
 		      const isContentSiteActive = currentUrl && !/^(?:chrome|about|edge):/i.test(currentUrl) && !/google\.com|bing\.com|duckduckgo\.com/i.test(currentUrl);
 
-		      if (isSearchIntent && isContentSiteActive) {
+		      if (isSearchIntent && globalThis.__PESAT_ENABLE_WEB_SEARCH__ === false) {
+	        addMessageToCurrentSession("assistant", "🔎 **Live Web Search is disabled.** Enable it in Settings → *Live Web Search & Sources* to search the web.");
+	        await finalizeTask("done", "Web search disabled by user.");
+	        return;
+	      }
+
+	      if (isSearchIntent && isContentSiteActive) {
 		        let hostName = "";
 		        try {
 		          hostName = new URL(currentUrl).hostname.replace(/^www\./i, "");
@@ -6343,7 +6409,7 @@ ATURAN KETAT:
       const usePlanner = globalThis.PesatAgentEngine?.shouldUsePlanner?.(goal, contextSources) === true;
       if (usePlanner) {
         showStatusIndicator("Menganalisis...");
-        const availableTools = globalThis.PesatSkillRegistry?.getAllTools?.() || [];
+        const availableTools = getAvailableAgentTools();
         const plannerReply = await callLLM("plan", `Susun rencana eksekusi tervalidasi untuk tujuan berikut:\n${goal}\n\nTool tersedia: ${availableTools.map(t => t.function?.name).filter(Boolean).join(", ")}`);
         const plannerData = globalThis.PesatAgentEngine.parseStrictJSON(String(plannerReply), "rencana");
         const validated = globalThis.PesatAgentEngine.validatePlan(plannerData, {
@@ -6543,6 +6609,12 @@ ${sub.description}
           resObj.action = "navigate";
           resObj.url = fnArgs.url;
           resObj.value = fnArgs.url;
+          // Blokir navigasi ke mesin pencari (riset web generik) saat Web Search OFF.
+          if (globalThis.__PESAT_ENABLE_WEB_SEARCH__ === false &&
+              /^https?:\/\/(?:www\.)?(?:google\.[a-z.]+|bing\.com|duckduckgo\.com)\/search/i.test(String(fnArgs.url || ""))) {
+            resObj.action = "blocked_web_search";
+            resObj.message = "Live Web Search is disabled by the user.";
+          }
         } else if (fnName === "click_element") {
           resObj.action = "click";
           resObj.elementId = fnArgs.elementId;
@@ -7094,7 +7166,7 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
       const parsed = parseActionJSON(reply);
       if (parsed && Array.isArray(parsed.plan) && parsed.plan.length > 0) {
         const doneItems = activeTask.plan.filter(s => s.status === "done");
-        const availableTools = globalThis.PesatSkillRegistry?.getAllTools?.() || [];
+        const availableTools = getAvailableAgentTools();
         const validated = globalThis.PesatAgentEngine?.validatePlan?.(parsed, {
           availableTools,
           maxSteps: Math.max(1, Math.min(7, (CFG.MAX_PLAN_STEPS || 10) - doneItems.length)),
@@ -8206,12 +8278,8 @@ Susun ulang rencana: pertahankan subtask lama yang sudah done apa adanya, ganti 
     });
   }
 
-  btnCloseSettings.addEventListener("click", () => {
-    settingsPanel.classList.add("hidden");
-  });
-  btnCancelSettings.addEventListener("click", () => {
-    settingsPanel.classList.add("hidden");
-  });
+  btnCloseSettings.addEventListener("click", () => { clearTimeout(autoSaveTimer); persistSettings({ close: true, log: false }); });
+  btnCancelSettings.addEventListener("click", () => { clearTimeout(autoSaveTimer); persistSettings({ close: true, log: false }); });
 
   // Global UX Keyboard Handler: Tutup dialog dengan tombol Escape
   window.addEventListener("keydown", (e) => {

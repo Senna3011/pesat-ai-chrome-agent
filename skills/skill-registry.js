@@ -188,7 +188,11 @@
 
     getSystemPromptAdditions() {
       let promptText = "\n\n=== SPESIALISASI SKILL & CAPABILITIES ===\n";
-      for (const skill of registeredSkills.values()) if (skill.systemPromptRules) promptText += skill.systemPromptRules + "\n";
+      for (const skill of registeredSkills.values()) {
+        if (!skill.systemPromptRules) continue;
+        if (skill.name === "web-search" && globalThis.__PESAT_ENABLE_WEB_SEARCH__ === false) continue;
+        promptText += skill.systemPromptRules + "\n";
+      }
       return promptText;
     },
 
