@@ -603,12 +603,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       item.innerHTML = `
         <div class="session-info">
           <div class="session-title">${escapeHtml(sess.title)}</div>
-          <div class="session-time">${timeStr} · ${sess.messages.length} pesan</div>
+          <div class="session-time">${timeStr} · ${sess.messages.length} messages</div>
         </div>
-        <button class="session-delete" title="Hapus Sesi">🗑️</button>
+        <button class="session-delete" title="Delete Session">🗑️</button>
       `;
 
       item.querySelector(".session-info")?.addEventListener("click", () => {
+        if (isAgentRunning) {
+          if (typeof showToast === "function") showToast("A task is still running. Stop it before switching sessions.", "error", 3000);
+          return;
+        }
         currentSessionId = sess.id;
         saveSessions();
         renderCurrentSession();
@@ -632,7 +636,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     await saveSessions();
     renderCurrentSession();
-    if (typeof showToast === "function") showToast("Sesi chat berhasil dihapus.", "success", 2000);
+    if (typeof showToast === "function") showToast("Chat session deleted.", "success", 2000);
   }
 
   // ═══════════════════════════════════════════════════
@@ -2068,6 +2072,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         saveModelsConfig();
         renderAllModelLists();
         if (typeof updateTokenTrackerUI === "function") updateTokenTrackerUI();
+        if (typeof showToast === "function") showToast(`Active model: ${m.name || m.id}`, "success", 1800);
       });
 
       // Edit model
@@ -2257,13 +2262,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Pilih model aktif (enabled) berikutnya untuk auto-switch saat kuota/token habis.
-  // Hanya mempertimbangkan model yang di-enable di Settings; melewati model saat ini.
+  // Hanya mempertimbangkan model yang di-enable di Settings; mengecualikan model saat ini.
   function pickNextEnabledModel(currentId) {
-    const enabled = modelsList.filter(m => m.enabled !== false && m.id);
-    if (enabled.length <= 1) return null;
-    const idx = enabled.findIndex(m => m.id === currentId);
-    if (idx === -1) return enabled[0].id;
-    return enabled[(idx + 1) % enabled.length].id;
+    const enabled = modelsList.filter(m => m.enabled !== false && m.id && m.id !== currentId);
+    if (!enabled.length) return null;
+    return enabled[0].id;
   }
 
   // Deteksi error kuota/rate-limit yang memicu auto-switch.
@@ -2503,7 +2506,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     } catch (err) {
       resultEl.classList.add("error");
-      resultEl.textContent = `❌ Error: ${err.message}`;
+      const friendly = globalThis.PesatAIEngine?.describeConnectionFailure?.(err) || "Connection failed. Check your internet, VPN/proxy, and Base URL, then try again.";
+      resultEl.textContent = `❌ ${friendly}`;
+      appendLog(`⚠️ Test Connection failed: ${friendly}`, "WARN");
     } finally {
       if (btnEl) btnEl.disabled = false;
     }
@@ -3093,14 +3098,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
 
     let res;
+    const usedModel = getModelName();
     try {
-      res = await doCall(getModelName());
+      res = await doCall(usedModel);
     } catch (err) {
       if (err.name === "AbortError") throw err;
       // Auto-switch ke model enabled berikutnya saat kuota/rate-limit habis (opsional di Settings).
-      const nextModel = (isRateLimitError(err) && storedSettings.autoSwitchModel) ? pickNextEnabledModel(activeModelId) : null;
+      const nextModel = (isRateLimitError(err) && storedSettings.autoSwitchModel) ? pickNextEnabledModel(usedModel) : null;
       if (nextModel) {
-        const prevModel = activeModelId;
+        const prevModel = usedModel;
         appendLog(`🔁 Rate limit/quota on "${prevModel}". Auto-switching to enabled model "${nextModel}".`, "WARN");
         activeModelId = nextModel;
         storedSettings.modelName = nextModel;

@@ -125,11 +125,38 @@
 
     parseCsvToMarkdown(csvText) {
       if (!csvText) return "";
-      const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
-      if (!lines.length) return "";
-      return lines.map((line, idx) => {
-        const cells = line.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
-        const rowStr = "| " + cells.join(" | ") + " |";
+      // Parser RFC-4180: dukung field ber-kutip, koma/newline di dalam field, dan "" escape.
+      const rows = [];
+      let field = "";
+      let row = [];
+      let inQuotes = false;
+      const pushField = () => { row.push(field); field = ""; };
+      const pushRow = () => { rows.push(row); row = []; };
+      for (let i = 0; i < csvText.length; i++) {
+        const ch = csvText[i];
+        if (inQuotes) {
+          if (ch === '"') {
+            if (csvText[i + 1] === '"') { field += '"'; i++; }
+            else inQuotes = false;
+          } else field += ch;
+        } else if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ",") {
+          pushField();
+        } else if (ch === "\n") {
+          pushField(); pushRow();
+        } else if (ch === "\r") {
+          // lewati CR (ditangani oleh \n)
+        } else {
+          field += ch;
+        }
+      }
+      if (field.length > 0 || row.length > 0) { pushField(); pushRow(); }
+      const nonEmpty = rows.filter(r => r.some(c => String(c).trim().length > 0));
+      if (!nonEmpty.length) return "";
+      const esc = (c) => String(c).trim().replace(/\|/g, "\\|");
+      return nonEmpty.map((cells, idx) => {
+        const rowStr = "| " + cells.map(esc).join(" | ") + " |";
         if (idx === 0) {
           const sepStr = "| " + cells.map(() => "---").join(" | ") + " |";
           return rowStr + "\n" + sepStr;

@@ -46,7 +46,7 @@
   --text-accent: #0284C7;
   --text-white: #FFFFFF;
   --text-inverse: #FFFFFF;
-  --text-muted: #94A3B8;
+  --text-muted: #64748B;
 
   /* Status Colors */
   --status-green: #10B981;
@@ -2176,7 +2176,7 @@ textarea::placeholder {
 		  margin: 6px 2px 0 2px;
 		  font-size: 11px;
 		  line-height: 1.45;
-		  color: #94A3B8;
+		  color: var(--text-muted, #64748B);
 		}
 
 			.config-input {

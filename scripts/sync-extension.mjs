@@ -21,7 +21,8 @@ const filesToSync = [
   "context-engine.js",
   "file-engine.js",
   "memory-engine.js",
-  "tool-call-noise.js"
+  "tool-call-noise.js",
+  "source-resolver.js"
 ];
 
 const dirsToSync = [

@@ -158,7 +158,7 @@
       // 3. Pattern Profil Pengguna
       const profMatch = text.match(/(?:saya adalah|profesi saya|pekerjaan saya|nama saya|bisnis saya|usaha saya|saya pemilik|i am a?)\s*:?\s*(.+)/i);
       if (profMatch && profMatch[1].length > 4) {
-        return this.add("profile", profMatch[0].trim());
+        return this.add("profile", profMatch[1].trim());
       }
 
       // 4. Pattern Preferensi Umum ("Ingat bahwa...", "Mulai sekarang...")

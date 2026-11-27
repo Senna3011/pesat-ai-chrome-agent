@@ -307,9 +307,20 @@ Gunakan hanya tool yang tersedia. Maksimal 10 langkah. Langkah act wajib memilik
       }
 
       const isAgenticAct = phase === "act" || (!phase && !isSummarize && phase !== "chat" && phase !== "validate" && phase !== "plan");
-      const fullSystemPrompt = isAgenticAct
+      // Suntikkan tanggal/waktu nyata (zona waktu perangkat) agar model tidak mengarang
+      // jawaban tentang hari/bulan/tahun saat ini.
+      let dateLine = "";
+      try {
+        const now = new Date();
+        const formatted = now.toLocaleString("en-US", {
+          weekday: "long", year: "numeric", month: "long", day: "numeric",
+          hour: "2-digit", minute: "2-digit", timeZoneName: "short"
+        });
+        dateLine = `\n\n[CURRENT DATE & TIME — authoritative]: ${formatted}. Treat this as the real current date/time when the user asks about today's date, day, month, or year. Do not guess or use a different date.`;
+      } catch (_) {}
+      const fullSystemPrompt = (isAgenticAct
         ? basePrompt + memoryPrompt + skillPrompt + domContext
-        : basePrompt + memoryPrompt;
+        : basePrompt + memoryPrompt) + dateLine;
 
       const payloadMessages = [
         { role: "system", content: fullSystemPrompt },

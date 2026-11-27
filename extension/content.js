@@ -4648,11 +4648,14 @@ ${tabText}`;
             text: text
           });
         } catch (err) {
+          const fallbackText = getReadableContent();
           sendResponse({
-            success: true,
+            success: !!fallbackText,
             title: document.title || "",
             url: window.location.href || "",
-            text: getReadableContent()
+            text: fallbackText,
+            fallback: true,
+            error: fallbackText ? undefined : "Failed to read page content"
           });
         }
       })();
